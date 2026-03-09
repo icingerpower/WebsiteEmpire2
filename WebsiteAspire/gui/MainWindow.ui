@@ -13,19 +13,53 @@
   <property name="windowTitle">
    <string>WebsiteAspire</string>
   </property>
-  <widget class="QWidget" name="centralwidget"/>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QTabWidget" name="tabWidget">
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+      <widget class="PaneAspire" name="tabAspire">
+       <attribute name="title">
+        <string>Aspire</string>
+       </attribute>
+      </widget>
+      <widget class="PaneDatabaseGen" name="tabDatabaseGen">
+       <attribute name="title">
+        <string>DB generation</string>
+       </attribute>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
     <rect>
      <x>0</x>
      <y>0</y>
      <width>1280</width>
-     <height>22</height>
+     <height>20</height>
     </rect>
    </property>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>PaneAspire</class>
+   <extends>QWidget</extends>
+   <header>gui/panes/PaneAspire.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>PaneDatabaseGen</class>
+   <extends>QWidget</extends>
+   <header>gui/panes/PaneDatabaseGen.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

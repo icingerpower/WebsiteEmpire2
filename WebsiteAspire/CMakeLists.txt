@@ -4,8 +4,10 @@ project(WebsiteAspire VERSION 0.1 LANGUAGES CXX)
 
 include(../common.cmake)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Network)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Network)
+
+setup_qcoro(COMPONENTS Core)
 
 include(../../common/workingdirectory/workingdirectory.cmake)
 
@@ -23,6 +25,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(WebsiteAspire
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
+        gui/panes/PaneAspire.h gui/panes/PaneAspire.cpp gui/panes/PaneAspire.ui
     )
 else()
     if(ANDROID)
@@ -38,6 +41,7 @@ endif()
 
 target_link_libraries(WebsiteAspire PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
+    QCoro::Core
     -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
 
 set_target_properties(WebsiteAspire PROPERTIES

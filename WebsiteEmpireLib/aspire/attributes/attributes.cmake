@@ -1,0 +1,16 @@
+set(ASPIRE_ATTRIBUTES_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractPageAttributes.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractPageAttributes.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFactory.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFactory.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesAddress.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesAddress.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesAddressAndContact.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesAddressAndContact.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesProductCategory.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesProductCategory.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesCertifications.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesCertifications.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesProduct.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesProduct.cpp
+)
