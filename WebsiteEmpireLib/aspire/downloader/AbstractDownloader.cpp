@@ -1,13 +1,16 @@
 #include "AbstractDownloader.h"
 
+#include <utility>
+
 #include <QCryptographicHash>
 #include <QPromise>
 #include <QSettings>
 
 
-AbstractDownloader::AbstractDownloader(const QDir &workingDir, QObject *parent)
+AbstractDownloader::AbstractDownloader(const QDir &workingDir, PageParsedCallback onPageParsed, QObject *parent)
     : QObject(parent)
     , m_workingDir(workingDir)
+    , m_onPageParsed(std::move(onPageParsed))
 {
 }
 
@@ -61,7 +64,9 @@ void AbstractDownloader::processNext(QSharedPointer<QPromise<void>> promise)
 
     fetchUrl(url).then(this, [this, url, promise](const QString &content) {
         markVisited(url);
-        emit pageParsed(url, getAttributeValues(content));
+        if (m_onPageParsed) {
+            m_onPageParsed(url, getAttributeValues(content));
+        }
         enqueuePending(getUrlsToParse(content));
         processNext(promise);
     }).onFailed(this, [this, url, promise](const QException &e) {

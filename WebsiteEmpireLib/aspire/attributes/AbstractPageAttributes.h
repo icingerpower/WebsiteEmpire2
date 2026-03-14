@@ -55,7 +55,8 @@ public:
         std::optional<ReferenceSpec> reference = std::nullopt;
     };
 
-    QString isAttributeValid(const Attribute &attribute) const; // Return empty if no error, or tr error description
+    virtual QString areAttributesCrossValid(
+        const QHash<QString, QString> &id_values) const; // Only to check that there is no incompatible values
 
     virtual QString getId() const = 0;
     virtual QString getName() const = 0;

@@ -17,6 +17,8 @@ include(website/website.cmake)
 add_library(WebsiteEmpireLib STATIC
     WebsiteEmpireLib.cpp
     WebsiteEmpireLib.h
+    ExceptionWithTitleText.h
+    ExceptionWithTitleText.cpp
     ${ASPIRE_FILES}
     ${WEBSITE_FILES}
     ${UTILS_FILES}

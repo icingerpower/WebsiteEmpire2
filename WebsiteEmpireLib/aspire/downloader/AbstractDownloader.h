@@ -1,6 +1,8 @@
 #ifndef ABSTRACTDOWNLOADER_H
 #define ABSTRACTDOWNLOADER_H
 
+#include <functional>
+
 #include <QDir>
 #include <QFuture>
 #include <QHash>
@@ -18,9 +20,16 @@ class AbstractDownloader : public QObject
     Q_OBJECT
 
 public:
+    // Called after each page is parsed: receives the URL and the extracted attribute map.
+    // Return true to accept the record, false to reject it (e.g. a check callback failed).
+    // Links from the page are followed regardless of the return value.
+    using PageParsedCallback = std::function<bool(const QString &url, const QHash<QString, QString> &attributes)>;
+
     // workingDir defaults to QDir{} so DECLARE_DOWNLOADER still works for
     // type-registry instances (which don't parse anything).
-    explicit AbstractDownloader(const QDir &workingDir = QDir{}, QObject *parent = nullptr);
+    explicit AbstractDownloader(const QDir &workingDir = QDir{},
+                                PageParsedCallback onPageParsed = {},
+                                QObject *parent = nullptr);
 
     virtual QString getId() const = 0;
     virtual QString getName() const = 0;
@@ -44,7 +53,7 @@ public:
     //           const QString url = takePending();
     //           const QString content = co_await fetchUrl(url); // ← yield point
     //           markVisited(url);
-    //           emit pageParsed(url, getAttributeValues(content));
+    //           m_onPageParsed(url, getAttributeValues(content));
     //           enqueuePending(getUrlsToParse(content));
     //       }
     //   }
@@ -56,9 +65,6 @@ public:
     public:
         Recorder(AbstractDownloader *downloader);
     };
-
-signals:
-    void pageParsed(const QString &url, const QHash<QString, QString> &attributes);
 
 protected:
     // Fetch content of url without blocking the event loop (no thread).
@@ -101,6 +107,7 @@ private:
     static QString urlKey(const QString &url); // SHA-256 hex — safe QSettings key
 
     QDir m_workingDir;
+    PageParsedCallback m_onPageParsed;
     QSharedPointer<QSettings> m_settings; // null until first settings() call
     QSet<QString> m_visited;
     QSet<QString> m_pendingSet;  // O(1) duplicate guard

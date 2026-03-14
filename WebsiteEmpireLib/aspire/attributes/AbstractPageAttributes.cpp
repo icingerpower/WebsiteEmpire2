@@ -24,6 +24,12 @@ void AbstractPageAttributes::init()
     }
 }
 
+QString AbstractPageAttributes::areAttributesCrossValid(
+    const QHash<QString, QString> &) const
+{
+    return QString{};
+}
+
 AbstractPageAttributes::Recorder::Recorder(AbstractPageAttributes *pageAttributes)
 {
     pageAttributes->init();
