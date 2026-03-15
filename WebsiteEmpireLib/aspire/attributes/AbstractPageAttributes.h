@@ -2,10 +2,13 @@
 #define ABSTRACTPAGEATTRIBUTES_H
 
 #include <QAbstractTableModel>
+#include <QList>
 #include <QMap>
 #include <QSharedPointer>
 
 #include <optional>
+
+class QImage;
 
 
 class AbstractPageAttributes : public QAbstractTableModel
@@ -53,6 +56,10 @@ public:
         std::optional<Schema> schema = std::nullopt;
         bool optional = false;
         std::optional<ReferenceSpec> reference = std::nullopt;
+        // If set, this attribute holds a list of images rather than a QString.
+        // AspiredDb stores it as a BLOB and calls this instead of validate().
+        bool isImage = false;
+        std::optional<std::function<QString(const QList<QSharedPointer<QImage>> &)>> validateImageList = std::nullopt;
     };
 
     virtual QString areAttributesCrossValid(

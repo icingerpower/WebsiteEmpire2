@@ -1,5 +1,8 @@
 #include "AspiredDb.h"
 
+#include <QBuffer>
+#include <QDataStream>
+#include <QImage>
 #include <QObject>
 #include <QSet>
 #include <QSqlDatabase>
@@ -8,6 +11,22 @@
 #include <QUuid>
 
 #include "ExceptionWithTitleText.h"
+
+static QByteArray serializeImages(const QList<QSharedPointer<QImage>> &images)
+{
+    QByteArray blob;
+    QDataStream stream(&blob, QIODevice::WriteOnly);
+    stream.setVersion(QDataStream::Qt_6_0);
+    stream << static_cast<qint32>(images.size());
+    for (const auto &img : std::as_const(images)) {
+        QByteArray imgBytes;
+        QBuffer buf(&imgBytes);
+        buf.open(QIODevice::WriteOnly);
+        img->save(&buf, "PNG");
+        stream << imgBytes;
+    }
+    return blob;
+}
 
 const QString AspiredDb::TABLE_NAME = "records";
 
@@ -43,8 +62,10 @@ void AspiredDb::createTableIdNeed(const QList<AbstractPageAttributes::Attribute>
     // Build CREATE TABLE with all attribute columns
     QStringList columnDefs;
     columnDefs << "id INTEGER PRIMARY KEY AUTOINCREMENT";
-    for (const auto &attr : attributes)
-        columnDefs << QString("%1 TEXT").arg(attr.id);
+    for (const auto &attr : attributes) {
+        const QString colType = attr.validateImageList.has_value() ? "BLOB" : "TEXT";
+        columnDefs << QString("%1 %2").arg(attr.id, colType);
+    }
 
     const QString createSql = QString("CREATE TABLE IF NOT EXISTS %1 (%2)")
                                   .arg(TABLE_NAME, columnDefs.join(", "));
@@ -72,8 +93,9 @@ void AspiredDb::createTableIdNeed(const QList<AbstractPageAttributes::Attribute>
         if (existingColumns.contains(attr.id))
             continue;
 
-        const QString alterSql = QString("ALTER TABLE %1 ADD COLUMN %2 TEXT")
-                                     .arg(TABLE_NAME, attr.id);
+        const QString colType = attr.validateImageList.has_value() ? "BLOB" : "TEXT";
+        const QString alterSql = QString("ALTER TABLE %1 ADD COLUMN %2 %3")
+                                     .arg(TABLE_NAME, attr.id, colType);
         if (!query.exec(alterSql)) {
             throw ExceptionWithTitleText(
                 QObject::tr("Database Error"),
@@ -85,14 +107,24 @@ void AspiredDb::createTableIdNeed(const QList<AbstractPageAttributes::Attribute>
 
 void AspiredDb::record(const QList<AbstractPageAttributes::Attribute> &attributes,
                        const QHash<QString, QString> &idAttr_value,
-                       const AbstractPageAttributes *pageAttributes)
+                       const AbstractPageAttributes *pageAttributes,
+                       const QHash<QString, QList<QSharedPointer<QImage>>> &idAttr_imageValue)
 {
     // Validate individual attributes
     for (const auto &attr : attributes) {
-        const QString value = idAttr_value.value(attr.id);
-        const QString error = attr.validate(value);
-        if (!error.isEmpty())
-            throw ExceptionWithTitleText(attr.name, error);
+        if (attr.validateImageList.has_value()) {
+            const auto &images = idAttr_imageValue.value(attr.id);
+            const QString error = (*attr.validateImageList)(images);
+            if (!error.isEmpty()) {
+                throw ExceptionWithTitleText(attr.name, error);
+            }
+        } else {
+            const QString value = idAttr_value.value(attr.id);
+            const QString error = attr.validate(value);
+            if (!error.isEmpty()) {
+                throw ExceptionWithTitleText(attr.name, error);
+            }
+        }
     }
 
     // Cross-validate
@@ -118,8 +150,13 @@ void AspiredDb::record(const QList<AbstractPageAttributes::Attribute> &attribute
                                   .arg(TABLE_NAME, columns.join(", "), placeholders.join(", "));
 
     query.prepare(insertSql);
-    for (const auto &attr : attributes)
-        query.bindValue(":" + attr.id, idAttr_value.value(attr.id));
+    for (const auto &attr : attributes) {
+        if (attr.validateImageList.has_value()) {
+            query.bindValue(":" + attr.id, serializeImages(idAttr_imageValue.value(attr.id)));
+        } else {
+            query.bindValue(":" + attr.id, idAttr_value.value(attr.id));
+        }
+    }
 
     if (!query.exec()) {
         throw ExceptionWithTitleText(

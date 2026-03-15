@@ -21,13 +21,18 @@ macro(setup_qcoro)
     set(QCoro_DIR_HINT_2 "/usr/lib/cmake/QCoro6")
     set(QCoro_DIR_HINT_3 "${Qt_DIR_HINT}/../../../../lib/cmake/QCoro6")
     set(QCoro_DIR_HINT_4 "${Qt_DIR_HINT}/../../../../lib/cmake/lib/cmake/QCoro6")
-    message("QCoro hints: ${QCoro_DIR_HINT_1} ; ${QCoro_DIR_HINT_2} ; ${QCoro_DIR_HINT_3} ; ${QCoro_DIR_HINT_4}")
+    set(QCoro_DIR_HINT_5 "${Qt_DIR_HINT}/../QCoro6")
+    set(QCoro_DIR_HINT_6 "${Qt_DIR_HINT}/../lib/cmake/QCoro6")
+    message("QCoro hints: ${QCoro_DIR_HINT_1} ; ${QCoro_DIR_HINT_2} ; ${QCoro_DIR_HINT_3} ; ${QCoro_DIR_HINT_4} ; ${QCoro_DIR_HINT_5}")
     list(APPEND CMAKE_PREFIX_PATH "${Qt_DIR_HINT}/../../../../lib/cmake")
+    list(APPEND CMAKE_PREFIX_PATH "${Qt_DIR_HINT}/..")
     find_package(QCoro6 REQUIRED ${ARGN}
         HINTS
             "${QCoro_DIR_HINT_1}"
             "${QCoro_DIR_HINT_2}"
             "${QCoro_DIR_HINT_3}"
             "${QCoro_DIR_HINT_4}"
+            "${QCoro_DIR_HINT_5}"
+            "${QCoro_DIR_HINT_6}"
     )
 endmacro()

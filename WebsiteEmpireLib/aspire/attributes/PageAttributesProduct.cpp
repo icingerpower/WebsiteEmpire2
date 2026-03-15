@@ -1,3 +1,4 @@
+#include <QImage>
 #include <QObject>
 
 #include "PageAttributesProduct.h"
@@ -8,6 +9,7 @@ const QString PageAttributesProduct::ID_SALE_PRICE = "sale_price";
 const QString PageAttributesProduct::ID_NAME = "name";
 const QString PageAttributesProduct::ID_DESCRIPTION = "description";
 const QString PageAttributesProduct::ID_SUPPLIER_PRICE = "supplier_price";
+const QString PageAttributesProduct::ID_IMAGES = "images";
 
 DECLARE_PAGE_ATTRIBUTES(PageAttributesProduct);
 
@@ -110,6 +112,30 @@ QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesProduct::
                             }
                             , std::nullopt
                             , true // Optional
+    };
+
+    *attributes << Attribute{ID_IMAGES
+                            , tr("Images")
+                            , tr("The product images (1–10). Each image's smallest side must be at least %1 px.").arg(MIN_IMAGE_SIDE_PX)
+                            , QString{}
+                            , QString{}
+                            , [](const QString &) { return QString{}; }
+                            , std::nullopt // schema
+                            , false        // not optional
+                            , std::nullopt // no reference
+                            , false        // is image
+                            , [](const QList<QSharedPointer<QImage>> &images) -> QString {
+                                if (images.isEmpty() || images.size() > 10) {
+                                    return tr("The product must have between 1 and 10 images");
+                                }
+                                for (const auto &img : std::as_const(images)) {
+                                    const int minSide = qMin(img->width(), img->height());
+                                    if (minSide < MIN_IMAGE_SIDE_PX) {
+                                        return tr("Each image's smallest side must be at least %1 px").arg(MIN_IMAGE_SIDE_PX);
+                                    }
+                                }
+                                return QString{};
+                            }
     };
 
     return attributes;
