@@ -1,3 +1,47 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Build & Test
+
+```bash
+# Configure and build
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+
+# Run all tests (from build dir)
+ctest
+
+# Run a single test executable
+./WebsiteAspireTests/Test_Aspired_Db
+./WebsiteAspireTests/Test_Aspire_Page_Attributes
+./WebsiteEmpireTests/Test_Website_Blocks
+```
+
+Dependencies: Qt6, QCoro6, and a shared `../../common/` directory (sibling to this repo).
+
+## Architecture
+
+The project has three layers:
+
+**`WebsiteEmpireLib/`** — static library shared by both apps:
+- `aspire/` — web scraping framework
+- `website/` — website generation (early stage)
+- `ExceptionWithTitleText` — custom Qt exception used throughout
+
+**`WebsiteAspire/`** — GUI app for running scrapers and generating databases
+
+**`WebsiteEmpire/`** — GUI app for building websites from scraped data
+
+### Aspire Module
+
+**`AbstractPageAttributes`** (QAbstractTableModel subclass) defines the schema for a page type. Each concrete subclass (e.g. `PageAttributesProductPetFood`) declares a list of `Attribute` structs with id, name, per-value validation lambda, and optional cross-validation. Subclasses self-register via the `DECLARE_PAGE_ATTRIBUTES()` macro into a static registry (`ALL_PAGE_ATTRIBUTES()`).
+
+**`AbstractDownloader`** defines a web scraper plugin. Subclasses implement `getId()`, `getName()`, `getUrlsToParse()`, `getAttributeValues()`, and `fetchUrl()`. They self-register via `DECLARE_DOWNLOADER()`. The crawl loop runs as a QFuture continuation chain (non-blocking, event-loop based). State (visited URLs + pending queue) is persisted to `<getId()>.ini`.
+
+**`AspiredDb`** manages an SQLite database per scraper. It creates tables from the scraper's `AbstractPageAttributes` schema (`createTableIdNeed()`), adds missing columns via `ALTER TABLE` on schema changes, and validates + inserts records (`record()`). Validation errors throw `ExceptionWithTitleText`.
+
 # Qt / C++ Rules
 
 ## Exception Handling
