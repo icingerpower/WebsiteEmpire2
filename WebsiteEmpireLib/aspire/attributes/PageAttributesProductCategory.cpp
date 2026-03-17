@@ -4,8 +4,9 @@
 
 DECLARE_PAGE_ATTRIBUTES(PageAttributesProductCategory);
 
+const QString PageAttributesProductCategory::ID_URL              = "url";
 const QString PageAttributesProductCategory::ID_PRODUCT_CATEGORY = "category_name_product";
-const QString PageAttributesProductCategory::ID_DESCRIPTION = "description";
+const QString PageAttributesProductCategory::ID_DESCRIPTION       = "description";
 
 QString PageAttributesProductCategory::getId() const
 {
@@ -25,7 +26,23 @@ QString PageAttributesProductCategory::getDescription() const
 QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesProductCategory::getAttributes() const
 {
     auto attributes = QSharedPointer<QList<AbstractPageAttributes::Attribute>>::create();
-    
+
+    *attributes << Attribute{ID_URL
+                            , tr("URL")
+                            , tr("The URL of the category page")
+                            , tr("https://example.com/category/vogelvoer/")
+                            , QString{}
+                            , [](const QString &value) {
+                                if (value.isEmpty()) {
+                                    return tr("The URL can't be empty");
+                                }
+                                if (!value.startsWith(QLatin1String("http"))) {
+                                    return tr("The URL must start with http");
+                                }
+                                return QString{};
+                            }
+    };
+
     *attributes << Attribute{ID_PRODUCT_CATEGORY
                             , tr("Name")
                             , tr("The name of the product category")

@@ -200,7 +200,7 @@ QStringList DownloaderVogelvoerkopenCategory::getUrlsToParse(const QString &cont
 // ---------------------------------------------------------------------------
 
 QHash<QString, QString> DownloaderVogelvoerkopenCategory::getAttributeValues(
-    const QString &content) const
+    const QString &url, const QString &content) const
 {
     // Product pages are not categories — skip them.
     // Category pages have a BreadcrumbList but no @type:Product.
@@ -270,8 +270,9 @@ QHash<QString, QString> DownloaderVogelvoerkopenCategory::getAttributeValues(
     }
 
     QHash<QString, QString> result;
+    result[PageAttributesProductCategory::ID_URL]              = url;
     result[PageAttributesProductCategory::ID_PRODUCT_CATEGORY] = categoryName;
-    result[PageAttributesProductCategory::ID_DESCRIPTION] = description;
+    result[PageAttributesProductCategory::ID_DESCRIPTION]      = description;
     return result;
 }
 

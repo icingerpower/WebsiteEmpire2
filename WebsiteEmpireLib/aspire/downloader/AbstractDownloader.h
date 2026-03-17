@@ -44,8 +44,8 @@ public:
     // working instances without knowing the concrete type.
     virtual AbstractDownloader *createInstance(const QDir &workingDir) const = 0;
 
-    virtual QStringList getUrlsToParse(const QString &content) const = 0;          // Next links to follow from one page
-    virtual QHash<QString, QString> getAttributeValues(const QString &content) const = 0; // Attribute id → value
+    virtual QStringList getUrlsToParse(const QString &content) const = 0;                             // Next links to follow from one page
+    virtual QHash<QString, QString> getAttributeValues(const QString &url, const QString &content) const = 0; // Attribute id → value; url is always stored as ID_URL
 
     // Seed URLs to pass to parse() when starting a fresh crawl.
     // Default implementation returns an empty list; subclasses should override.
@@ -76,7 +76,7 @@ public:
     //           const QString url = takePending();
     //           const QString content = co_await fetchUrl(url); // ← yield point
     //           markVisited(url);
-    //           m_onPageParsed(url, getAttributeValues(content));
+    //           m_onPageParsed(url, getAttributeValues(url, content));
     //           enqueuePending(getUrlsToParse(content));
     //       }
     //   }

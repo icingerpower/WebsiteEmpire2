@@ -84,7 +84,7 @@ public:
 
     AbstractDownloader *createInstance(const QDir &) const override { return nullptr; }
     QStringList getUrlsToParse(const QString &)         const override { return {}; }
-    QHash<QString, QString> getAttributeValues(const QString &) const override { return {}; }
+    QHash<QString, QString> getAttributeValues(const QString &, const QString &) const override { return {}; }
 
 protected:
     QFuture<QString> fetchUrl(const QString &) override

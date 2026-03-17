@@ -61,6 +61,22 @@ public:
     // image columns delegate to QSqlTableModel::data().
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
+    // Returns Qt::ItemIsEditable for non-image cells so that double-clicking
+    // opens an editor and the cell value can be copied.  Image cells are not
+    // editable because they hold raw BLOB data.
+    Qt::ItemFlags flags(const QModelIndex &index) const override;
+
+    // Always returns false without modifying any data.  Edits initiated through
+    // the view (e.g. after double-click) must not persist; all writes go through
+    // recordPage() → AspiredDb::record().
+    bool setData(const QModelIndex &index, const QVariant &value,
+                 int role = Qt::EditRole) override;
+
+    // Deletes the rows whose primary-key ids are listed in rowIds, then
+    // refreshes the model with select().  Rows not found in the database are
+    // silently ignored.  Throws ExceptionWithTitleText on SQL error.
+    void deleteRows(const QList<QString> &rowIds);
+
 private:
     AspiredDb m_aspiredDb;
     AbstractDownloader *m_downloader;                       // non-owning

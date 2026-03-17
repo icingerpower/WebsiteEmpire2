@@ -4,7 +4,8 @@
 #include "PageAttributesProduct.h"
 #include "PageAttributesProductCategory.h"
 
-const QString PageAttributesProduct::ID_CATEGORY = "category";
+const QString PageAttributesProduct::ID_URL           = "url";
+const QString PageAttributesProduct::ID_CATEGORY      = "category";
 const QString PageAttributesProduct::ID_SALE_PRICE = "sale_price";
 const QString PageAttributesProduct::ID_NAME = "name";
 const QString PageAttributesProduct::ID_DESCRIPTION = "description";
@@ -31,7 +32,23 @@ QString PageAttributesProduct::getDescription() const
 QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesProduct::getAttributes() const
 {
     auto attributes = QSharedPointer<QList<AbstractPageAttributes::Attribute>>::create();
-    
+
+    *attributes << Attribute{ID_URL
+                            , tr("URL")
+                            , tr("The URL of the product page")
+                            , tr("https://example.com/product/premium-headphones/")
+                            , QString{}
+                            , [](const QString &value) {
+                                if (value.isEmpty()) {
+                                    return tr("The URL can't be empty");
+                                }
+                                if (!value.startsWith(QLatin1String("http"))) {
+                                    return tr("The URL must start with http");
+                                }
+                                return QString{};
+                            }
+    };
+
     *attributes << Attribute{ID_CATEGORY
                             , tr("Category")
                             , tr("The product category")

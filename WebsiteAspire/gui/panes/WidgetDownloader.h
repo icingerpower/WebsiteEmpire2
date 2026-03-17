@@ -35,6 +35,7 @@ public slots:
     // start == true  → begin (or resume) an async crawl and record into the table.
     // start == false → signal the crawl to stop; already-downloaded rows are kept.
     void download(bool start);
+    void removePages();
 
 private slots:
     void _onRowAttributeSelected(const QItemSelection &selected, const QItemSelection &deselected);

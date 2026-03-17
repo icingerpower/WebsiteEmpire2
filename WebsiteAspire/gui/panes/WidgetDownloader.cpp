@@ -1,6 +1,7 @@
 #include "WidgetDownloader.h"
 #include "ui_WidgetDownloader.h"
 
+#include <QMessageBox>
 #include <QEventLoop>
 #include <QImage>
 #include <QItemSelectionModel>
@@ -39,6 +40,10 @@ void WidgetDownloader::_connectSlots()
             &QPushButton::clicked,
             this,
             &WidgetDownloader::viewAttributes);
+    connect(ui->buttonRemovePages,
+            &QPushButton::clicked,
+            this,
+            &WidgetDownloader::removePages);
     connect(ui->listWidgetImages,
             &QListWidget::itemClicked,
             this,
@@ -52,14 +57,14 @@ void WidgetDownloader::init(const AbstractPageAttributes *pageAttribute,
     m_pageAttribute = pageAttribute;
     m_dowanloadedPageTable = dowanloadedPageTable;
 
-    ui->tableViewAttriutes->setModel(m_dowanloadedPageTable);
-    ui->tableViewAttriutes->setSelectionMode(QAbstractItemView::SingleSelection);
-    ui->tableViewAttriutes->setSelectionBehavior(QAbstractItemView::SelectRows);
-    ui->tableViewAttriutes->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    ui->tableViewAttriutes->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-    ui->tableViewAttriutes->horizontalHeader()->setStretchLastSection(true);
+    ui->tableViewPages->setModel(m_dowanloadedPageTable);
+    ui->tableViewPages->setSelectionMode(QAbstractItemView::SingleSelection);
+    ui->tableViewPages->setSelectionBehavior(QAbstractItemView::SelectRows);
+    ui->tableViewPages->setEditTriggers(QAbstractItemView::DoubleClicked);
+    ui->tableViewPages->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    ui->tableViewPages->horizontalHeader()->setStretchLastSection(true);
 
-    connect(ui->tableViewAttriutes->selectionModel(),
+    connect(ui->tableViewPages->selectionModel(),
             &QItemSelectionModel::selectionChanged,
             this,
             &WidgetDownloader::_onRowAttributeSelected);
@@ -218,6 +223,46 @@ void WidgetDownloader::download(bool start)
     // Start (or resume) the crawl; pass seed URLs only on first launch — the
     // downloader's .ini keeps the queue across sessions automatically.
     m_parseFuture = dl->parse(dl->getSeedUrls());
+}
+
+void WidgetDownloader::removePages()
+{
+    if (!m_dowanloadedPageTable) {
+        return;
+    }
+
+    const QModelIndexList selected =
+        ui->tableViewPages->selectionModel()->selectedRows();
+
+    if (selected.isEmpty()) {
+        QMessageBox::information(this,
+                                 tr("No Selection"),
+                                 tr("Please select one or more rows to remove."));
+        return;
+    }
+
+    const int count = selected.size();
+    const auto answer = QMessageBox::question(
+        this,
+        tr("Confirm Deletion"),
+        tr("Delete %n page(s)?", "", count),
+        QMessageBox::Yes | QMessageBox::No);
+
+    if (answer != QMessageBox::Yes) {
+        return;
+    }
+
+    QList<QString> ids;
+    ids.reserve(count);
+    for (const auto &index : std::as_const(selected)) {
+        ids.append(
+            m_dowanloadedPageTable->data(index.siblingAtColumn(0), Qt::DisplayRole)
+                .toString());
+    }
+
+    m_dowanloadedPageTable->deleteRows(ids);
+    ui->labelDownloadQuantities->setText(
+        tr("%1 pages").arg(m_dowanloadedPageTable->rowCount()));
 }
 
 // ---------------------------------------------------------------------------

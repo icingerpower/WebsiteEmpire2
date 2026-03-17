@@ -95,7 +95,7 @@ void AbstractDownloader::processNext(QSharedPointer<QPromise<void>> promise)
 
     fetchUrl(url).then(this, [this, url, promise](const QString &content) {
         markVisited(url);
-        const QHash<QString, QString> attrs = getAttributeValues(content);
+        const QHash<QString, QString> attrs = getAttributeValues(url, content);
         const QStringList newUrls = getUrlsToParse(content);
         qDebug() << getId() << ": parsed" << url
                  << "— attrs keys:" << attrs.keys()

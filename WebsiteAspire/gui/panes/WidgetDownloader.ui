@@ -37,6 +37,16 @@
       </widget>
      </item>
      <item>
+      <widget class="QPushButton" name="buttonRemovePages">
+       <property name="toolTip">
+        <string>Delete the selected row(s)</string>
+       </property>
+       <property name="text">
+        <string>Delete</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QLabel" name="labelDownloadQuantities">
        <property name="text">
         <string/>
@@ -73,7 +83,7 @@
      <property name="orientation">
       <enum>Qt::Orientation::Vertical</enum>
      </property>
-     <widget class="QTableView" name="tableViewAttriutes"/>
+     <widget class="QTableView" name="tableViewPages"/>
      <widget class="QWidget" name="layoutWidget">
       <layout class="QHBoxLayout" name="horizontalLayout_2">
        <item>

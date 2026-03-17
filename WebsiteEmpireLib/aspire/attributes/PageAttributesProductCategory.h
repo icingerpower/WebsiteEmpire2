@@ -8,6 +8,7 @@ class PageAttributesProductCategory : public AbstractPageAttributes
     Q_OBJECT
 
 public:
+    static const QString ID_URL;
     static const QString ID_PRODUCT_CATEGORY;
     static const QString ID_DESCRIPTION;
 

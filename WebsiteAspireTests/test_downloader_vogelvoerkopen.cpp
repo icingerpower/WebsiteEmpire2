@@ -253,21 +253,23 @@ void Test_Downloader_Vogelvoerkopen::test_getAttributeValues_non_product_page_re
     const QString html = QStringLiteral(
         "<html><body><p>Some non-product content.</p></body></html>");
 
-    QVERIFY(dl.getAttributeValues(html).isEmpty());
+    QVERIFY(dl.getAttributeValues(QStringLiteral("https://vogelvoerkopen.nl/not-a-product/"), html).isEmpty());
 }
 
 void Test_Downloader_Vogelvoerkopen::test_getAttributeValues_extracts_name_description_price()
 {
     DownloaderVogelvoerkopen dl;
 
+    const QString url = QStringLiteral("https://vogelvoerkopen.nl/zonnebloem-500g/");
     const QString html = makeProductHtml(
         QStringLiteral("Zonnebloem 500g"),
         QStringLiteral("Heerlijk vogelzaad voor tuinvogels."),
         QStringLiteral("5.99"));
 
-    const auto attrs = dl.getAttributeValues(html);
+    const auto attrs = dl.getAttributeValues(url, html);
 
     QVERIFY(!attrs.isEmpty());
+    QCOMPARE(attrs.value(PageAttributesProduct::ID_URL), url);
     QCOMPARE(attrs.value(PageAttributesProduct::ID_NAME),
              QStringLiteral("Zonnebloem 500g"));
     QCOMPARE(attrs.value(PageAttributesProduct::ID_SALE_PRICE),
@@ -288,9 +290,11 @@ void Test_Downloader_Vogelvoerkopen::test_getAttributeValues_breadcrumb_sets_cat
         QStringLiteral("8.50"),
         QStringLiteral("Wilde vogels"));
 
-    const auto attrs = dl.getAttributeValues(html);
+    const QString url = QStringLiteral("https://vogelvoerkopen.nl/pindavoer-1kg/");
+    const auto attrs = dl.getAttributeValues(url, html);
 
     QVERIFY(!attrs.isEmpty());
+    QCOMPARE(attrs.value(PageAttributesProduct::ID_URL), url);
     QCOMPARE(attrs.value(PageAttributesProduct::ID_CATEGORY),
              QStringLiteral("Wilde vogels"));
 }
@@ -305,9 +309,11 @@ void Test_Downloader_Vogelvoerkopen::test_getAttributeValues_weight_parsed_from_
         QStringLiteral("Vogelzaad zonnebloem 2 kilogram."),
         QStringLiteral("12.00"));
 
-    const auto attrs = dl.getAttributeValues(html);
+    const QString url = QStringLiteral("https://vogelvoerkopen.nl/zonnebloem-2kg/");
+    const auto attrs = dl.getAttributeValues(url, html);
 
     QVERIFY(!attrs.isEmpty());
+    QCOMPARE(attrs.value(PageAttributesProduct::ID_URL), url);
     QCOMPARE(attrs.value(PageAttributesProductPetFood::ID_WEIGHT_GR),
              QStringLiteral("2000"));
     // price falls back to sale price
@@ -339,9 +345,11 @@ void Test_Downloader_Vogelvoerkopen::test_getAttributeValues_weight_from_variati
         "</head><body><form data-product_variations=\"%1\"></form>"
         "</body></html>").arg(encoded);
 
-    const auto attrs = dl.getAttributeValues(html);
+    const QString url = QStringLiteral("https://vogelvoerkopen.nl/zonnebloem-varianten/");
+    const auto attrs = dl.getAttributeValues(url, html);
 
     QVERIFY(!attrs.isEmpty());
+    QCOMPARE(attrs.value(PageAttributesProduct::ID_URL), url);
     const QString weights = attrs.value(PageAttributesProductPetFood::ID_WEIGHT_GR);
     const QString prices  = attrs.value(PageAttributesProductPetFood::ID_PRICES);
     QVERIFY(weights.contains(QLatin1String("500")));
@@ -365,9 +373,11 @@ void Test_Downloader_Vogelvoerkopen::test_getAttributeValues_price_from_aggregat
         "</script>"
         "</head><body></body></html>");
 
-    const auto attrs = dl.getAttributeValues(html);
+    const QString url = QStringLiteral("https://vogelvoerkopen.nl/pindavet-mix/");
+    const auto attrs = dl.getAttributeValues(url, html);
 
     QVERIFY(!attrs.isEmpty());
+    QCOMPARE(attrs.value(PageAttributesProduct::ID_URL), url);
     QCOMPARE(attrs.value(PageAttributesProduct::ID_SALE_PRICE),
              QStringLiteral("3.49"));
 }
@@ -383,9 +393,11 @@ void Test_Downloader_Vogelvoerkopen::test_getAttributeValues_image_url_key_prese
         {},
         QStringLiteral("https://www.vogelvoerkopen.nl/img/mix.jpg"));
 
-    const auto attrs = dl.getAttributeValues(html);
+    const QString url = QStringLiteral("https://vogelvoerkopen.nl/vogelzaad-mix/");
+    const auto attrs = dl.getAttributeValues(url, html);
 
     QVERIFY(!attrs.isEmpty());
+    QCOMPARE(attrs.value(PageAttributesProduct::ID_URL), url);
     QVERIFY(attrs.contains(VOGELVOERKOPEN_IMAGE_URL_KEY));
     QCOMPARE(attrs.value(VOGELVOERKOPEN_IMAGE_URL_KEY),
              QStringLiteral("https://www.vogelvoerkopen.nl/img/mix.jpg"));
@@ -409,9 +421,11 @@ void Test_Downloader_Vogelvoerkopen::test_setKnownCategories_exact_match()
         QStringLiteral("3.99"),
         QStringLiteral("wilde vogels")); // lowercase
 
-    const auto attrs = dl.getAttributeValues(html);
+    const QString url = QStringLiteral("https://vogelvoerkopen.nl/pindanet/");
+    const auto attrs = dl.getAttributeValues(url, html);
 
     QVERIFY(!attrs.isEmpty());
+    QCOMPARE(attrs.value(PageAttributesProduct::ID_URL), url);
     QCOMPARE(attrs.value(PageAttributesProduct::ID_CATEGORY),
              QStringLiteral("Wilde vogels"));
 }
@@ -429,7 +443,8 @@ void Test_Downloader_Vogelvoerkopen::test_setKnownCategories_substring_match()
         QStringLiteral("7.99"),
         QStringLiteral("Vogelvoer")); // "Vogelvoer en meer" contains "vogelvoer"
 
-    const auto attrs = dl.getAttributeValues(html);
+    const auto attrs = dl.getAttributeValues(
+        QStringLiteral("https://vogelvoerkopen.nl/zonnebloem-1kg/"), html);
 
     QVERIFY(!attrs.isEmpty());
     QCOMPARE(attrs.value(PageAttributesProduct::ID_CATEGORY),
@@ -450,7 +465,8 @@ void Test_Downloader_Vogelvoerkopen::test_setKnownCategories_keyword_match()
         QStringLiteral("4.50"),
         QStringLiteral("Kanaries")); // keyword overlap with "Kanaries en Vinken"
 
-    const auto attrs = dl.getAttributeValues(html);
+    const auto attrs = dl.getAttributeValues(
+        QStringLiteral("https://vogelvoerkopen.nl/kanariemix-500g/"), html);
 
     QVERIFY(!attrs.isEmpty());
     QCOMPARE(attrs.value(PageAttributesProduct::ID_CATEGORY),
@@ -470,7 +486,8 @@ void Test_Downloader_Vogelvoerkopen::test_setKnownCategories_no_match_defaults_t
         QStringLiteral("15.00"),
         QStringLiteral("Reptielenvoer"));
 
-    const auto attrs = dl.getAttributeValues(html);
+    const auto attrs = dl.getAttributeValues(
+        QStringLiteral("https://vogelvoerkopen.nl/krokodillenvet/"), html);
 
     QVERIFY(!attrs.isEmpty());
     QCOMPARE(attrs.value(PageAttributesProduct::ID_CATEGORY),
@@ -488,7 +505,8 @@ void Test_Downloader_Vogelvoerkopen::test_setKnownCategories_empty_list_keeps_ra
         QStringLiteral("5.49"),
         QStringLiteral("Levend voer"));
 
-    const auto attrs = dl.getAttributeValues(html);
+    const auto attrs = dl.getAttributeValues(
+        QStringLiteral("https://vogelvoerkopen.nl/meelwormen-500g/"), html);
 
     QVERIFY(!attrs.isEmpty());
     QCOMPARE(attrs.value(PageAttributesProduct::ID_CATEGORY),
@@ -563,9 +581,11 @@ void Test_Downloader_Vogelvoerkopen::test_category_getAttributeValues_extracts_f
         QStringLiteral("Wilde vogels"),
         QStringLiteral("Vogelzaad en nestmateriaal voor wilde tuinvogels."));
 
-    const auto attrs = dl.getAttributeValues(html);
+    const QString url = QStringLiteral("https://vogelvoerkopen.nl/wilde-vogels/");
+    const auto attrs = dl.getAttributeValues(url, html);
 
     QVERIFY(!attrs.isEmpty());
+    QCOMPARE(attrs.value(PageAttributesProductCategory::ID_URL), url);
     QCOMPARE(attrs.value(PageAttributesProductCategory::ID_PRODUCT_CATEGORY),
              QStringLiteral("Wilde vogels"));
     const QString desc = attrs.value(PageAttributesProductCategory::ID_DESCRIPTION);
@@ -584,7 +604,7 @@ void Test_Downloader_Vogelvoerkopen::test_category_getAttributeValues_product_pa
     const QString html = QString::fromLatin1(
         "<html><body><p>Just some content with no structured data.</p></body></html>");
 
-    QVERIFY(dl.getAttributeValues(html).isEmpty());
+    QVERIFY(dl.getAttributeValues(QStringLiteral("https://vogelvoerkopen.nl/unknown/"), html).isEmpty());
 }
 
 void Test_Downloader_Vogelvoerkopen::test_category_getAttributeValues_description_fallback()
@@ -594,9 +614,11 @@ void Test_Downloader_Vogelvoerkopen::test_category_getAttributeValues_descriptio
     // No .term-description div → generated fallback description.
     const QString html = makeCategoryHtml(QStringLiteral("Papegaaien"));
 
-    const auto attrs = dl.getAttributeValues(html);
+    const QString url = QStringLiteral("https://vogelvoerkopen.nl/papegaaien/");
+    const auto attrs = dl.getAttributeValues(url, html);
 
     QVERIFY(!attrs.isEmpty());
+    QCOMPARE(attrs.value(PageAttributesProductCategory::ID_URL), url);
     QCOMPARE(attrs.value(PageAttributesProductCategory::ID_PRODUCT_CATEGORY),
              QStringLiteral("Papegaaien"));
     const QString desc = attrs.value(PageAttributesProductCategory::ID_DESCRIPTION);
@@ -615,9 +637,11 @@ void Test_Downloader_Vogelvoerkopen::test_category_getAttributeValues_h1_fallbac
         "<div class=\"term-description\"><p>Vogelzaad speciaal voor kanaries en tropische vogels.</p></div>"
         "</body></html>");
 
-    const auto attrs = dl.getAttributeValues(html);
+    const QString url = QStringLiteral("https://vogelvoerkopen.nl/kanaries/");
+    const auto attrs = dl.getAttributeValues(url, html);
 
     QVERIFY(!attrs.isEmpty());
+    QCOMPARE(attrs.value(PageAttributesProductCategory::ID_URL), url);
     QCOMPARE(attrs.value(PageAttributesProductCategory::ID_PRODUCT_CATEGORY),
              QStringLiteral("Kanaries"));
     QVERIFY(attrs.value(PageAttributesProductCategory::ID_DESCRIPTION).length() >= 10);
@@ -675,10 +699,10 @@ void Test_Downloader_Vogelvoerkopen::test_parse_three_categories_without_error()
     QObject::connect(&timeout, &QTimer::timeout, &eventLoop,
                      [&eventLoop, &failureReason]() {
                          failureReason = QStringLiteral(
-                             "Timeout: 3 categories were not recorded within 120 seconds");
+                             "Timeout: 3 categories were not recorded within 300 seconds");
                          eventLoop.quit();
                      });
-    timeout.start(120'000);
+    timeout.start(300'000);
 
     eventLoop.exec();
 

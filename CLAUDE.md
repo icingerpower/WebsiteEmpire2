@@ -49,6 +49,12 @@ The project has three layers:
   - **BAD**: Catching an exception, logging a warning, and returning `0`, `nullptr`, or an empty value.
   - **GOOD**: Let the exception propagate so the operation fails explicitly, or handle it by notifying the user immediately.
 
+## Working Directories
+- Working directories come from exactly two sources: **UI user selection** or **`WorkingDirectoryManager::instance()->workingDir().path()`** (or a subdirectory of it).
+- **Never** derive a working directory from Qt standard paths (`QStandardPaths`, `QDir::temp()`, `QDir::home()`, etc.).
+- In production code, always obtain the working dir through one of the two approved sources above and pass it down explicitly.
+- In tests, use `QTemporaryDir` as a self-contained working dir — this is the only acceptable exception.
+
 ## General Qt
 - Use `QString` and `QList` over `std::string` and `std::vector` when interacting with Qt APIs.
 - Prefer `qDebug()` for logging.

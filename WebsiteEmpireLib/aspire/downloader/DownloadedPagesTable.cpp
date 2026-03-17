@@ -149,6 +149,57 @@ QHash<QString, QSharedPointer<QList<QImage>>> DownloadedPagesTable::imagesAt(
     return result;
 }
 
+void DownloadedPagesTable::deleteRows(const QList<QString> &rowIds)
+{
+    if (rowIds.isEmpty()) {
+        return;
+    }
+
+    // Build a single DELETE ... WHERE id IN (?, ?, ...) for atomicity.
+    QStringList placeholders;
+    placeholders.reserve(rowIds.size());
+    for (int i = 0; i < rowIds.size(); ++i) {
+        placeholders.append("?");
+    }
+    const QString sql = QString("DELETE FROM %1 WHERE id IN (%2)")
+                            .arg(AspiredDb::TABLE_NAME, placeholders.join(", "));
+
+    QSqlQuery q(database());
+    q.prepare(sql);
+    for (const auto &id : std::as_const(rowIds)) {
+        q.addBindValue(id);
+    }
+
+    if (!q.exec()) {
+        ExceptionWithTitleText ex(
+            tr("Database Error"),
+            tr("Failed to delete rows: %1").arg(q.lastError().text()));
+        ex.raise();
+    }
+
+    select();
+}
+
+Qt::ItemFlags DownloadedPagesTable::flags(const QModelIndex &index) const
+{
+    if (!index.isValid()) {
+        return Qt::NoItemFlags;
+    }
+    const QString colName =
+        headerData(index.column(), Qt::Horizontal, Qt::DisplayRole).toString();
+    if (m_imageAttributeIds.contains(colName)) {
+        return QSqlTableModel::flags(index) & ~Qt::ItemIsEditable;
+    }
+    return QSqlTableModel::flags(index) | Qt::ItemIsEditable;
+}
+
+bool DownloadedPagesTable::setData(const QModelIndex & /*index*/,
+                                   const QVariant & /*value*/,
+                                   int /*role*/)
+{
+    return false;
+}
+
 QVariant DownloadedPagesTable::data(const QModelIndex &index, int role) const
 {
     if ((role == Qt::DisplayRole || role == Qt::EditRole) && index.isValid()) {

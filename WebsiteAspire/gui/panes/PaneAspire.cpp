@@ -3,12 +3,12 @@
 
 #include <QDir>
 #include <QListWidgetItem>
-#include <QStandardPaths>
 
 #include "WidgetDownloader.h"
 #include "aspire/attributes/AbstractPageAttributes.h"
 #include "aspire/downloader/AbstractDownloader.h"
 #include "aspire/downloader/DownloadedPagesTable.h"
+#include "../../common/workingdirectory/WorkingDirectoryManager.h"
 
 PaneAspire::PaneAspire(QWidget *parent)
     : QWidget(parent)
@@ -32,9 +32,7 @@ void PaneAspire::setVisible(bool visible)
 void PaneAspire::_init()
 {
     // Working directory: one shared folder for all downloaders' .db and .ini files.
-    const QString dataPath =
-        QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    QDir workDir(dataPath + QStringLiteral("/aspire"));
+    QDir workDir(WorkingDirectoryManager::instance()->workingDir().path() + QStringLiteral("/aspire"));
     workDir.mkpath(QStringLiteral("."));
 
     // Each entry in ALL_DOWNLOADERS() is a static registry instance created by

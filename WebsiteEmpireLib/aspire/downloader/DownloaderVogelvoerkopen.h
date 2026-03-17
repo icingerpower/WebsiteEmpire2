@@ -51,7 +51,7 @@ public:
     // Extra key "__image_url__" holds the first product image URL.
     // When knownCategories have been set via setKnownCategories(), the raw
     // breadcrumb category is matched against them before insertion.
-    QHash<QString, QString> getAttributeValues(const QString &content) const override;
+    QHash<QString, QString> getAttributeValues(const QString &url, const QString &content) const override;
 
     // Supplies the list of known category names (from DownloaderVogelvoerkopenCategory)
     // so that getAttributeValues() can resolve the product's raw breadcrumb category

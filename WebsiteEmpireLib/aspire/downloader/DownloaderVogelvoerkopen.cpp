@@ -315,7 +315,7 @@ QString DownloaderVogelvoerkopen::matchCategory(const QString &rawCategory) cons
 // Attribute extraction
 // ---------------------------------------------------------------------------
 
-QHash<QString, QString> DownloaderVogelvoerkopen::getAttributeValues(const QString &content) const
+QHash<QString, QString> DownloaderVogelvoerkopen::getAttributeValues(const QString &url, const QString &content) const
 {
     // Collect all JSON-LD blocks
     static const QRegularExpression ldRe(
@@ -487,13 +487,14 @@ QHash<QString, QString> DownloaderVogelvoerkopen::getAttributeValues(const QStri
     }
 
     QHash<QString, QString> result;
-    result[PageAttributesProduct::ID_NAME]            = name;
-    result[PageAttributesProduct::ID_DESCRIPTION]     = description;
-    result[PageAttributesProduct::ID_SALE_PRICE]      = salePrice;
-    result[PageAttributesProduct::ID_CATEGORY]        = matchCategory(category);
+    result[PageAttributesProduct::ID_URL]              = url;
+    result[PageAttributesProduct::ID_NAME]             = name;
+    result[PageAttributesProduct::ID_DESCRIPTION]      = description;
+    result[PageAttributesProduct::ID_SALE_PRICE]       = salePrice;
+    result[PageAttributesProduct::ID_CATEGORY]         = matchCategory(category);
     result[PageAttributesProductPetFood::ID_WEIGHT_GR] = weightGrStr;
-    result[PageAttributesProductPetFood::ID_PRICES]   = pricesStr;
-    result[VOGELVOERKOPEN_IMAGE_URL_KEY]               = imageUrl;
+    result[PageAttributesProductPetFood::ID_PRICES]    = pricesStr;
+    result[VOGELVOERKOPEN_IMAGE_URL_KEY]                = imageUrl;
     return result;
 }
 

@@ -46,7 +46,7 @@ public:
 
     // Returns PageAttributesProductCategory attributes when the page is a category
     // page, otherwise an empty hash.
-    QHash<QString, QString> getAttributeValues(const QString &content) const override;
+    QHash<QString, QString> getAttributeValues(const QString &url, const QString &content) const override;
 
 protected:
     QFuture<QString> fetchUrl(const QString &url) override;
