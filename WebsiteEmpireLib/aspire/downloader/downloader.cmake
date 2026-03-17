@@ -1,4 +1,10 @@
 set(ASPIRE_DOWNLOADER_FILES
     ${CMAKE_CURRENT_LIST_DIR}/AbstractDownloader.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractDownloader.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/DownloadedPagesTable.h
+    ${CMAKE_CURRENT_LIST_DIR}/DownloadedPagesTable.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/DownloaderVogelvoerkopen.h
+    ${CMAKE_CURRENT_LIST_DIR}/DownloaderVogelvoerkopen.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/DownloaderVogelvoerkopenCategory.h
+    ${CMAKE_CURRENT_LIST_DIR}/DownloaderVogelvoerkopenCategory.cpp
 )

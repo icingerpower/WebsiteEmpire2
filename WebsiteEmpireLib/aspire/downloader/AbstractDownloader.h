@@ -13,6 +13,8 @@
 #include <QSharedPointer>
 #include <QStringList>
 
+class AbstractPageAttributes;
+
 class QSettings;
 
 class AbstractDownloader : public QObject
@@ -34,9 +36,30 @@ public:
     virtual QString getId() const = 0;
     virtual QString getName() const = 0;
     virtual QString getDescription() const = 0;
+    virtual AbstractPageAttributes *createPageAttributes() const = 0;
+
+    // Creates and returns a new, fully operational instance of this downloader
+    // type backed by workingDir.  The caller takes ownership (no parent set).
+    // Registry instances (created by DECLARE_DOWNLOADER) use this to spawn
+    // working instances without knowing the concrete type.
+    virtual AbstractDownloader *createInstance(const QDir &workingDir) const = 0;
 
     virtual QStringList getUrlsToParse(const QString &content) const = 0;          // Next links to follow from one page
     virtual QHash<QString, QString> getAttributeValues(const QString &content) const = 0; // Attribute id → value
+
+    // Seed URLs to pass to parse() when starting a fresh crawl.
+    // Default implementation returns an empty list; subclasses should override.
+    virtual QStringList getSeedUrls() const;
+
+    // Key in the getAttributeValues() hash that holds an image URL to be
+    // fetched and stored in the image attribute.  Returns an empty string
+    // for downloaders that do not embed image URLs in the text attributes.
+    virtual QString getImageUrlAttributeKey() const;
+
+    // Replaces the page-parsed callback used by the next parse() call.
+    // Useful for wiring a GUI component to an existing downloader after
+    // construction.
+    void setPageParsedCallback(PageParsedCallback cb);
 
     // Starts or resumes the crawl.
     // - seedUrls are added to the pending queue; already-visited ones are skipped.
@@ -58,6 +81,10 @@ public:
     //       }
     //   }
     QFuture<void> parse(const QStringList &seedUrls = {});
+
+    // Emitted when parse() drains the pending queue and there is nothing left
+    // to fetch.  Not emitted when a crawl is stopped externally.
+    Q_SIGNAL void finished();
 
     static const QMap<QString, const AbstractDownloader *> &ALL_DOWNLOADERS();
 

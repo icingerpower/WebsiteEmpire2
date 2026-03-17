@@ -28,6 +28,27 @@ static QByteArray serializeImages(const QList<QSharedPointer<QImage>> &images)
     return blob;
 }
 
+QList<QSharedPointer<QImage>> AspiredDb::deserializeImages(const QByteArray &blob)
+{
+    QList<QSharedPointer<QImage>> images;
+    if (blob.isEmpty()) {
+        return images;
+    }
+    QDataStream stream(blob);
+    stream.setVersion(QDataStream::Qt_6_0);
+    qint32 count = 0;
+    stream >> count;
+    images.reserve(count);
+    for (qint32 i = 0; i < count; ++i) {
+        QByteArray imgBytes;
+        stream >> imgBytes;
+        auto img = QSharedPointer<QImage>::create();
+        img->loadFromData(imgBytes, "PNG");
+        images.append(img);
+    }
+    return images;
+}
+
 const QString AspiredDb::TABLE_NAME = "records";
 
 AspiredDb::AspiredDb(const QString &workingDir, const QString &retrieverID)

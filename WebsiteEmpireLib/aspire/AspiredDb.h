@@ -31,6 +31,10 @@ public:
                 const AbstractPageAttributes *pageAttributes,
                 const QHash<QString, QList<QSharedPointer<QImage>>> &idAttr_imageValue = {});
 
+    // Inverse of the internal serializeImages() used by record().
+    // Returns an empty list for a null/empty blob.
+    static QList<QSharedPointer<QImage>> deserializeImages(const QByteArray &blob);
+
     static const QString TABLE_NAME;
 
 private:

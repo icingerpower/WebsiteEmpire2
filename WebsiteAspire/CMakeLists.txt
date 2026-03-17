@@ -26,6 +26,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
         gui/panes/PaneAspire.h gui/panes/PaneAspire.cpp gui/panes/PaneAspire.ui
+        gui/panes/WidgetDownloader.h gui/panes/WidgetDownloader.cpp gui/panes/WidgetDownloader.ui
     )
 else()
     if(ANDROID)

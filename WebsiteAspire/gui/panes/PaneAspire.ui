@@ -13,7 +13,42 @@
   <property name="windowTitle">
    <string>Form</string>
   </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QSplitter" name="splitter">
+     <property name="orientation">
+      <enum>Qt::Orientation::Horizontal</enum>
+     </property>
+     <widget class="QListWidget" name="listWidgetDownloaders">
+      <property name="maximumSize">
+       <size>
+        <width>200</width>
+        <height>16777215</height>
+       </size>
+      </property>
+     </widget>
+     <widget class="QStackedWidget" name="stackedWidget"/>
+    </widget>
+   </item>
+  </layout>
  </widget>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>listWidgetDownloaders</sender>
+   <signal>currentRowChanged(int)</signal>
+   <receiver>stackedWidget</receiver>
+   <slot>setCurrentIndex(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>163</x>
+     <y>252</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>708</x>
+     <y>240</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>

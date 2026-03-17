@@ -64,3 +64,15 @@ QVariant AbstractPageAttributes::data(const QModelIndex &index, int role) const
     }
     return QVariant();
 }
+
+QVariant AbstractPageAttributes::headerData(int section, Qt::Orientation orientation,
+                                            int role) const
+{
+    if (role != Qt::DisplayRole) {
+        return QVariant();
+    }
+    if (orientation == Qt::Horizontal && section >= 0 && section < COLUMNS.size()) {
+        return COLUMNS[section];
+    }
+    return QVariant();
+}

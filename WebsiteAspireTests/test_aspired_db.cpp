@@ -1,5 +1,6 @@
 #include <QtTest>
 #include <QFile>
+#include <QImage>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -170,6 +171,7 @@ private slots:
     void test_record_throws_on_cross_validation_failure();
     void test_record_cross_validation_exception_uses_page_attributes_name();
     void test_record_auto_creates_table_without_prior_createTableIdNeed();
+    void test_record_image_single_then_list_of_three();
 };
 
 // ---------------------------------------------------------------------------
@@ -761,6 +763,62 @@ void Test_AspiredDb::test_record_auto_creates_table_without_prior_createTableIdN
     QCOMPARE(rows.size(), 1);
     QCOMPARE(rows[0].value("field_x"), QString("hello"));
     QCOMPARE(rows[0].value("field_y"), QString("world"));
+}
+
+// ---------------------------------------------------------------------------
+// 18. record() stores one image, then a list of three images
+// ---------------------------------------------------------------------------
+void Test_AspiredDb::test_record_image_single_then_list_of_three()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    // Image attribute: requires at least one image.
+    AbstractPageAttributes::Attribute imgAttr{
+        "photos", "Photos", "", "", "",
+        [](const QString &) { return QString{}; },
+        std::nullopt,
+        false,
+        std::nullopt,
+        true,
+        std::make_optional<std::function<QString(const QList<QSharedPointer<QImage>> &)>>(
+            [](const QList<QSharedPointer<QImage>> &images) -> QString {
+                if (images.isEmpty()) {
+                    return "Photos requires at least one image";
+                }
+                return QString{};
+            })
+    };
+    const QList<AbstractPageAttributes::Attribute> attrs = { imgAttr };
+    SimpleTestAttributes pageAttrs;
+
+    AspiredDb db(dir.path(), "r17");
+
+    // --- First record: one image ---
+    auto img1 = QSharedPointer<QImage>::create(4, 4, QImage::Format_RGB32);
+    img1->fill(Qt::red);
+
+    db.record(attrs, {}, &pageAttrs, {{"photos", {img1}}});
+
+    // --- Second record: three images ---
+    auto img2 = QSharedPointer<QImage>::create(4, 4, QImage::Format_RGB32);
+    img2->fill(Qt::green);
+    auto img3 = QSharedPointer<QImage>::create(4, 4, QImage::Format_RGB32);
+    img3->fill(Qt::blue);
+
+    db.record(attrs, {}, &pageAttrs, {{"photos", {img1, img2, img3}}});
+
+    // Both rows must be present
+    const QString dbPath = dir.path() + "/r17.db";
+    const auto rows = allRows(dbPath, "conn_test18", AspiredDb::TABLE_NAME);
+    QCOMPARE(rows.size(), 2);
+
+    // Both blobs must be non-empty
+    QVERIFY(!rows[0].value("photos").isEmpty());
+    QVERIFY(!rows[1].value("photos").isEmpty());
+
+    // The 3-image blob must be strictly larger than the 1-image blob
+    QVERIFY(rows[1].value("photos").size() > rows[0].value("photos").size());
 }
 
 QTEST_MAIN(Test_AspiredDb)

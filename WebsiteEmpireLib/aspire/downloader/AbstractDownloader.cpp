@@ -19,6 +19,21 @@ const QDir &AbstractDownloader::workingDir() const
     return m_workingDir;
 }
 
+QStringList AbstractDownloader::getSeedUrls() const
+{
+    return {};
+}
+
+QString AbstractDownloader::getImageUrlAttributeKey() const
+{
+    return {};
+}
+
+void AbstractDownloader::setPageParsedCallback(PageParsedCallback cb)
+{
+    m_onPageParsed = std::move(cb);
+}
+
 // --- Registry ---
 
 AbstractDownloader::Recorder::Recorder(AbstractDownloader *downloader)
@@ -44,8 +59,19 @@ QFuture<void> AbstractDownloader::parse(const QStringList &seedUrls)
     if (!m_stateLoaded) {
         m_stateLoaded = true;
         loadState();
+        qDebug() << getId() << ": state loaded —"
+                 << m_visited.size() << "visited,"
+                 << m_pending.size() << "pending";
     }
+
+    const int beforeSize = m_pending.size();
     enqueuePending(seedUrls);
+    const int added = m_pending.size() - beforeSize;
+    qDebug() << getId() << ": enqueuePending" << seedUrls
+             << "→ added" << added
+             << "(seeds already visited:" << (seedUrls.size() - added) << ")";
+
+    qDebug() << getId() << ": starting parse with" << m_pending.size() << "pending URLs";
 
     auto promise = QSharedPointer<QPromise<void>>::create();
     promise->start();
@@ -56,21 +82,31 @@ QFuture<void> AbstractDownloader::parse(const QStringList &seedUrls)
 void AbstractDownloader::processNext(QSharedPointer<QPromise<void>> promise)
 {
     if (!hasPending()) {
+        qDebug() << getId() << ": no more pending URLs — finished"
+                 << "(total visited:" << m_visited.size() << ")";
+        emit finished();
         promise->finish();
         return;
     }
 
     const QString url = takePending();
+    qDebug() << getId() << ": fetching" << url
+             << "(" << m_pending.size() << "remaining)";
 
     fetchUrl(url).then(this, [this, url, promise](const QString &content) {
         markVisited(url);
+        const QHash<QString, QString> attrs = getAttributeValues(content);
+        const QStringList newUrls = getUrlsToParse(content);
+        qDebug() << getId() << ": parsed" << url
+                 << "— attrs keys:" << attrs.keys()
+                 << "— new URLs:" << newUrls.size();
         if (m_onPageParsed) {
-            m_onPageParsed(url, getAttributeValues(content));
+            m_onPageParsed(url, attrs);
         }
-        enqueuePending(getUrlsToParse(content));
+        enqueuePending(newUrls);
         processNext(promise);
     }).onFailed(this, [this, url, promise](const QException &e) {
-        qDebug() << "Failed to fetch" << url << ":" << e.what();
+        qDebug() << getId() << ": failed to fetch" << url << ":" << e.what();
         processNext(promise); // skip and continue
     });
 }
