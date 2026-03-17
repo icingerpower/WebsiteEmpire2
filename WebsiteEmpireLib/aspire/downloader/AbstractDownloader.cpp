@@ -101,10 +101,19 @@ void AbstractDownloader::processNext(QSharedPointer<QPromise<void>> promise)
                  << "— attrs keys:" << attrs.keys()
                  << "— new URLs:" << newUrls.size();
         if (m_onPageParsed) {
-            m_onPageParsed(url, attrs);
+            // Await the callback's future so async work (e.g. image fetches) completes
+            // before advancing to the next URL.  The event loop remains free throughout.
+            m_onPageParsed(url, attrs).then(this, [this, newUrls, promise](bool /*accepted*/) {
+                enqueuePending(newUrls);
+                processNext(promise);
+            }).onFailed(this, [this, newUrls, promise](const QException &) {
+                enqueuePending(newUrls);
+                processNext(promise);
+            });
+        } else {
+            enqueuePending(newUrls);
+            processNext(promise);
         }
-        enqueuePending(newUrls);
-        processNext(promise);
     }).onFailed(this, [this, url, promise](const QException &e) {
         qDebug() << getId() << ": failed to fetch" << url << ":" << e.what();
         processNext(promise); // skip and continue

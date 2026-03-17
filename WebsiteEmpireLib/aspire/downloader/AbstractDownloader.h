@@ -23,9 +23,11 @@ class AbstractDownloader : public QObject
 
 public:
     // Called after each page is parsed: receives the URL and the extracted attribute map.
-    // Return true to accept the record, false to reject it (e.g. a check callback failed).
+    // Returns a QFuture<bool>: true to accept the record, false to reject it.
     // Links from the page are followed regardless of the return value.
-    using PageParsedCallback = std::function<bool(const QString &url, const QHash<QString, QString> &attributes)>;
+    // The crawl chain awaits this future before moving to the next URL, so the callback
+    // may perform async work (e.g. image fetches) without blocking the event loop.
+    using PageParsedCallback = std::function<QFuture<bool>(const QString &url, const QHash<QString, QString> &attributes)>;
 
     // workingDir defaults to QDir{} so DECLARE_DOWNLOADER still works for
     // type-registry instances (which don't parse anything).
@@ -76,7 +78,7 @@ public:
     //           const QString url = takePending();
     //           const QString content = co_await fetchUrl(url); // ← yield point
     //           markVisited(url);
-    //           m_onPageParsed(url, getAttributeValues(url, content));
+    //           co_await m_onPageParsed(url, getAttributeValues(url, content));
     //           enqueuePending(getUrlsToParse(content));
     //       }
     //   }

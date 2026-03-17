@@ -125,6 +125,10 @@ This pattern allows users to add missing configuration during operations without
 
 ## File Organisation
 
+### Prefer .ui Files for Widget Configuration
+- **Always prefer `.ui` files** over C++ code for configuring widget properties (selection mode, edit triggers, resize modes, stretch, alignment, etc.).
+- Properties settable via Qt Designer XML must go in `.ui`, not in `.cpp`. Only use C++ for configuration that Qt Designer cannot express (e.g. `QHeaderView::setSectionResizeMode`, runtime model assignment, signal/slot connections).
+
 ### Implementations in .cpp
 - Keep implementations in `.cpp` files. Only declare in `.h`.
 

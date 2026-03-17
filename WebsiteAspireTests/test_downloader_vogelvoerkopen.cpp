@@ -6,6 +6,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QPromise>
 #include <QSharedPointer>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -662,15 +663,23 @@ void Test_Downloader_Vogelvoerkopen::test_parse_three_categories_without_error()
     DownloadedPagesTable *tablePtr = nullptr;
 
     auto onPageParsed = [&](const QString & /*url*/,
-                            const QHash<QString, QString> &attrs) -> bool {
+                            const QHash<QString, QString> &attrs) -> QFuture<bool> {
+        auto makeReady = [](bool value) -> QFuture<bool> {
+            QPromise<bool> p;
+            p.start();
+            p.addResult(value);
+            p.finish();
+            return p.future();
+        };
+
         if (recordedCount >= 3 || !failureReason.isEmpty() || !tablePtr) {
-            return false;
+            return makeReady(false);
         }
 
         const QString categoryName =
             attrs.value(PageAttributesProductCategory::ID_PRODUCT_CATEGORY);
         if (categoryName.isEmpty()) {
-            return false; // Not a category page
+            return makeReady(false); // Not a category page
         }
 
         try {
@@ -684,7 +693,7 @@ void Test_Downloader_Vogelvoerkopen::test_parse_three_categories_without_error()
             eventLoop.quit();
         }
 
-        return true;
+        return makeReady(true);
     };
 
     DownloaderVogelvoerkopenCategory downloader(workDir, onPageParsed);
@@ -731,14 +740,22 @@ void Test_Downloader_Vogelvoerkopen::test_parse_five_products_without_error()
     // row into DownloadedPagesTable.  Stops the outer event loop once 5 rows
     // have been committed.
     auto onPageParsed = [&](const QString & /*url*/,
-                            const QHash<QString, QString> &attrs) -> bool {
+                            const QHash<QString, QString> &attrs) -> QFuture<bool> {
+        auto makeReady = [](bool value) -> QFuture<bool> {
+            QPromise<bool> p;
+            p.start();
+            p.addResult(value);
+            p.finish();
+            return p.future();
+        };
+
         if (recordedCount >= 5 || !failureReason.isEmpty() || !tablePtr) {
-            return false;
+            return makeReady(false);
         }
 
         const QString name = attrs.value(PageAttributesProduct::ID_NAME);
         if (name.isEmpty()) {
-            return false; // Not a product page
+            return makeReady(false); // Not a product page
         }
 
         // Build image list
@@ -765,7 +782,7 @@ void Test_Downloader_Vogelvoerkopen::test_parse_five_products_without_error()
             eventLoop.quit();
         }
 
-        return true;
+        return makeReady(true);
     };
 
     // Construct downloader and table.  The table must outlive the downloader
