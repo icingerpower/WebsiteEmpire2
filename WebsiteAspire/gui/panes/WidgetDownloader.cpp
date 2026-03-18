@@ -2,6 +2,9 @@
 #include "ui_WidgetDownloader.h"
 
 #include <QClipboard>
+#include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
 #include <QItemSelectionModel>
@@ -13,7 +16,9 @@
 #include <QPixmap>
 #include <QPointer>
 #include <QPromise>
+#include <QSettings>
 #include <QShortcut>
+#include <QTextStream>
 
 #include "gui/dialog/DialogViewAttributes.h"
 
@@ -32,6 +37,8 @@ WidgetDownloader::WidgetDownloader(QWidget *parent)
     ui->setupUi(this);
     ui->buttonDownload->setEnabled(false);
     ui->buttonDownload->setCheckable(true);
+    ui->buttonDownloadFromFileUrls->setEnabled(false);
+    ui->buttonDownloadFromFileUrls->setCheckable(true);
     ui->progressBar->hide();
     _connectSlots();
 }
@@ -66,6 +73,10 @@ void WidgetDownloader::_connectSlots()
             &QPushButton::clicked,
             this,
             &WidgetDownloader::copyUrl);
+    connect(ui->buttonDownloadFromFileUrls,
+            &QPushButton::clicked,
+            this,
+            &WidgetDownloader::downloadFromFileUrls);
 
     auto *copyShortcut = new QShortcut(
         QKeySequence::Copy, ui->tableViewPages, nullptr, nullptr, Qt::WidgetShortcut);
@@ -86,6 +97,8 @@ void WidgetDownloader::init(const AbstractPageAttributes *pageAttribute,
             this,
             &WidgetDownloader::_onRowAttributeSelected);
 
+    ui->buttonDownloadFromFileUrls->setEnabled(
+        dowanloadedPageTable->downloader()->supportsFileUrlDownload());
     ui->labelImage->setAlignment(Qt::AlignCenter);
     ui->labelDownloadQuantities->setText(tr("%1 pages").arg(m_dowanloadedPageTable->rowCount()));
 }
@@ -117,6 +130,103 @@ void WidgetDownloader::viewAttributes()
 // download
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// _buildPageParsedCallback
+// ---------------------------------------------------------------------------
+
+std::function<QFuture<bool>(const QString &, const QHash<QString, QString> &)>
+WidgetDownloader::_buildPageParsedCallback()
+{
+    // Capture everything by value / safe pointer so that the lambda does not
+    // dangle if WidgetDownloader is destroyed mid-crawl.
+    QPointer<WidgetDownloader> self(this);
+    const QString imageUrlKey = m_dowanloadedPageTable->downloader()->getImageUrlAttributeKey();
+
+    return [self, imageUrlKey](const QString & /*url*/,
+                               const QHash<QString, QString> &attrs) -> QFuture<bool> {
+        auto promise = QSharedPointer<QPromise<bool>>::create();
+        promise->start();
+
+        if (!self || self->m_stopDownload || attrs.isEmpty()) {
+            promise->addResult(false);
+            promise->finish();
+            return promise->future();
+        }
+
+        // Helper: records the page with the given images and resolves the promise.
+        auto record = [self, attrs, imageUrlKey, promise](QList<QSharedPointer<QImage>> images) {
+            // Strip the image-URL transport key before handing attrs to the schema.
+            QHash<QString, QString> textAttrs = attrs;
+            textAttrs.remove(imageUrlKey);
+
+            const QHash<QString, QList<QSharedPointer<QImage>>> imageAttrs{
+                {PageAttributesProduct::ID_IMAGES, images}
+            };
+
+            try {
+                self->m_dowanloadedPageTable->recordPage(textAttrs, imageAttrs);
+                ++self->m_sessionRecordCount;
+                const int total = self->m_dowanloadedPageTable->rowCount();
+                self->ui->labelDownloadQuantities->setText(
+                    QObject::tr("%1 added (total %2 pages)")
+                        .arg(self->m_sessionRecordCount)
+                        .arg(total));
+            } catch (const QException &ex) {
+                qDebug() << "WidgetDownloader: record failed:" << ex.what();
+            }
+
+            promise->addResult(true);
+            promise->finish();
+        };
+
+        // --- Fetch product image asynchronously (no nested event loop) ---
+        const QString imageUrl = attrs.value(imageUrlKey);
+        if (!imageUrl.isEmpty() && self->m_nam) {
+            QNetworkRequest req{QUrl{imageUrl}};
+            req.setHeader(QNetworkRequest::UserAgentHeader,
+                          QStringLiteral("Mozilla/5.0 (compatible; WebsiteEmpire/1.0)"));
+            req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                             QNetworkRequest::NoLessSafeRedirectPolicy);
+
+            QNetworkReply *reply = self->m_nam->get(req);
+            QObject::connect(reply, &QNetworkReply::finished, reply,
+                             [self, reply, record]() mutable {
+                                 QList<QSharedPointer<QImage>> images;
+                                 if (!self) {
+                                     reply->deleteLater();
+                                     return;
+                                 }
+                                 const QByteArray imgData = reply->readAll();
+                                 reply->deleteLater();
+
+                                 auto img = QSharedPointer<QImage>::create();
+                                 if (img->loadFromData(imgData)) {
+                                     images << img;
+                                 }
+                                 if (images.isEmpty()) {
+                                     auto placeholder = QSharedPointer<QImage>::create(
+                                         200, 200, QImage::Format_RGB32);
+                                     placeholder->fill(Qt::white);
+                                     images << placeholder;
+                                 }
+                                 record(std::move(images));
+                             });
+        } else {
+            // No image URL: record with a placeholder immediately.
+            auto placeholder = QSharedPointer<QImage>::create(
+                200, 200, QImage::Format_RGB32);
+            placeholder->fill(Qt::white);
+            record({placeholder});
+        }
+
+        return promise->future();
+    };
+}
+
+// ---------------------------------------------------------------------------
+// download
+// ---------------------------------------------------------------------------
+
 void WidgetDownloader::download(bool start)
 {
     ui->progressBar->setVisible(start);
@@ -131,106 +241,24 @@ void WidgetDownloader::download(bool start)
         m_dowanloadedPageTable->downloader()->requestStop();
         ui->buttonDownload->setChecked(false);
         ui->buttonDownload->setText(tr("Download"));
+        ui->buttonDownloadFromFileUrls->setEnabled(
+            m_dowanloadedPageTable->downloader()->supportsFileUrlDownload());
         ui->progressBar->hide();
         return;
     }
-    ui->progressBar->setTextVisible(start);
+    ui->progressBar->setTextVisible(true);
 
     m_stopDownload = false;
     m_sessionRecordCount = 0;
     ui->buttonDownload->setText(tr("Stop"));
+    ui->buttonDownloadFromFileUrls->setEnabled(false);
 
     if (!m_nam) {
         m_nam = new QNetworkAccessManager(this);
     }
 
     AbstractDownloader *dl = m_dowanloadedPageTable->downloader();
-    const QString imageUrlKey = dl->getImageUrlAttributeKey();
-
-    // Capture everything the callback needs by value / safe pointer so that
-    // the lambda does not dangle if WidgetDownloader is destroyed mid-crawl.
-    QPointer<WidgetDownloader> self(this);
-
-    dl->setPageParsedCallback(
-        [self, imageUrlKey](const QString & /*url*/,
-                            const QHash<QString, QString> &attrs) -> QFuture<bool> {
-            auto promise = QSharedPointer<QPromise<bool>>::create();
-            promise->start();
-
-            if (!self || self->m_stopDownload || attrs.isEmpty()) {
-                promise->addResult(false);
-                promise->finish();
-                return promise->future();
-            }
-
-            // Helper: records the page with the given images and resolves the promise.
-            auto record = [self, attrs, imageUrlKey, promise](QList<QSharedPointer<QImage>> images) {
-                // Strip the image-URL transport key before handing attrs to the schema.
-                QHash<QString, QString> textAttrs = attrs;
-                textAttrs.remove(imageUrlKey);
-
-                const QHash<QString, QList<QSharedPointer<QImage>>> imageAttrs{
-                    {PageAttributesProduct::ID_IMAGES, images}
-                };
-
-                try {
-                    self->m_dowanloadedPageTable->recordPage(textAttrs, imageAttrs);
-                    ++self->m_sessionRecordCount;
-                    const int total = self->m_dowanloadedPageTable->rowCount();
-                    self->ui->labelDownloadQuantities->setText(
-                        QObject::tr("%1 added (total %2 pages)")
-                            .arg(self->m_sessionRecordCount)
-                            .arg(total));
-                } catch (const QException &ex) {
-                    qDebug() << "WidgetDownloader: record failed:" << ex.what();
-                }
-
-                promise->addResult(true);
-                promise->finish();
-            };
-
-            // --- Fetch product image asynchronously (no nested event loop) ---
-            const QString imageUrl = attrs.value(imageUrlKey);
-            if (!imageUrl.isEmpty() && self->m_nam) {
-                QNetworkRequest req{QUrl{imageUrl}};
-                req.setHeader(QNetworkRequest::UserAgentHeader,
-                              QStringLiteral("Mozilla/5.0 (compatible; WebsiteEmpire/1.0)"));
-                req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                                 QNetworkRequest::NoLessSafeRedirectPolicy);
-
-                QNetworkReply *reply = self->m_nam->get(req);
-                QObject::connect(reply, &QNetworkReply::finished, reply,
-                                 [self, reply, record]() mutable {
-                                     QList<QSharedPointer<QImage>> images;
-                                     if (!self) {
-                                         reply->deleteLater();
-                                         return;
-                                     }
-                                     const QByteArray imgData = reply->readAll();
-                                     reply->deleteLater();
-
-                                     auto img = QSharedPointer<QImage>::create();
-                                     if (img->loadFromData(imgData)) {
-                                         images << img;
-                                     }
-                                     if (images.isEmpty()) {
-                                         auto placeholder = QSharedPointer<QImage>::create(
-                                             200, 200, QImage::Format_RGB32);
-                                         placeholder->fill(Qt::white);
-                                         images << placeholder;
-                                     }
-                                     record(std::move(images));
-                                 });
-            } else {
-                // No image URL: record with a placeholder immediately.
-                auto placeholder = QSharedPointer<QImage>::create(
-                    200, 200, QImage::Format_RGB32);
-                placeholder->fill(Qt::white);
-                record({placeholder});
-            }
-
-            return promise->future();
-        });
+    dl->setPageParsedCallback(_buildPageParsedCallback());
 
     // Disconnect any previous finished() connection before creating a new one
     // so that restarting a stopped crawl never fires the old handler.
@@ -242,6 +270,8 @@ void WidgetDownloader::download(bool start)
             ui->progressBar->hide();
             ui->buttonDownload->setChecked(false);
             ui->buttonDownload->setText(tr("Download"));
+            ui->buttonDownloadFromFileUrls->setEnabled(
+                m_dowanloadedPageTable->downloader()->supportsFileUrlDownload());
             ui->labelDownloadQuantities->setText(
                 ui->labelDownloadQuantities->text()
                 + tr(" — %1").arg(tr("FINISHED")));
@@ -250,6 +280,108 @@ void WidgetDownloader::download(bool start)
     // Start (or resume) the crawl; pass seed URLs only on first launch — the
     // downloader's .ini keeps the queue across sessions automatically.
     m_parseFuture = dl->parse(dl->getSeedUrls());
+}
+
+// ---------------------------------------------------------------------------
+// downloadFromFileUrls
+// ---------------------------------------------------------------------------
+
+void WidgetDownloader::downloadFromFileUrls(bool start)
+{
+    if (!m_dowanloadedPageTable) {
+        ui->buttonDownloadFromFileUrls->setChecked(false);
+        return;
+    }
+
+    if (!start) {
+        disconnect(m_downloadFinishedConnection);
+        m_stopDownload = true;
+        m_dowanloadedPageTable->downloader()->requestStop();
+        ui->buttonDownloadFromFileUrls->setChecked(false);
+        ui->buttonDownloadFromFileUrls->setText(tr("Download From File URLs"));
+        ui->buttonDownload->setEnabled(true);
+        ui->progressBar->hide();
+        return;
+    }
+
+    // --- Pick the URL list file ---
+    QSettings appSettings;
+    appSettings.beginGroup(QStringLiteral("FileUrlsDownloader"));
+    const QString lastFolder = appSettings.value(QStringLiteral("lastFolder"),
+                                                  QDir::homePath()).toString();
+
+    const QString filePath = QFileDialog::getOpenFileName(
+        this,
+        tr("Select URL List"),
+        lastFolder,
+        tr("Text files (*.txt);;All files (*)"));
+
+    if (filePath.isEmpty()) {
+        ui->buttonDownloadFromFileUrls->setChecked(false);
+        appSettings.endGroup();
+        return;
+    }
+
+    appSettings.setValue(QStringLiteral("lastFolder"), QFileInfo(filePath).absolutePath());
+    appSettings.endGroup();
+
+    // --- Read one URL per line, skip empty lines ---
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::warning(this,
+                             tr("File Error"),
+                             tr("Cannot open file: %1").arg(filePath));
+        ui->buttonDownloadFromFileUrls->setChecked(false);
+        return;
+    }
+
+    QStringList urls;
+    QTextStream stream(&file);
+    while (!stream.atEnd()) {
+        const QString line = stream.readLine().trimmed();
+        if (!line.isEmpty()) {
+            urls.append(line);
+        }
+    }
+
+    if (urls.isEmpty()) {
+        QMessageBox::information(this,
+                                 tr("Empty File"),
+                                 tr("No URLs found in the selected file."));
+        ui->buttonDownloadFromFileUrls->setChecked(false);
+        return;
+    }
+
+    // --- Start download ---
+    ui->progressBar->setVisible(true);
+    ui->progressBar->setTextVisible(true);
+    m_stopDownload = false;
+    m_sessionRecordCount = 0;
+    ui->buttonDownloadFromFileUrls->setText(tr("Stop"));
+    ui->buttonDownload->setEnabled(false);
+
+    if (!m_nam) {
+        m_nam = new QNetworkAccessManager(this);
+    }
+
+    AbstractDownloader *dl = m_dowanloadedPageTable->downloader();
+    dl->setPageParsedCallback(_buildPageParsedCallback());
+
+    disconnect(m_downloadFinishedConnection);
+    m_downloadFinishedConnection = connect(
+        dl, &AbstractDownloader::finished,
+        this, [this]() {
+            m_stopDownload = true;
+            ui->progressBar->hide();
+            ui->buttonDownloadFromFileUrls->setChecked(false);
+            ui->buttonDownloadFromFileUrls->setText(tr("Download From File URLs"));
+            ui->buttonDownload->setEnabled(true);
+            ui->labelDownloadQuantities->setText(
+                ui->labelDownloadQuantities->text()
+                + tr(" — %1").arg(tr("FINISHED")));
+        });
+
+    m_parseFuture = dl->parseSpecificUrls(urls);
 }
 
 void WidgetDownloader::removePages()

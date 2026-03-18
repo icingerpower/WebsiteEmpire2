@@ -1,7 +1,10 @@
 #ifndef WIDGETDOWNLOADER_H
 #define WIDGETDOWNLOADER_H
 
+#include <functional>
+
 #include <QFuture>
+#include <QHash>
 #include <QItemSelection>
 #include <QWidget>
 
@@ -35,6 +38,13 @@ public slots:
     // start == true  → begin (or resume) an async crawl and record into the table.
     // start == false → signal the crawl to stop; already-downloaded rows are kept.
     void download(bool start);
+
+    // start == true  → prompt for a .txt file of URLs (one per line, no header),
+    //                   then download each URL without following any discovered links.
+    //                   The last selected folder is remembered in QSettings.
+    // start == false → signal the crawl to stop; already-downloaded rows are kept.
+    void downloadFromFileUrls(bool start);
+
     void removePages();
     void reparse();
     void copyUrl();
@@ -46,6 +56,11 @@ private slots:
 
 private:
     void _connectSlots();
+
+    // Builds the page-parsed callback shared by download() and downloadFromFileUrls().
+    // Must be called after m_dowanloadedPageTable is set and m_nam is initialised.
+    std::function<QFuture<bool>(const QString &, const QHash<QString, QString> &)>
+    _buildPageParsedCallback();
 
     Ui::WidgetDownloader *ui;
     const AbstractPageAttributes *m_pageAttribute = nullptr;
@@ -65,7 +80,7 @@ private:
     QFuture<void> m_parseFuture;
 
     // Connection to AbstractDownloader::finished() — disconnected on user stop
-    // and replaced on each new download(true) call.
+    // and replaced on each new download(true) / downloadFromFileUrls(true) call.
     QMetaObject::Connection m_downloadFinishedConnection;
 };
 

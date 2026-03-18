@@ -26,10 +26,23 @@
      <item>
       <widget class="QPushButton" name="buttonDownload">
        <property name="toolTip">
-        <string>Start downloading pages</string>
+        <string>Start downloading pages by following links from the seed URLs</string>
        </property>
        <property name="text">
         <string>Download</string>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="buttonDownloadFromFileUrls">
+       <property name="toolTip">
+        <string>Pick a .txt file containing one URL per line (no header). Downloads only those URLs without following any links.</string>
+       </property>
+       <property name="text">
+        <string>Download From File URLs</string>
        </property>
        <property name="checkable">
         <bool>true</bool>

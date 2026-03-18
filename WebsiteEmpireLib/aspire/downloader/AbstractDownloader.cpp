@@ -29,6 +29,11 @@ QString AbstractDownloader::getImageUrlAttributeKey() const
     return {};
 }
 
+bool AbstractDownloader::supportsFileUrlDownload() const
+{
+    return false;
+}
+
 void AbstractDownloader::setPageParsedCallback(PageParsedCallback cb)
 {
     m_onPageParsed = std::move(cb);
@@ -86,6 +91,7 @@ QFuture<void> AbstractDownloader::reparseUrl(const QString &url, PageParsedCallb
 
 QFuture<void> AbstractDownloader::parse(const QStringList &seedUrls)
 {
+    m_followLinks = true;
     m_stopRequested = false;
 
     if (!m_stateLoaded) {
@@ -104,6 +110,34 @@ QFuture<void> AbstractDownloader::parse(const QStringList &seedUrls)
              << "(seeds already visited:" << (seedUrls.size() - added) << ")";
 
     qDebug() << getId() << ": starting parse with" << m_pending.size() << "pending URLs";
+
+    auto promise = QSharedPointer<QPromise<void>>::create();
+    promise->start();
+    processNext(promise);
+    return promise->future();
+}
+
+QFuture<void> AbstractDownloader::parseSpecificUrls(const QStringList &urls)
+{
+    m_followLinks = false;
+    m_stopRequested = false;
+
+    if (!m_stateLoaded) {
+        m_stateLoaded = true;
+        loadState();
+        qDebug() << getId() << ": state loaded —"
+                 << m_visited.size() << "visited,"
+                 << m_pending.size() << "pending";
+    }
+
+    const int beforeSize = m_pending.size();
+    enqueuePending(urls);
+    const int added = m_pending.size() - beforeSize;
+    qDebug() << getId() << ": parseSpecificUrls: enqueuePending" << urls.size() << "URLs"
+             << "→ added" << added
+             << "(already visited or pending:" << (urls.size() - added) << ")";
+
+    qDebug() << getId() << ": starting specific-URLs parse with" << m_pending.size() << "pending URLs";
 
     auto promise = QSharedPointer<QPromise<void>>::create();
     promise->start();
@@ -141,7 +175,7 @@ void AbstractDownloader::processNext(QSharedPointer<QPromise<void>> promise)
     fetchUrl(url).then(this, [this, url, promise](const QString &content) {
         markVisited(url);
         const QHash<QString, QString> attrs = getAttributeValues(url, content);
-        const QStringList newUrls = getUrlsToParse(content);
+        const QStringList newUrls = m_followLinks ? getUrlsToParse(content) : QStringList{};
         qDebug() << getId() << ": parsed" << url
                  << "— attrs keys:" << attrs.keys()
                  << "— new URLs:" << newUrls.size();

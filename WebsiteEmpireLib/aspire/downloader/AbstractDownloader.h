@@ -69,6 +69,7 @@ public:
     //   every page, so the session survives a crash.
     // - Implemented as a QFuture continuation chain: no threads, stays on the
     //   Qt event loop. fetchUrl() is the yield point.
+    // - Calls getUrlsToParse() after each page to discover new links to follow.
     //
     // With QCoro this collapses to:
     //   QCoro::Task<void> parse(const QStringList &seedUrls = {});
@@ -83,6 +84,18 @@ public:
     //       }
     //   }
     QFuture<void> parse(const QStringList &seedUrls = {});
+
+    // Returns true if this downloader supports targeted download from an
+    // external URL list (i.e. parseSpecificUrls() is meaningful for it).
+    // Default is false; subclasses that accept a URL list should override.
+    virtual bool supportsFileUrlDownload() const;
+
+    // Like parse(), but processes only the given URLs without following any
+    // links discovered via getUrlsToParse().  Useful for targeted downloads
+    // driven by an external URL list (e.g. a Google Analytics export).
+    // State is persisted to the same .ini file so the session survives restarts:
+    // call parseSpecificUrls() with the same list to resume from where it stopped.
+    QFuture<void> parseSpecificUrls(const QStringList &urls);
 
     // Re-fetches a single URL unconditionally (bypassing the visited set and
     // the pending queue), calls getAttributeValues() on the result, then
@@ -161,6 +174,8 @@ private:
     QQueue<QString> m_pending;   // FIFO ordering
     bool m_stateLoaded = false;
     bool m_stopRequested = false;
+    // When false, getUrlsToParse() is not called — set by parseSpecificUrls().
+    bool m_followLinks = true;
 };
 
 #define DECLARE_DOWNLOADER(NEW_CLASS) \
