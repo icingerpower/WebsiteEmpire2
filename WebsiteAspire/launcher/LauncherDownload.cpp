@@ -1,5 +1,8 @@
 #include "LauncherDownload.h"
 
+#include <csignal>
+#include <unistd.h>
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QImage>
@@ -7,6 +10,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPromise>
+#include <QSocketNotifier>
 
 #include "aspire/attributes/AbstractPageAttributes.h"
 #include "aspire/attributes/PageAttributesProduct.h"
@@ -17,6 +21,16 @@
 DECLARE_LAUNCHER(LauncherDownload)
 
 const QString LauncherDownload::OPTION_NAME = QStringLiteral("download");
+
+// Self-pipe used to relay SIGINT from the async-signal context into Qt's event loop.
+static int s_sigIntPipe[2] = {-1, -1};
+
+static void sigIntHandler(int)
+{
+    const char byte = 1;
+    // write() is async-signal-safe; errors are intentionally ignored here.
+    [[maybe_unused]] ssize_t r = ::write(s_sigIntPipe[1], &byte, sizeof(byte));
+}
 
 QString LauncherDownload::getOptionName() const
 {
@@ -126,6 +140,19 @@ void LauncherDownload::run(const QString &value)
         holder->deleteLater();
         QCoreApplication::quit();
     });
+
+    // --- Graceful Ctrl+C: let the current page's DB/INI write finish first ---
+    if (::pipe(s_sigIntPipe) == 0) {
+        ::signal(SIGINT, sigIntHandler);
+        auto *notifier = new QSocketNotifier(s_sigIntPipe[0], QSocketNotifier::Read, holder);
+        QObject::connect(notifier, &QSocketNotifier::activated, dl, [dl, notifier]() {
+            notifier->setEnabled(false);
+            char byte;
+            [[maybe_unused]] ssize_t r = ::read(s_sigIntPipe[0], &byte, sizeof(byte));
+            qDebug() << "LauncherDownload: Ctrl+C received — finishing current page then stopping...";
+            dl->requestStop();
+        });
+    }
 
     dl->parse(dl->getSeedUrls());
 }

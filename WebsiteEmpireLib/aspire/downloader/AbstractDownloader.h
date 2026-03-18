@@ -91,6 +91,12 @@ public:
     // the fetch and callback have both completed.
     QFuture<void> reparseUrl(const QString &url, PageParsedCallback callback);
 
+    // Requests the crawl to stop after the current page finishes.
+    // processNext() checks this flag before fetching the next URL, so any
+    // in-flight DB write or image fetch is allowed to complete first.
+    // Designed for graceful Ctrl+C handling in headless mode.
+    void requestStop();
+
     // Emitted when parse() drains the pending queue and there is nothing left
     // to fetch.  Not emitted when a crawl is stopped externally.
     Q_SIGNAL void finished();
@@ -149,6 +155,7 @@ private:
     QSet<QString> m_pendingSet;  // O(1) duplicate guard
     QQueue<QString> m_pending;   // FIFO ordering
     bool m_stateLoaded = false;
+    bool m_stopRequested = false;
 };
 
 #define DECLARE_DOWNLOADER(NEW_CLASS) \

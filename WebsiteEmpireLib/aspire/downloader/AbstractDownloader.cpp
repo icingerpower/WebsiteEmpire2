@@ -2,6 +2,7 @@
 
 #include <utility>
 
+#include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QPromise>
 #include <QSettings>
@@ -109,8 +110,21 @@ QFuture<void> AbstractDownloader::parse(const QStringList &seedUrls)
     return promise->future();
 }
 
+void AbstractDownloader::requestStop()
+{
+    qDebug() << getId() << ": stop requested — will finish after current page";
+    m_stopRequested = true;
+}
+
 void AbstractDownloader::processNext(QSharedPointer<QPromise<void>> promise)
 {
+    if (m_stopRequested) {
+        qDebug() << getId() << ": stop requested — aborting crawl (state saved)";
+        promise->finish();
+        QCoreApplication::quit();
+        return;
+    }
+
     if (!hasPending()) {
         qDebug() << getId() << ": no more pending URLs — finished"
                  << "(total visited:" << m_visited.size() << ")";
