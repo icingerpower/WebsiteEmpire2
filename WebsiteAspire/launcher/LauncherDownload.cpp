@@ -137,10 +137,17 @@ void LauncherDownload::run(const QString &value)
             return promise->future();
         });
 
-    QObject::connect(dl, &AbstractDownloader::finished, holder, [holder]() {
-        qDebug() << "LauncherDownload: download finished.";
+    auto quit = [holder]() {
         holder->deleteLater();
         QCoreApplication::quit();
+    };
+    QObject::connect(dl, &AbstractDownloader::finished, holder, [quit]() {
+        qDebug() << "LauncherDownload: download finished.";
+        quit();
+    });
+    QObject::connect(dl, &AbstractDownloader::stopped, holder, [quit]() {
+        qDebug() << "LauncherDownload: download stopped.";
+        quit();
     });
 
     // --- Graceful Ctrl+C: let the current page's DB/INI write finish first ---

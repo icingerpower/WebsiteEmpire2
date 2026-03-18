@@ -61,6 +61,16 @@
       </widget>
      </item>
      <item>
+      <widget class="QPushButton" name="buttonCopyUrl">
+       <property name="toolTip">
+        <string>Copy the URL of the first selected row</string>
+       </property>
+       <property name="text">
+        <string>Copy URL</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QPushButton" name="buttonCopyCommand">
        <property name="toolTip">
         <string>Copy the command line to launch download without the UI</string>
@@ -94,6 +104,13 @@
       </spacer>
      </item>
     </layout>
+   </item>
+   <item>
+    <widget class="QLabel" name="labelLog">
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
    </item>
    <item>
     <widget class="QSplitter" name="splitter">

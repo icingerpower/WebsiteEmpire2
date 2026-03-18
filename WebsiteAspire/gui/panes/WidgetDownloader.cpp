@@ -1,16 +1,19 @@
 #include "WidgetDownloader.h"
 #include "ui_WidgetDownloader.h"
 
-#include <QMessageBox>
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QImage>
 #include <QItemSelectionModel>
 #include <QListWidgetItem>
+#include <QMessageBox>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPixmap>
 #include <QPointer>
 #include <QPromise>
+#include <QShortcut>
 
 #include "gui/dialog/DialogViewAttributes.h"
 
@@ -59,6 +62,14 @@ void WidgetDownloader::_connectSlots()
             &QPushButton::clicked,
             this,
             &WidgetDownloader::copyCommand);
+    connect(ui->buttonCopyUrl,
+            &QPushButton::clicked,
+            this,
+            &WidgetDownloader::copyUrl);
+
+    auto *copyShortcut = new QShortcut(
+        QKeySequence::Copy, ui->tableViewPages, nullptr, nullptr, Qt::WidgetShortcut);
+    connect(copyShortcut, &QShortcut::activated, this, &WidgetDownloader::copyUrl);
 }
 
 void WidgetDownloader::init(const AbstractPageAttributes *pageAttribute,
@@ -108,18 +119,21 @@ void WidgetDownloader::viewAttributes()
 
 void WidgetDownloader::download(bool start)
 {
+    ui->progressBar->setVisible(start);
     if (!m_dowanloadedPageTable) {
+        ui->progressBar->hide();
         return;
     }
 
     if (!start) {
         disconnect(m_downloadFinishedConnection);
         m_stopDownload = true;
+        m_dowanloadedPageTable->downloader()->requestStop();
         ui->buttonDownload->setChecked(false);
         ui->buttonDownload->setText(tr("Download"));
+        ui->progressBar->hide();
         return;
     }
-    ui->progressBar->show();
     ui->progressBar->setTextVisible(start);
 
     m_stopDownload = false;
@@ -425,6 +439,69 @@ void WidgetDownloader::reparse()
 
         dl->reparseUrl(url, reparseCallback);
     }
+}
+
+void WidgetDownloader::copyUrl()
+{
+    if (!m_dowanloadedPageTable) {
+        return;
+    }
+
+    const QModelIndexList selected =
+        ui->tableViewPages->selectionModel()->selectedRows();
+
+    if (selected.isEmpty()) {
+        return;
+    }
+
+    // Find the URL attribute id in the schema.
+    QString urlAttrId;
+    const auto &attrsPtr = m_pageAttribute->getAttributes();
+    if (attrsPtr) {
+        for (const auto &attr : std::as_const(*attrsPtr)) {
+            if (attr.isUrl) {
+                urlAttrId = attr.id;
+                break;
+            }
+        }
+    }
+
+    if (urlAttrId.isEmpty()) {
+        QMessageBox::warning(this,
+                             tr("No URL Attribute"),
+                             tr("No URL attribute found in the schema."));
+        return;
+    }
+
+    // Find the column index for the URL attribute.
+    int urlColIndex = -1;
+    for (int c = 0; c < m_dowanloadedPageTable->columnCount(); ++c) {
+        if (m_dowanloadedPageTable->headerData(c, Qt::Horizontal, Qt::DisplayRole).toString()
+            == urlAttrId) {
+            urlColIndex = c;
+            break;
+        }
+    }
+
+    if (urlColIndex < 0) {
+        QMessageBox::warning(this,
+                             tr("No URL Attribute"),
+                             tr("No URL attribute found in the schema."));
+        return;
+    }
+
+    // Use EditRole to get the full URL (DisplayRole may truncate).
+    const QModelIndex &firstIndex = selected.first();
+    const QString url =
+        m_dowanloadedPageTable->data(firstIndex.siblingAtColumn(urlColIndex), Qt::EditRole)
+            .toString();
+
+    if (url.isEmpty()) {
+        return;
+    }
+
+    QGuiApplication::clipboard()->setText(url);
+    ui->labelLog->setText(tr("URL copied: %1").arg(url));
 }
 
 void WidgetDownloader::copyCommand()

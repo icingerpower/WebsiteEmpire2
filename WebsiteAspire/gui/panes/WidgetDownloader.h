@@ -37,6 +37,7 @@ public slots:
     void download(bool start);
     void removePages();
     void reparse();
+    void copyUrl();
     void copyCommand();
 
 private slots:

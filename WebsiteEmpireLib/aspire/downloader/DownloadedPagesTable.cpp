@@ -95,15 +95,17 @@ AbstractDownloader *DownloadedPagesTable::downloader() const
 
 bool DownloadedPagesTable::select()
 {
-    // Build a SELECT that skips image (BLOB) columns.  Loading ~1-2 MB BLOBs
-    // per row via SELECT * blocks the main thread for several seconds once the
-    // database grows.  Images are read on-demand through imagesAt() which
-    // issues its own targeted query.
+    // Build a SELECT that avoids loading full image BLOBs.  For image columns
+    // we fetch only the first 4 bytes (the QDataStream-serialised qint32 image
+    // count) so data() can display "N images" without touching the pixel data.
+    // Full BLOBs are still read on-demand through imagesAt().
     QStringList cols;
     cols.reserve(m_attributes.size() + 1);
     cols << QStringLiteral("id");
     for (const auto &attr : std::as_const(m_attributes)) {
-        if (!m_imageAttributeIds.contains(attr.id)) {
+        if (m_imageAttributeIds.contains(attr.id)) {
+            cols << QStringLiteral("substr(%1, 1, 4) AS %1").arg(attr.id);
+        } else {
             cols << attr.id;
         }
     }
@@ -244,7 +246,19 @@ QVariant DownloadedPagesTable::data(const QModelIndex &index, int role) const
         const QString colName =
             headerData(index.column(), Qt::Horizontal, Qt::DisplayRole).toString();
         if (m_imageAttributeIds.contains(colName)) {
-            return QVariant{};
+            // The model holds only the first 4 bytes of the BLOB: the
+            // QDataStream big-endian qint32 image count written by
+            // serializeImages().  Parse it to show "N images".
+            const QByteArray header =
+                QSqlTableModel::data(index, Qt::DisplayRole).toByteArray();
+            if (header.size() < 4) {
+                return tr("0 images");
+            }
+            QDataStream stream(header);
+            stream.setVersion(QDataStream::Qt_6_0);
+            qint32 count = 0;
+            stream >> count;
+            return tr("%1 images").arg(count);
         }
     }
     if (role == Qt::DisplayRole && index.isValid()) {

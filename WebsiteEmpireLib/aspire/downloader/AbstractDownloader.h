@@ -98,8 +98,13 @@ public:
     void requestStop();
 
     // Emitted when parse() drains the pending queue and there is nothing left
-    // to fetch.  Not emitted when a crawl is stopped externally.
+    // to fetch.  Not emitted when a crawl is stopped via requestStop().
     Q_SIGNAL void finished();
+
+    // Emitted when requestStop() causes the crawl to halt before the queue is
+    // drained (i.e. after the current in-flight page completes).
+    // Not emitted on natural completion — use finished() for that.
+    Q_SIGNAL void stopped();
 
     static const QMap<QString, const AbstractDownloader *> &ALL_DOWNLOADERS();
 

@@ -21,9 +21,9 @@ class QImage;
 // QSqlDatabase connection is read-only from the model's point of view:
 // select() is called after each recordPage() to refresh the view.
 //
-// Image columns (isImage == true) are hidden from Qt::DisplayRole /
-// Qt::EditRole so that views do not attempt to render raw BLOB bytes.
-// Use imagesAt() to retrieve the decoded images for a given row.
+// Image columns (isImage == true) display "N images" in Qt::DisplayRole /
+// Qt::EditRole instead of raw BLOB bytes.  Only the 4-byte count header is
+// fetched during select(); full pixel data is retrieved on-demand via imagesAt().
 class DownloadedPagesTable : public QSqlTableModel
 {
     Q_OBJECT
@@ -56,9 +56,9 @@ public:
     // Returns an empty hash for an invalid index.
     QHash<QString, QSharedPointer<QList<QImage>>> imagesAt(const QModelIndex &index) const;
 
-    // Returns QVariant{} for Qt::DisplayRole and Qt::EditRole on image columns
-    // so that views skip rendering raw BLOB data.  All other roles and non-
-    // image columns delegate to QSqlTableModel::data().
+    // Returns "N images" for Qt::DisplayRole and Qt::EditRole on image columns
+    // (parsed from the 4-byte count header stored by select()).  All other
+    // roles and non-image columns delegate to QSqlTableModel::data().
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
     // Returns Qt::ItemIsEditable for non-image cells so that double-clicking
