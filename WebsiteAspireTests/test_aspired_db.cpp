@@ -141,6 +141,21 @@ AbstractPageAttributes::Attribute makeDoubleAttr(const QString &id, const QStrin
     };
 }
 
+// Builds a URL attribute (isUrl = true, required).
+AbstractPageAttributes::Attribute makeUrlAttr(const QString &id, const QString &name)
+{
+    AbstractPageAttributes::Attribute attr;
+    attr.id           = id;
+    attr.name         = name;
+    attr.valueExemple = "https://example.com/page";
+    attr.validate     = [name](const QString &v) -> QString {
+        if (v.isEmpty()) { return name + " is required"; }
+        return QString{};
+    };
+    attr.isUrl = true;
+    return attr;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -172,6 +187,7 @@ private slots:
     void test_record_cross_validation_exception_uses_page_attributes_name();
     void test_record_auto_creates_table_without_prior_createTableIdNeed();
     void test_record_image_single_then_list_of_three();
+    void test_record_ignores_duplicate_url();
 };
 
 // ---------------------------------------------------------------------------
@@ -819,6 +835,45 @@ void Test_AspiredDb::test_record_image_single_then_list_of_three()
 
     // The 3-image blob must be strictly larger than the 1-image blob
     QVERIFY(rows[1].value("photos").size() > rows[0].value("photos").size());
+}
+
+// ---------------------------------------------------------------------------
+// 19. record() silently ignores a second insert with the same URL
+// ---------------------------------------------------------------------------
+void Test_AspiredDb::test_record_ignores_duplicate_url()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    const QList<AbstractPageAttributes::Attribute> attrs = {
+        makeUrlAttr("url",  "URL"),
+        makeAttr("title", "Title", true),
+    };
+    SimpleTestAttributes pageAttrs;
+    AspiredDb db(dir.path(), "r18");
+
+    // First insert — must succeed
+    db.record(attrs, {{"url", "https://example.com/p/1"}, {"title", "Page One"}}, &pageAttrs);
+
+    // Second insert with the same URL — must be silently ignored, no exception
+    bool noThrow = true;
+    try {
+        db.record(attrs, {{"url", "https://example.com/p/1"}, {"title", "Page One duplicate"}}, &pageAttrs);
+    } catch (...) {
+        noThrow = false;
+    }
+    QVERIFY(noThrow);
+
+    // Still only one row
+    const QString dbPath = dir.path() + "/r18.db";
+    const auto rows = allRows(dbPath, "conn_test19a", AspiredDb::TABLE_NAME);
+    QCOMPARE(rows.size(), 1);
+    QCOMPARE(rows[0].value("title"), QString("Page One"));
+
+    // A different URL must still be accepted
+    db.record(attrs, {{"url", "https://example.com/p/2"}, {"title", "Page Two"}}, &pageAttrs);
+    const auto rows2 = allRows(dbPath, "conn_test19b", AspiredDb::TABLE_NAME);
+    QCOMPARE(rows2.size(), 2);
 }
 
 QTEST_MAIN(Test_AspiredDb)

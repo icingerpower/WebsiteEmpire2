@@ -66,18 +66,19 @@ void LauncherDownload::run(const QString &value)
     const QString imageUrlKey = dl->getImageUrlAttributeKey();
 
     dl->setPageParsedCallback(
-        [table, imageUrlKey, nam](const QString & /*url*/,
+        [table, imageUrlKey, nam](const QString &url,
                                   const QHash<QString, QString> &attrs) -> QFuture<bool> {
             auto promise = QSharedPointer<QPromise<bool>>::create();
             promise->start();
 
             if (attrs.isEmpty()) {
+                qDebug() << "LauncherDownload: not recorded (no attributes parsed)" << url;
                 promise->addResult(false);
                 promise->finish();
                 return promise->future();
             }
 
-            auto record = [table, attrs, imageUrlKey, promise](QList<QSharedPointer<QImage>> images) {
+            auto record = [table, attrs, imageUrlKey, promise, url](QList<QSharedPointer<QImage>> images) {
                 QHash<QString, QString> textAttrs = attrs;
                 textAttrs.remove(imageUrlKey);
 
@@ -87,10 +88,11 @@ void LauncherDownload::run(const QString &value)
 
                 try {
                     table->recordPage(textAttrs, imageAttrs);
-                    qDebug() << "LauncherDownload: recorded page, total:"
-                             << table->rowCount();
+                    qDebug() << "LauncherDownload: URL added, NEW TOTAL IS:"
+                             << table->rowCount() << url;
                 } catch (const QException &ex) {
-                    qDebug() << "LauncherDownload: record failed:" << ex.what();
+                    qDebug() << "LauncherDownload: not recorded (validation failed)" << url
+                             << "—" << ex.what();
                 }
 
                 promise->addResult(true);

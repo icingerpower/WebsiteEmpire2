@@ -124,6 +124,24 @@ void AspiredDb::createTableIdNeed(const QList<AbstractPageAttributes::Attribute>
             );
         }
     }
+
+    // Ensure a unique index exists on each URL attribute.  Using an index rather
+    // than a column constraint means this also migrates pre-existing databases.
+    for (const auto &attr : attributes) {
+        if (!attr.isUrl) {
+            continue;
+        }
+        const QString indexSql =
+            QString("CREATE UNIQUE INDEX IF NOT EXISTS idx_%1_%2 ON %1 (%2)")
+                .arg(TABLE_NAME, attr.id);
+        if (!query.exec(indexSql)) {
+            throw ExceptionWithTitleText(
+                QObject::tr("Database Error"),
+                QObject::tr("Failed to create unique index on '%1': %2")
+                    .arg(attr.id, query.lastError().text())
+            );
+        }
+    }
 }
 
 void AspiredDb::record(const QList<AbstractPageAttributes::Attribute> &attributes,
@@ -167,7 +185,7 @@ void AspiredDb::record(const QList<AbstractPageAttributes::Attribute> &attribute
         placeholders << ":" + attr.id;
     }
 
-    const QString insertSql = QString("INSERT INTO %1 (%2) VALUES (%3)")
+    const QString insertSql = QString("INSERT OR IGNORE INTO %1 (%2) VALUES (%3)")
                                   .arg(TABLE_NAME, columns.join(", "), placeholders.join(", "));
 
     query.prepare(insertSql);
@@ -184,6 +202,17 @@ void AspiredDb::record(const QList<AbstractPageAttributes::Attribute> &attribute
             QObject::tr("Database Error"),
             QObject::tr("Failed to insert record: %1").arg(query.lastError().text())
         );
+    }
+
+    if (query.numRowsAffected() == 0) {
+        QString url;
+        for (const auto &attr : attributes) {
+            if (attr.isUrl) {
+                url = idAttr_value.value(attr.id);
+                break;
+            }
+        }
+        qDebug() << "AspiredDb: not recorded (URL already exists)" << url;
     }
 }
 
