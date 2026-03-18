@@ -52,6 +52,36 @@ QMap<QString, const AbstractDownloader *> &AbstractDownloader::getDownloaders()
     return downloaders;
 }
 
+// --- Reparse single URL ---
+
+QFuture<void> AbstractDownloader::reparseUrl(const QString &url, PageParsedCallback callback)
+{
+    auto promise = QSharedPointer<QPromise<void>>::create();
+    promise->start();
+
+    qDebug() << getId() << ": reparsing" << url;
+
+    fetchUrl(url).then(this, [this, url, callback, promise](const QString &content) {
+        const QHash<QString, QString> attrs = getAttributeValues(url, content);
+        qDebug() << getId() << ": reparse parsed" << url
+                 << "— attrs keys:" << attrs.keys();
+        if (callback) {
+            callback(url, attrs).then(this, [promise](bool) {
+                promise->finish();
+            }).onFailed(this, [promise](const QException &) {
+                promise->finish();
+            });
+        } else {
+            promise->finish();
+        }
+    }).onFailed(this, [url, promise](const QException &e) {
+        qDebug() << "AbstractDownloader: reparseUrl failed for" << url << ":" << e.what();
+        promise->finish();
+    });
+
+    return promise->future();
+}
+
 // --- Parse loop ---
 
 QFuture<void> AbstractDownloader::parse(const QStringList &seedUrls)

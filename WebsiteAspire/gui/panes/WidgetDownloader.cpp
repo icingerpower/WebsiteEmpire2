@@ -51,6 +51,10 @@ void WidgetDownloader::_connectSlots()
             &QListWidget::itemClicked,
             this,
             &WidgetDownloader::_onImageItemClicked);
+    connect(ui->buttonReparse,
+            &QPushButton::clicked,
+            this,
+            &WidgetDownloader::reparse);
     connect(ui->buttonCopyCommand,
             &QPushButton::clicked,
             this,
@@ -65,7 +69,6 @@ void WidgetDownloader::init(const AbstractPageAttributes *pageAttribute,
     m_dowanloadedPageTable = dowanloadedPageTable;
 
     ui->tableViewPages->setModel(m_dowanloadedPageTable);
-    ui->tableViewPages->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
 
     connect(ui->tableViewPages->selectionModel(),
             &QItemSelectionModel::selectionChanged,
@@ -273,6 +276,155 @@ void WidgetDownloader::removePages()
     m_dowanloadedPageTable->deleteRows(ids);
     ui->labelDownloadQuantities->setText(
         tr("%1 pages").arg(m_dowanloadedPageTable->rowCount()));
+}
+
+void WidgetDownloader::reparse()
+{
+    if (!m_dowanloadedPageTable) {
+        return;
+    }
+
+    const QModelIndexList selected =
+        ui->tableViewPages->selectionModel()->selectedRows();
+
+    if (selected.isEmpty()) {
+        QMessageBox::warning(this,
+                             tr("No Selection"),
+                             tr("Please select one or more rows to reparse."));
+        return;
+    }
+
+    // Find the first URL attribute in the schema.
+    QString urlAttrId;
+    const auto &attrsPtr = m_pageAttribute->getAttributes();
+    if (attrsPtr) {
+        for (const auto &attr : std::as_const(*attrsPtr)) {
+            if (attr.isUrl) {
+                urlAttrId = attr.id;
+                break;
+            }
+        }
+    }
+
+    if (urlAttrId.isEmpty()) {
+        QMessageBox::warning(this,
+                             tr("No URL Attribute"),
+                             tr("No URL attribute found in the schema. Reparse is not possible."));
+        return;
+    }
+
+    // Find the column index for the URL attribute in the model.
+    int urlColIndex = -1;
+    for (int c = 0; c < m_dowanloadedPageTable->columnCount(); ++c) {
+        if (m_dowanloadedPageTable->headerData(c, Qt::Horizontal, Qt::DisplayRole).toString()
+            == urlAttrId) {
+            urlColIndex = c;
+            break;
+        }
+    }
+
+    if (urlColIndex < 0) {
+        QMessageBox::warning(this,
+                             tr("URL Column Not Found"),
+                             tr("The URL column is not visible in the table. Reparse is not possible."));
+        return;
+    }
+
+    if (!m_nam) {
+        m_nam = new QNetworkAccessManager(this);
+    }
+
+    AbstractDownloader *dl = m_dowanloadedPageTable->downloader();
+    const QString imageUrlKey = dl->getImageUrlAttributeKey();
+    QPointer<WidgetDownloader> self(this);
+
+    for (const auto &index : std::as_const(selected)) {
+        const QString rowId =
+            m_dowanloadedPageTable->data(index.siblingAtColumn(0), Qt::DisplayRole).toString();
+        // Use EditRole to retrieve the full URL — DisplayRole truncates text
+        // longer than 120 characters, which would corrupt the fetch request.
+        const QString url =
+            m_dowanloadedPageTable->data(index.siblingAtColumn(urlColIndex), Qt::EditRole).toString();
+
+        if (url.isEmpty()) {
+            continue;
+        }
+
+        // Callback that calls updatePage() instead of recordPage().
+        auto reparseCallback =
+            [self, rowId, imageUrlKey](const QString & /*url*/,
+                                       const QHash<QString, QString> &attrs) -> QFuture<bool> {
+            auto promise = QSharedPointer<QPromise<bool>>::create();
+            promise->start();
+
+            if (!self || attrs.isEmpty()) {
+                promise->addResult(false);
+                promise->finish();
+                return promise->future();
+            }
+
+            auto doUpdate = [self, rowId, attrs, imageUrlKey, promise](
+                                QList<QSharedPointer<QImage>> images) {
+                QHash<QString, QString> textAttrs = attrs;
+                textAttrs.remove(imageUrlKey);
+
+                const QHash<QString, QList<QSharedPointer<QImage>>> imageAttrs{
+                    {PageAttributesProduct::ID_IMAGES, images}
+                };
+
+                try {
+                    self->m_dowanloadedPageTable->updatePage(rowId, textAttrs, imageAttrs);
+                } catch (const QException &ex) {
+                    qDebug() << "WidgetDownloader: reparse update failed:" << ex.what();
+                }
+
+                promise->addResult(true);
+                promise->finish();
+            };
+
+            const QString imageUrl = attrs.value(imageUrlKey);
+            if (!imageUrl.isEmpty() && self->m_nam) {
+                QNetworkRequest req{QUrl{imageUrl}};
+                req.setHeader(QNetworkRequest::UserAgentHeader,
+                              QStringLiteral("Mozilla/5.0 (compatible; WebsiteEmpire/1.0)"));
+                req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                                 QNetworkRequest::NoLessSafeRedirectPolicy);
+
+                QNetworkReply *reply = self->m_nam->get(req);
+                QObject::connect(reply, &QNetworkReply::finished, reply,
+                                 [self, reply, doUpdate]() mutable {
+                                     if (!self) {
+                                         reply->deleteLater();
+                                         return;
+                                     }
+                                     const QByteArray imgData = reply->readAll();
+                                     reply->deleteLater();
+
+                                     QList<QSharedPointer<QImage>> images;
+                                     auto img = QSharedPointer<QImage>::create();
+                                     if (img->loadFromData(imgData)) {
+                                         images << img;
+                                     }
+                                     if (images.isEmpty()) {
+                                         auto placeholder = QSharedPointer<QImage>::create(
+                                             200, 200, QImage::Format_RGB32);
+                                         placeholder->fill(Qt::white);
+                                         images << placeholder;
+                                     }
+                                     doUpdate(std::move(images));
+                                 });
+            } else {
+                auto placeholder = QSharedPointer<QImage>::create(
+                    200, 200, QImage::Format_RGB32);
+                placeholder->fill(Qt::white);
+                doUpdate({placeholder});
+            }
+
+            return promise->future();
+        };
+
+        dl->reparseUrl(url, reparseCallback);
+    }
 }
 
 void WidgetDownloader::copyCommand()

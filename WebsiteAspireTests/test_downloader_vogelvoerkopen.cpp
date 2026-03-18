@@ -147,6 +147,9 @@ private slots:
     void test_getAttributeValues_weight_from_variations();
     void test_getAttributeValues_price_from_aggregate_offer();
     void test_getAttributeValues_image_url_key_present();
+    void test_getAttributeValues_price_as_string_in_json_ld();
+    void test_getAttributeValues_no_weight_defaults_to_one();
+    void test_imagesAt_returns_stored_images();
 
     // DownloaderVogelvoerkopen — category matching
     void test_setKnownCategories_exact_match();
@@ -166,9 +169,15 @@ private slots:
     void test_category_getAttributeValues_description_fallback();
     void test_category_getAttributeValues_h1_fallback();
 
+    // AggregateOffer lowPrice as a JSON number (not string)
+    void test_getAttributeValues_aggregate_offer_lowPrice_as_number();
+    // Yoast SEO format: price in priceSpecification array, offers is an array
+    void test_getAttributeValues_price_in_priceSpecification();
+
     // Integration tests
     void test_parse_three_categories_without_error();
     void test_parse_five_products_without_error();
+    void test_slingerpakket_price_is_above_ten();
 };
 
 // ===========================================================================
@@ -814,6 +823,236 @@ void Test_Downloader_Vogelvoerkopen::test_parse_five_products_without_error()
 
     QVERIFY2(failureReason.isEmpty(), qPrintable(failureReason));
     QCOMPARE(table.rowCount(), 5);
+}
+
+// ===========================================================================
+// Bug regression: WooCommerce JSON-LD price stored as a string
+// Reproduces the vogelvoerkopen.nl/het-grote-vogelvoer-slingerpakket/ case
+// where "price" is "61.39" (string) not 61.39 (number), which caused
+// extractPrice() to return 0 and fall back to the hardcoded "0.01" sentinel.
+// ===========================================================================
+void Test_Downloader_Vogelvoerkopen::test_getAttributeValues_price_as_string_in_json_ld()
+{
+    DownloaderVogelvoerkopen dl;
+
+    // "price" is a JSON string ("61.39"), not a JSON number.
+    const QString html = QString::fromLatin1(
+        "<html><head>"
+        "<script type=\"application/ld+json\">"
+        "{\"@type\":\"Product\","
+        "\"name\":\"Het grote vogelvoer slingerpakket\","
+        "\"description\":\"Een groot slingerpakket voor tuinvogels.\","
+        "\"offers\":{\"@type\":\"Offer\",\"price\":\"61.39\",\"priceCurrency\":\"EUR\"}}"
+        "</script>"
+        "</head><body></body></html>");
+
+    const QString url = QStringLiteral("https://vogelvoerkopen.nl/het-grote-vogelvoer-slingerpakket/");
+    const auto attrs = dl.getAttributeValues(url, html);
+
+    QVERIFY(!attrs.isEmpty());
+    QCOMPARE(attrs.value(PageAttributesProduct::ID_URL), url);
+    QCOMPARE(attrs.value(PageAttributesProduct::ID_SALE_PRICE),
+             QStringLiteral("61.39"));
+}
+
+// ===========================================================================
+// Bug regression: products without a parseable weight must default to 1,
+// not 0, so the weight/price count cross-validation stays satisfied.
+// ===========================================================================
+void Test_Downloader_Vogelvoerkopen::test_getAttributeValues_no_weight_defaults_to_one()
+{
+    DownloaderVogelvoerkopen dl;
+
+    // Name contains no weight unit; no data-product_variations present.
+    const QString html = makeProductHtml(
+        QStringLiteral("Vogelvoer slingerpakket"),
+        QStringLiteral("Een decoratief slingerpakket met vogelvoer."),
+        QStringLiteral("29.99"));
+
+    const QString url = QStringLiteral("https://vogelvoerkopen.nl/slingerpakket/");
+    const auto attrs = dl.getAttributeValues(url, html);
+
+    QVERIFY(!attrs.isEmpty());
+    QCOMPARE(attrs.value(PageAttributesProduct::ID_URL), url);
+    QCOMPARE(attrs.value(PageAttributesProductPetFood::ID_WEIGHT_GR),
+             QStringLiteral("1"));
+    QCOMPARE(attrs.value(PageAttributesProductPetFood::ID_PRICES),
+             QStringLiteral("29.99"));
+}
+
+// ===========================================================================
+// Bug regression: images stored via DownloadedPagesTable::recordPage() must
+// be retrievable through imagesAt() — the Attribute::isImage flag was false,
+// causing m_imageAttributeIds to stay empty and imagesAt() to return {} always.
+// ===========================================================================
+void Test_Downloader_Vogelvoerkopen::test_imagesAt_returns_stored_images()
+{
+    QTemporaryDir tmpDir;
+    QVERIFY(tmpDir.isValid());
+    const QDir workDir(tmpDir.path());
+
+    DownloaderVogelvoerkopen downloader(workDir);
+    DownloadedPagesTable table(workDir, &downloader);
+
+    QHash<QString, QString> textAttrs;
+    textAttrs[PageAttributesProduct::ID_URL]              = QStringLiteral("https://vogelvoerkopen.nl/test-product/");
+    textAttrs[PageAttributesProduct::ID_NAME]             = QStringLiteral("Test Product");
+    textAttrs[PageAttributesProduct::ID_DESCRIPTION]      = QStringLiteral("A test product description.");
+    textAttrs[PageAttributesProduct::ID_SALE_PRICE]       = QStringLiteral("9.99");
+    textAttrs[PageAttributesProduct::ID_CATEGORY]         = QStringLiteral("Vogelvoer");
+    textAttrs[PageAttributesProductPetFood::ID_WEIGHT_GR] = QStringLiteral("500");
+    textAttrs[PageAttributesProductPetFood::ID_PRICES]    = QStringLiteral("9.99");
+
+    auto img = QSharedPointer<QImage>::create(200, 200, QImage::Format_RGB32);
+    img->fill(Qt::blue);
+    const QHash<QString, QList<QSharedPointer<QImage>>> imageAttrs{
+        {PageAttributesProduct::ID_IMAGES, {img}}
+    };
+
+    table.recordPage(textAttrs, imageAttrs);
+    QCOMPARE(table.rowCount(), 1);
+
+    const QModelIndex idx = table.index(0, 0);
+    const auto allImages = table.imagesAt(idx);
+
+    QVERIFY(!allImages.isEmpty());
+    const QSharedPointer<QList<QImage>> imgList = allImages.constBegin().value();
+    QVERIFY(imgList);
+    QVERIFY(!imgList->isEmpty());
+    QCOMPARE(imgList->first().width(), 200);
+    QCOMPARE(imgList->first().height(), 200);
+}
+
+// ===========================================================================
+// Bug regression: Yoast SEO WooCommerce format — price nested inside
+// priceSpecification array, and offers is a JSON array (not a single object).
+// Reproduces the vogelvoerkopen.nl/het-grote-vogelvoer-slingerpakket/ case
+// where the Offer object has no top-level "price" field and uses instead:
+//   "offers":[{"@type":"Offer","priceSpecification":[{"price":"61.39",...}]}]
+// ===========================================================================
+void Test_Downloader_Vogelvoerkopen::test_getAttributeValues_price_in_priceSpecification()
+{
+    DownloaderVogelvoerkopen dl;
+
+    const QString html = QString::fromLatin1(
+        "<html><head>"
+        "<script type=\"application/ld+json\">"
+        "{\"@context\":\"https://schema.org/\",\"@graph\":["
+        "{\"@type\":\"BreadcrumbList\",\"itemListElement\":["
+        "{\"@type\":\"ListItem\",\"position\":1,\"item\":{\"name\":\"Vogelvoerslingers\",\"@id\":\"https://vogelvoerkopen.nl/vogelvoerslingers/\"}},"
+        "{\"@type\":\"ListItem\",\"position\":2,\"item\":{\"name\":\"Het grote vogelvoer slingerpakket\",\"@id\":\"https://vogelvoerkopen.nl/slingerpakket/\"}}"
+        "]},"
+        "{\"@type\":\"Product\","
+        "\"name\":\"Het grote vogelvoer slingerpakket\","
+        "\"description\":\"Een groot slingerpakket voor tuinvogels.\","
+        "\"offers\":[{\"@type\":\"Offer\","
+        "\"priceSpecification\":[{\"@type\":\"UnitPriceSpecification\","
+        "\"price\":\"61.39\",\"priceCurrency\":\"EUR\",\"valueAddedTaxIncluded\":true}]}]}"
+        "]}"
+        "</script>"
+        "</head><body></body></html>");
+
+    const QString url = QStringLiteral("https://vogelvoerkopen.nl/slingerpakket/");
+    const auto attrs = dl.getAttributeValues(url, html);
+
+    QVERIFY(!attrs.isEmpty());
+    QCOMPARE(attrs.value(PageAttributesProduct::ID_URL), url);
+
+    const QString priceStr = attrs.value(PageAttributesProduct::ID_SALE_PRICE);
+    bool ok = false;
+    const double price = priceStr.toDouble(&ok);
+    QVERIFY(ok);
+    QVERIFY(price > 10.0);
+    QCOMPARE(priceStr, QStringLiteral("61.39"));
+}
+
+// ===========================================================================
+// Bug regression: AggregateOffer lowPrice stored as a JSON number (not string)
+// If lowPrice is a numeric 61.39 (not the string "61.39"), the old code called
+// QJsonValue::toString() which returns "" for non-string values, causing
+// toDouble() to return 0 and the price to fall back to the sentinel "0.01".
+// ===========================================================================
+void Test_Downloader_Vogelvoerkopen::test_getAttributeValues_aggregate_offer_lowPrice_as_number()
+{
+    DownloaderVogelvoerkopen dl;
+
+    // lowPrice and highPrice are JSON numbers, not strings.
+    const QString html = QString::fromLatin1(
+        "<html><head>"
+        "<script type=\"application/ld+json\">"
+        "{\"@type\":\"Product\","
+        "\"name\":\"Slingerpakket\","
+        "\"description\":\"Een groot slingerpakket.\","
+        "\"offers\":{\"@type\":\"AggregateOffer\","
+        "\"lowPrice\":61.39,\"highPrice\":69.99}}"
+        "</script>"
+        "</head><body></body></html>");
+
+    const QString url = QStringLiteral("https://vogelvoerkopen.nl/slingerpakket/");
+    const auto attrs = dl.getAttributeValues(url, html);
+
+    QVERIFY(!attrs.isEmpty());
+    QCOMPARE(attrs.value(PageAttributesProduct::ID_URL), url);
+
+    const QString priceStr = attrs.value(PageAttributesProduct::ID_SALE_PRICE);
+    bool ok = false;
+    const double price = priceStr.toDouble(&ok);
+    QVERIFY(ok);
+    QVERIFY(price > 10.0);
+}
+
+// ===========================================================================
+// Integration test: fetch the real slingerpakket page and verify the price
+// is correctly extracted as > 10 (not the 0.01 sentinel fallback).
+// ===========================================================================
+void Test_Downloader_Vogelvoerkopen::test_slingerpakket_price_is_above_ten()
+{
+    QTemporaryDir tmpDir;
+    QVERIFY(tmpDir.isValid());
+    const QDir workDir(tmpDir.path());
+
+    QNetworkAccessManager nam;
+    QEventLoop loop;
+    QString pageContent;
+
+    const QString pageUrl = QStringLiteral("https://www.vogelvoerkopen.nl/het-grote-vogelvoer-slingerpakket/");
+    QNetworkRequest req{QUrl{pageUrl}};
+    req.setHeader(QNetworkRequest::UserAgentHeader,
+                  QStringLiteral("Mozilla/5.0 (compatible; WebsiteEmpire/1.0)"));
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::NoLessSafeRedirectPolicy);
+
+    QNetworkReply *reply = nam.get(req);
+    QObject::connect(reply, &QNetworkReply::finished, &loop,
+                     [reply, &pageContent, &loop]() {
+                         if (reply->error() == QNetworkReply::NoError) {
+                             pageContent = QString::fromUtf8(reply->readAll());
+                         }
+                         reply->deleteLater();
+                         loop.quit();
+                     });
+
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timeout.start(30'000);
+    loop.exec();
+
+    QVERIFY2(!pageContent.isEmpty(), "Failed to fetch slingerpakket page within 30 s");
+
+    DownloaderVogelvoerkopen dl;
+    const auto attrs = dl.getAttributeValues(pageUrl, pageContent);
+
+    QVERIFY2(!attrs.isEmpty(), "Page did not parse as a product page");
+
+    const QString priceStr = attrs.value(PageAttributesProduct::ID_SALE_PRICE);
+    bool ok = false;
+    const double price = priceStr.toDouble(&ok);
+    QVERIFY2(ok, qPrintable(QStringLiteral("sale_price is not a number: '%1'").arg(priceStr)));
+    QVERIFY2(price > 10.0,
+             qPrintable(QStringLiteral("Expected price > 10, got %1 — "
+                                       "extractPrice likely fell back to the 0.01 sentinel")
+                            .arg(priceStr)));
 }
 
 QTEST_MAIN(Test_Downloader_Vogelvoerkopen)

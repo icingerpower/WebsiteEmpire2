@@ -36,6 +36,7 @@ public slots:
     // start == false → signal the crawl to stop; already-downloaded rows are kept.
     void download(bool start);
     void removePages();
+    void reparse();
     void copyCommand();
 
 private slots:

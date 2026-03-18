@@ -60,6 +60,10 @@ public:
         // AspiredDb stores it as a BLOB and calls this instead of validate().
         bool isImage = false;
         std::optional<std::function<QString(const QList<QSharedPointer<QImage>> &)>> validateImageList = std::nullopt;
+        // If true, this attribute holds the page URL (used by reparse to know
+        // which URL to re-fetch for selected rows).  At most one attribute per
+        // schema should have isUrl == true.
+        bool isUrl = false;
     };
 
     virtual QString areAttributesCrossValid(

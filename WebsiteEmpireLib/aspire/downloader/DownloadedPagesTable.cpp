@@ -93,6 +93,32 @@ AbstractDownloader *DownloadedPagesTable::downloader() const
     return m_downloader;
 }
 
+bool DownloadedPagesTable::select()
+{
+    // Build a SELECT that skips image (BLOB) columns.  Loading ~1-2 MB BLOBs
+    // per row via SELECT * blocks the main thread for several seconds once the
+    // database grows.  Images are read on-demand through imagesAt() which
+    // issues its own targeted query.
+    QStringList cols;
+    cols.reserve(m_attributes.size() + 1);
+    cols << QStringLiteral("id");
+    for (const auto &attr : std::as_const(m_attributes)) {
+        if (!m_imageAttributeIds.contains(attr.id)) {
+            cols << attr.id;
+        }
+    }
+
+    const QString sql = QString("SELECT %1 FROM %2")
+                            .arg(cols.join(QStringLiteral(", ")),
+                                 AspiredDb::TABLE_NAME);
+    QSqlQuery q(database());
+    q.exec(sql);
+    // setQuery() puts QSqlTableModel into raw-query mode; writes still go
+    // exclusively through m_aspiredDb so this is safe.
+    QSqlTableModel::setQuery(std::move(q));
+    return !lastError().isValid();
+}
+
 void DownloadedPagesTable::recordPage(
     const QHash<QString, QString> &idAttr_value,
     const QHash<QString, QList<QSharedPointer<QImage>>> &idAttr_imageValue)
@@ -100,6 +126,18 @@ void DownloadedPagesTable::recordPage(
     // Throws ExceptionWithTitleText on validation failure — the model is left
     // unchanged in that case.
     m_aspiredDb.record(m_attributes, idAttr_value, m_pageAttributes.get(),
+                       idAttr_imageValue);
+    select();
+}
+
+void DownloadedPagesTable::updatePage(
+    const QString &rowId,
+    const QHash<QString, QString> &idAttr_value,
+    const QHash<QString, QList<QSharedPointer<QImage>>> &idAttr_imageValue)
+{
+    // Throws ExceptionWithTitleText on validation failure — the row is left
+    // unchanged in that case.
+    m_aspiredDb.update(rowId, m_attributes, idAttr_value, m_pageAttributes.get(),
                        idAttr_imageValue);
     select();
 }
@@ -208,6 +246,18 @@ QVariant DownloadedPagesTable::data(const QModelIndex &index, int role) const
         if (m_imageAttributeIds.contains(colName)) {
             return QVariant{};
         }
+    }
+    if (role == Qt::DisplayRole && index.isValid()) {
+        // HarfBuzz glyph shaping is O(n) in text length.  Shaping thousands
+        // of characters per cell (e.g. the description field) blocks the main
+        // thread for seconds in a debug build.  Truncate display text to keep
+        // painting fast; the full value is still stored in the database.
+        const QVariant v = QSqlTableModel::data(index, role);
+        const QString s = v.toString();
+        if (s.length() > 120) {
+            return s.left(117) + QStringLiteral("...");
+        }
+        return v;
     }
     return QSqlTableModel::data(index, role);
 }

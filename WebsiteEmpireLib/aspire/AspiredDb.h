@@ -31,6 +31,16 @@ public:
                 const AbstractPageAttributes *pageAttributes,
                 const QHash<QString, QList<QSharedPointer<QImage>>> &idAttr_imageValue = {});
 
+    // Like record(), but updates the existing row identified by rowId (the
+    // auto-increment primary key stored in column "id") instead of inserting.
+    // Throws ExceptionWithTitleText on validation failure; the row is left
+    // unchanged in that case.
+    void update(const QString &rowId,
+                const QList<AbstractPageAttributes::Attribute> &attributes,
+                const QHash<QString, QString> &idAttr_value,
+                const AbstractPageAttributes *pageAttributes,
+                const QHash<QString, QList<QSharedPointer<QImage>>> &idAttr_imageValue = {});
+
     // Inverse of the internal serializeImages() used by record().
     // Returns an empty list for a null/empty blob.
     static QList<QSharedPointer<QImage>> deserializeImages(const QByteArray &blob);

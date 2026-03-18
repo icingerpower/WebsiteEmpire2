@@ -186,3 +186,62 @@ void AspiredDb::record(const QList<AbstractPageAttributes::Attribute> &attribute
         );
     }
 }
+
+void AspiredDb::update(const QString &rowId,
+                       const QList<AbstractPageAttributes::Attribute> &attributes,
+                       const QHash<QString, QString> &idAttr_value,
+                       const AbstractPageAttributes *pageAttributes,
+                       const QHash<QString, QList<QSharedPointer<QImage>>> &idAttr_imageValue)
+{
+    // Validate individual attributes
+    for (const auto &attr : attributes) {
+        if (attr.validateImageList.has_value()) {
+            const auto &images = idAttr_imageValue.value(attr.id);
+            const QString error = (*attr.validateImageList)(images);
+            if (!error.isEmpty()) {
+                throw ExceptionWithTitleText(attr.name, error);
+            }
+        } else {
+            const QString value = idAttr_value.value(attr.id);
+            const QString error = attr.validate(value);
+            if (!error.isEmpty()) {
+                throw ExceptionWithTitleText(attr.name, error);
+            }
+        }
+    }
+
+    // Cross-validate
+    const QString crossError = pageAttributes->areAttributesCrossValid(idAttr_value);
+    if (!crossError.isEmpty()) {
+        throw ExceptionWithTitleText(pageAttributes->getName(), crossError);
+    }
+
+    // Build and execute UPDATE
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
+    QSqlQuery query(db);
+
+    QStringList setClauses;
+    for (const auto &attr : attributes) {
+        setClauses << QString("%1 = :%1").arg(attr.id);
+    }
+
+    const QString updateSql = QString("UPDATE %1 SET %2 WHERE id = :rowId")
+                                  .arg(TABLE_NAME, setClauses.join(", "));
+
+    query.prepare(updateSql);
+    query.bindValue(":rowId", rowId);
+    for (const auto &attr : attributes) {
+        if (attr.validateImageList.has_value()) {
+            query.bindValue(":" + attr.id, serializeImages(idAttr_imageValue.value(attr.id)));
+        } else {
+            query.bindValue(":" + attr.id, idAttr_value.value(attr.id));
+        }
+    }
+
+    if (!query.exec()) {
+        throw ExceptionWithTitleText(
+            QObject::tr("Database Error"),
+            QObject::tr("Failed to update record: %1").arg(query.lastError().text())
+        );
+    }
+}

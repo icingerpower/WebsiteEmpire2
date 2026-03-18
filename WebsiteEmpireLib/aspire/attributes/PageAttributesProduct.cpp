@@ -47,6 +47,12 @@ QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesProduct::
                                 }
                                 return QString{};
                             }
+                            , std::nullopt // schema
+                            , false        // not optional
+                            , std::nullopt // no reference
+                            , false        // not image
+                            , std::nullopt // no image validation
+                            , true         // isUrl
     };
 
     *attributes << Attribute{ID_CATEGORY
@@ -140,7 +146,7 @@ QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesProduct::
                             , std::nullopt // schema
                             , false        // not optional
                             , std::nullopt // no reference
-                            , false        // is image
+                            , true         // is image
                             , [](const QList<QSharedPointer<QImage>> &images) -> QString {
                                 if (images.isEmpty() || images.size() > 10) {
                                     return tr("The product must have between 1 and 10 images");

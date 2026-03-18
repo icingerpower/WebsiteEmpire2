@@ -41,6 +41,12 @@ QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesProductCa
                                 }
                                 return QString{};
                             }
+                            , std::nullopt // schema
+                            , false        // not optional
+                            , std::nullopt // no reference
+                            , false        // not image
+                            , std::nullopt // no image validation
+                            , true         // isUrl
     };
 
     *attributes << Attribute{ID_PRODUCT_CATEGORY

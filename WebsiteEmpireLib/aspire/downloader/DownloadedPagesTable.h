@@ -72,10 +72,23 @@ public:
     bool setData(const QModelIndex &index, const QVariant &value,
                  int role = Qt::EditRole) override;
 
+    // Like recordPage(), but updates the existing row identified by rowId
+    // (the auto-increment primary key from column 0) instead of inserting a
+    // new one.  Validates via the schema before writing.  Throws
+    // ExceptionWithTitleText on validation failure; the row is left unchanged.
+    void updatePage(const QString &rowId,
+                    const QHash<QString, QString> &idAttr_value,
+                    const QHash<QString, QList<QSharedPointer<QImage>>> &idAttr_imageValue = {});
+
     // Deletes the rows whose primary-key ids are listed in rowIds, then
     // refreshes the model with select().  Rows not found in the database are
     // silently ignored.  Throws ExceptionWithTitleText on SQL error.
     void deleteRows(const QList<QString> &rowIds);
+
+    // Overrides the default SELECT * to exclude image (BLOB) columns.
+    // Loading large BLOBs eagerly during select() blocks the main thread;
+    // images are retrieved on-demand via imagesAt() instead.
+    bool select() override;
 
 private:
     AspiredDb m_aspiredDb;

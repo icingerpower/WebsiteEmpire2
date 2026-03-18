@@ -122,6 +122,28 @@ Attr makeTextAttr(const QString &id, const QString &name, bool required = false)
     };
 }
 
+Attr makeUrlAttr(const QString &id, const QString &name)
+{
+    return Attr{
+        id, name, "", "https://example.com/", "",
+        [name](const QString &v) -> QString {
+            if (v.trimmed().isEmpty()) {
+                return name + " is required";
+            }
+            if (!v.startsWith(QLatin1String("http"))) {
+                return name + " must start with http";
+            }
+            return QString{};
+        },
+        std::nullopt, // schema
+        false,        // optional
+        std::nullopt, // reference
+        false,        // isImage
+        std::nullopt, // validateImageList
+        true          // isUrl
+    };
+}
+
 Attr makeImgAttr(const QString &id, const QString &name, bool requireAtLeastOne = false)
 {
     return Attr{
@@ -226,6 +248,18 @@ private slots:
 
     // --- Mixed text + image ---
     void test_mixed_text_and_image_round_trip();
+
+    // --- isUrl flag ---
+    void test_isUrl_flag_false_for_text_and_image_attrs();
+    void test_isUrl_flag_true_for_url_attr();
+
+    // --- updatePage() ---
+    void test_updatePage_changes_text_value();
+    void test_updatePage_rowCount_unchanged();
+    void test_updatePage_throws_on_required_attr_missing();
+    void test_updatePage_only_updates_target_row();
+    void test_updatePage_persists_across_instance_recreation();
+    void test_updatePage_changes_image();
 };
 
 // ===========================================================================
@@ -471,8 +505,9 @@ void Test_DownloadedPagesTable::test_model_columns_with_image_attr()
 
     QVERIFY(findColumn(&table, "id")     != -1);
     QVERIFY(findColumn(&table, "title")  != -1);
-    QVERIFY(findColumn(&table, "photos") != -1);
-    QCOMPARE(table.columnCount(), 3);   // id + title + photos
+    // Image columns are excluded from the SELECT query — not in the model.
+    QVERIFY(findColumn(&table, "photos") == -1);
+    QCOMPARE(table.columnCount(), 2);   // id + title (photos excluded)
 }
 
 // ===========================================================================
@@ -488,11 +523,15 @@ void Test_DownloadedPagesTable::test_data_DisplayRole_hides_image_column()
     DownloadedPagesTable table(QDir(dir.path()), &dl);
     table.recordPage({}, {{"photos", {makeImage(4, 4, Qt::red)}}});
 
+    // Image columns are excluded from the SELECT query entirely — they do not
+    // appear as model columns at all, which is the strongest form of "hidden".
     const int imgCol = findColumn(&table, "photos");
-    QVERIFY(imgCol != -1);
+    QVERIFY(imgCol == -1);
 
-    const QVariant v = table.data(table.index(0, imgCol), Qt::DisplayRole);
-    QVERIFY(v.isNull() || !v.isValid() || v.toString().isEmpty());
+    // Images are still accessible via imagesAt().
+    const auto result = table.imagesAt(table.index(0, 0));
+    QVERIFY(result.contains("photos"));
+    QCOMPARE(result.value("photos")->size(), 1);
 }
 
 void Test_DownloadedPagesTable::test_data_EditRole_hides_image_column()
@@ -504,11 +543,9 @@ void Test_DownloadedPagesTable::test_data_EditRole_hides_image_column()
     DownloadedPagesTable table(QDir(dir.path()), &dl);
     table.recordPage({}, {{"photos", {makeImage(4, 4, Qt::green)}}});
 
+    // Image columns are excluded from the SELECT query — not in the model at all.
     const int imgCol = findColumn(&table, "photos");
-    QVERIFY(imgCol != -1);
-
-    const QVariant v = table.data(table.index(0, imgCol), Qt::EditRole);
-    QVERIFY(v.isNull() || !v.isValid() || v.toString().isEmpty());
+    QVERIFY(imgCol == -1);
 }
 
 void Test_DownloadedPagesTable::test_data_text_column_returns_value()
@@ -890,11 +927,9 @@ void Test_DownloadedPagesTable::test_mixed_text_and_image_round_trip()
     QCOMPARE(table.data(table.index(0, nameCol), Qt::DisplayRole).toString(),
              QString("Tabby Cat Food"));
 
-    // Image column is hidden
+    // Image column is excluded from the SELECT query — not in the model at all.
     const int imgCol = findColumn(&table, "photos");
-    QVERIFY(imgCol != -1);
-    const QVariant imgDisplay = table.data(table.index(0, imgCol), Qt::DisplayRole);
-    QVERIFY(imgDisplay.isNull() || !imgDisplay.isValid() || imgDisplay.toString().isEmpty());
+    QVERIFY(imgCol == -1);
 
     // Image data retrieved correctly
     const auto result = table.imagesAt(table.index(0, 0));
@@ -904,6 +939,171 @@ void Test_DownloadedPagesTable::test_mixed_text_and_image_round_trip()
     QCOMPARE(QColor(result.value("photos")->at(0).pixel(0, 0)).red(), 255);
     QCOMPARE(QColor(result.value("photos")->at(0).pixel(0, 0)).green(),  0);
     QCOMPARE(QColor(result.value("photos")->at(0).pixel(0, 0)).blue(),   0);
+}
+
+// ===========================================================================
+// isUrl flag
+// ===========================================================================
+
+void Test_DownloadedPagesTable::test_isUrl_flag_false_for_text_and_image_attrs()
+{
+    const Attr textAttr = makeTextAttr("name", "Name");
+    QVERIFY(!textAttr.isUrl);
+
+    const Attr imgAttr = makeImgAttr("photos", "Photos");
+    QVERIFY(!imgAttr.isUrl);
+}
+
+void Test_DownloadedPagesTable::test_isUrl_flag_true_for_url_attr()
+{
+    const Attr urlAttr = makeUrlAttr("url", "URL");
+    QVERIFY(urlAttr.isUrl);
+
+    // isUrl does not imply isImage
+    QVERIFY(!urlAttr.isImage);
+}
+
+// ===========================================================================
+// updatePage()
+// ===========================================================================
+
+void Test_DownloadedPagesTable::test_updatePage_changes_text_value()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    StubDownloader dl("dl", {makeUrlAttr("url", "URL"), makeTextAttr("name", "Name")});
+    DownloadedPagesTable table(QDir(dir.path()), &dl);
+    table.recordPage({{"url", "https://example.com/a/"}, {"name", "Original"}});
+
+    QCOMPARE(cellText(&table, 0, "name"), QString("Original"));
+
+    const QString rowId = cellText(&table, 0, "id");
+    table.updatePage(rowId, {{"url", "https://example.com/a/"}, {"name", "Updated"}});
+
+    QCOMPARE(cellText(&table, 0, "name"), QString("Updated"));
+}
+
+void Test_DownloadedPagesTable::test_updatePage_rowCount_unchanged()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    StubDownloader dl("dl", {makeUrlAttr("url", "URL"), makeTextAttr("name", "Name")});
+    DownloadedPagesTable table(QDir(dir.path()), &dl);
+    table.recordPage({{"url", "https://example.com/a/"}, {"name", "Before"}});
+
+    QCOMPARE(table.rowCount(), 1);
+
+    const QString rowId = cellText(&table, 0, "id");
+    table.updatePage(rowId, {{"url", "https://example.com/a/"}, {"name", "After"}});
+
+    QCOMPARE(table.rowCount(), 1);
+}
+
+void Test_DownloadedPagesTable::test_updatePage_throws_on_required_attr_missing()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    StubDownloader dl("dl", {makeUrlAttr("url", "URL"),
+                             makeTextAttr("name", "Name", /*required=*/true)});
+    DownloadedPagesTable table(QDir(dir.path()), &dl);
+    table.recordPage({{"url", "https://example.com/a/"}, {"name", "Valid"}});
+
+    const QString rowId = cellText(&table, 0, "id");
+
+    bool threw = false;
+    try {
+        table.updatePage(rowId, {{"url", "https://example.com/a/"}, {"name", ""}});
+    } catch (const ExceptionWithTitleText &e) {
+        threw = true;
+        QVERIFY(!e.errorText().isEmpty());
+    }
+    QVERIFY(threw);
+
+    // Original value must be untouched
+    QCOMPARE(cellText(&table, 0, "name"), QString("Valid"));
+}
+
+void Test_DownloadedPagesTable::test_updatePage_only_updates_target_row()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    StubDownloader dl("dl", {makeUrlAttr("url", "URL"), makeTextAttr("name", "Name")});
+    DownloadedPagesTable table(QDir(dir.path()), &dl);
+    table.recordPage({{"url", "https://example.com/a/"}, {"name", "Row A"}});
+    table.recordPage({{"url", "https://example.com/b/"}, {"name", "Row B"}});
+
+    // Determine which model row holds "Row A" and update it.
+    int rowAIndex = -1;
+    for (int r = 0; r < table.rowCount(); ++r) {
+        if (cellText(&table, r, "name") == QStringLiteral("Row A")) {
+            rowAIndex = r;
+            break;
+        }
+    }
+    QVERIFY(rowAIndex >= 0);
+
+    const QString rowId = cellText(&table, rowAIndex, "id");
+    table.updatePage(rowId, {{"url", "https://example.com/a/"}, {"name", "Row A Updated"}});
+
+    // Collect all names after update.
+    QSet<QString> names;
+    for (int r = 0; r < table.rowCount(); ++r) {
+        names.insert(cellText(&table, r, "name"));
+    }
+    QVERIFY(names.contains(QStringLiteral("Row A Updated")));
+    QVERIFY(names.contains(QStringLiteral("Row B")));
+}
+
+void Test_DownloadedPagesTable::test_updatePage_persists_across_instance_recreation()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    const QList<Attr> attrs = {makeUrlAttr("url", "URL"), makeTextAttr("name", "Name")};
+
+    QString rowId;
+    {
+        StubDownloader dl("persist", attrs);
+        DownloadedPagesTable table(QDir(dir.path()), &dl);
+        table.recordPage({{"url", "https://example.com/a/"}, {"name", "Before"}});
+        rowId = cellText(&table, 0, "id");
+        QVERIFY(!rowId.isEmpty());
+        table.updatePage(rowId, {{"url", "https://example.com/a/"}, {"name", "After"}});
+        QCOMPARE(cellText(&table, 0, "name"), QString("After"));
+    }
+
+    StubDownloader dl2("persist", attrs);
+    DownloadedPagesTable table2(QDir(dir.path()), &dl2);
+
+    QCOMPARE(table2.rowCount(), 1);
+    QCOMPARE(cellText(&table2, 0, "name"), QString("After"));
+}
+
+void Test_DownloadedPagesTable::test_updatePage_changes_image()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    StubDownloader dl("dl", {makeImgAttr("photos", "Photos")});
+    DownloadedPagesTable table(QDir(dir.path()), &dl);
+    table.recordPage({}, {{"photos", {makeImage(4, 4, Qt::red)}}});
+
+    const QString rowId = cellText(&table, 0, "id");
+
+    // Replace the red image with a blue image.
+    table.updatePage(rowId, {}, {{"photos", {makeImage(4, 4, Qt::blue)}}});
+
+    const auto result = table.imagesAt(table.index(0, 0));
+    QVERIFY(result.contains("photos"));
+    const auto &imgList = *result.value("photos");
+    QCOMPARE(imgList.size(), 1);
+    // Pixel should now be blue, not red.
+    QCOMPARE(QColor(imgList[0].pixel(0, 0)).blue(), 255);
+    QCOMPARE(QColor(imgList[0].pixel(0, 0)).red(),    0);
 }
 
 QTEST_MAIN(Test_DownloadedPagesTable)

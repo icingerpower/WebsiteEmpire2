@@ -84,6 +84,13 @@ public:
     //   }
     QFuture<void> parse(const QStringList &seedUrls = {});
 
+    // Re-fetches a single URL unconditionally (bypassing the visited set and
+    // the pending queue), calls getAttributeValues() on the result, then
+    // invokes callback with the extracted attributes.  The visited set and
+    // pending queue are not modified.  Returns a future that resolves when
+    // the fetch and callback have both completed.
+    QFuture<void> reparseUrl(const QString &url, PageParsedCallback callback);
+
     // Emitted when parse() drains the pending queue and there is nothing left
     // to fetch.  Not emitted when a crawl is stopped externally.
     Q_SIGNAL void finished();

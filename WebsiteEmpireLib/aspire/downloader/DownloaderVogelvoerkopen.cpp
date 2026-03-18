@@ -217,10 +217,34 @@ static QString cleanHtml(const QString &html)
 static QString extractPrice(const QJsonValue &offersVal)
 {
     auto priceFromObj = [](const QJsonObject &obj) -> double {
-        // Prefer "price" scalar; fall back to "lowPrice" for AggregateOffer
-        double p = obj[QStringLiteral("price")].toDouble();
+        // Prefer "price" scalar; fall back to "lowPrice" for AggregateOffer.
+        // WooCommerce sometimes emits price as a JSON string ("61.39") rather
+        // than a JSON number, so try toString() as a fallback when toDouble()
+        // returns 0.
+        const QJsonValue priceVal = obj[QStringLiteral("price")];
+        double p = priceVal.isDouble() ? priceVal.toDouble()
+                                       : priceVal.toString().toDouble();
         if (p <= 0.0) {
-            p = obj[QStringLiteral("lowPrice")].toString().toDouble();
+            const QJsonValue lowPriceVal = obj[QStringLiteral("lowPrice")];
+            p = lowPriceVal.isDouble() ? lowPriceVal.toDouble()
+                                       : lowPriceVal.toString().toDouble();
+        }
+        // Yoast SEO WooCommerce format: price nested inside priceSpecification
+        // array instead of a top-level "price" field.
+        if (p <= 0.0) {
+            const QJsonArray specArr = obj[QStringLiteral("priceSpecification")].toArray();
+            for (const QJsonValue &spec : specArr) {
+                if (!spec.isObject()) {
+                    continue;
+                }
+                const QJsonValue specPrice = spec.toObject()[QStringLiteral("price")];
+                const double sp = specPrice.isDouble() ? specPrice.toDouble()
+                                                       : specPrice.toString().toDouble();
+                if (sp > 0.0) {
+                    p = sp;
+                    break;
+                }
+            }
         }
         return p;
     };
@@ -480,7 +504,7 @@ QHash<QString, QString> DownloaderVogelvoerkopen::getAttributeValues(const QStri
     if (weightGrStr.isEmpty()) {
         int wg = parseNameWeightGrams(name);
         if (wg < 0) {
-            wg = 0; // unknown weight — passes integer validation
+            wg = 1; // unknown weight — record as 1 (0 fails some downstream checks)
         }
         weightGrStr = QString::number(wg);
         pricesStr = salePrice;
