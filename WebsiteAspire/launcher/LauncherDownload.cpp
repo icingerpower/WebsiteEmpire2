@@ -99,37 +99,43 @@ void LauncherDownload::run(const QString &value)
                 promise->finish();
             };
 
-            // --- Fetch product image asynchronously (no nested event loop) ---
-            const QString imageUrl = attrs.value(imageUrlKey);
-            if (!imageUrl.isEmpty()) {
-                QNetworkRequest req{QUrl{imageUrl}};
-                req.setHeader(QNetworkRequest::UserAgentHeader,
-                              QStringLiteral("Mozilla/5.0 (compatible; WebsiteEmpire/1.0)"));
-                req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                                 QNetworkRequest::NoLessSafeRedirectPolicy);
+            // --- Fetch product images asynchronously (no nested event loop) ---
+            // imageUrlKey may hold a semicolon-separated list of URLs; download all
+            // in parallel and call record() once every reply has been received.
+            const QStringList imageUrls = attrs.value(imageUrlKey)
+                                              .split(QLatin1Char(';'), Qt::SkipEmptyParts);
+            if (!imageUrls.isEmpty()) {
+                auto collected = QSharedPointer<QList<QSharedPointer<QImage>>>::create();
+                auto remaining = QSharedPointer<int>::create(imageUrls.size());
 
-                QNetworkReply *reply = nam->get(req);
-                QObject::connect(reply, &QNetworkReply::finished, reply,
-                                 [reply, record]() mutable {
-                                     QList<QSharedPointer<QImage>> images;
-                                     const QByteArray imgData = reply->readAll();
-                                     reply->deleteLater();
+                for (const QString &imgUrl : imageUrls) {
+                    QNetworkRequest req{QUrl{imgUrl}};
+                    req.setHeader(QNetworkRequest::UserAgentHeader,
+                                  QStringLiteral("Mozilla/5.0 (compatible; WebsiteEmpire/1.0)"));
+                    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                                     QNetworkRequest::NoLessSafeRedirectPolicy);
 
-                                     auto img = QSharedPointer<QImage>::create();
-                                     if (img->loadFromData(imgData)) {
-                                         images << img;
-                                     }
-                                     if (images.isEmpty()) {
-                                         auto placeholder = QSharedPointer<QImage>::create(
-                                             200, 200, QImage::Format_RGB32);
-                                         placeholder->fill(Qt::white);
-                                         images << placeholder;
-                                     }
-                                     record(std::move(images));
-                                 });
+                    QNetworkReply *reply = nam->get(req);
+                    QObject::connect(reply, &QNetworkReply::finished, reply,
+                                     [reply, collected, remaining, record]() mutable {
+                                         auto img = QSharedPointer<QImage>::create();
+                                         if (img->loadFromData(reply->readAll())) {
+                                             *collected << img;
+                                         }
+                                         reply->deleteLater();
+                                         if (--(*remaining) == 0) {
+                                             if (collected->isEmpty()) {
+                                                 auto placeholder = QSharedPointer<QImage>::create(
+                                                     200, 200, QImage::Format_RGB32);
+                                                 placeholder->fill(Qt::white);
+                                                 *collected << placeholder;
+                                             }
+                                             record(std::move(*collected));
+                                         }
+                                     });
+                }
             } else {
-                auto placeholder = QSharedPointer<QImage>::create(
-                    200, 200, QImage::Format_RGB32);
+                auto placeholder = QSharedPointer<QImage>::create(200, 200, QImage::Format_RGB32);
                 placeholder->fill(Qt::white);
                 record({placeholder});
             }

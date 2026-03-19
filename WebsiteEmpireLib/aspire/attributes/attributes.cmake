@@ -15,4 +15,6 @@ set(ASPIRE_ATTRIBUTES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesProduct.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesProductPetFood.h
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesProductPetFood.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesProductFashion.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesProductFashion.cpp
 )

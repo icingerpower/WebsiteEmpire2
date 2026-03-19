@@ -31,3 +31,9 @@ add_test(NAME Test_Downloader_Vogelvoerkopen COMMAND Test_Downloader_Vogelvoerko
 set_tests_properties(Test_Downloader_Vogelvoerkopen PROPERTIES TIMEOUT 700)
 target_link_libraries(Test_Downloader_Vogelvoerkopen PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Sql Qt${QT_VERSION_MAJOR}::Network QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
 target_include_directories(Test_Downloader_Vogelvoerkopen PRIVATE ../WebsiteEmpireLib)
+
+add_executable(Test_Downloader_Pradize test_downloader_pradize.cpp)
+add_test(NAME Test_Downloader_Pradize COMMAND Test_Downloader_Pradize)
+set_tests_properties(Test_Downloader_Pradize PROPERTIES TIMEOUT 700)
+target_link_libraries(Test_Downloader_Pradize PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Sql Qt${QT_VERSION_MAJOR}::Network QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+target_include_directories(Test_Downloader_Pradize PRIVATE ../WebsiteEmpireLib)

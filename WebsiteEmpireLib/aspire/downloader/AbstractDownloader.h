@@ -58,6 +58,18 @@ public:
     // for downloaders that do not embed image URLs in the text attributes.
     virtual QString getImageUrlAttributeKey() const;
 
+    // Minimum delay in milliseconds between consecutive page fetches during a
+    // crawl.  Default is 0 (no delay).  Override to throttle requests to
+    // servers with strict rate limits.
+    virtual int requestDelayMs() const;
+
+    // Returns true when the fetched content is a valid, complete response worth
+    // processing and marking as visited.  Default returns true for any non-empty
+    // content.  Override to detect degraded responses (e.g. rate-limited short
+    // pages) so the URL is re-enqueued for retry instead of being permanently
+    // marked visited.
+    virtual bool isFetchSuccessful(const QString &url, const QString &content) const;
+
     // Replaces the page-parsed callback used by the next parse() call.
     // Useful for wiring a GUI component to an existing downloader after
     // construction.

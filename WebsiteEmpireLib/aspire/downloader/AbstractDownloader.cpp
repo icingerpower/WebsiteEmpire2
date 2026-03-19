@@ -3,8 +3,11 @@
 #include <utility>
 
 #include <QCryptographicHash>
+#include <QFile>
 #include <QPromise>
 #include <QSettings>
+#include <QTimer>
+#include <QUrl>
 
 
 AbstractDownloader::AbstractDownloader(const QDir &workingDir, PageParsedCallback onPageParsed, QObject *parent)
@@ -27,6 +30,16 @@ QStringList AbstractDownloader::getSeedUrls() const
 QString AbstractDownloader::getImageUrlAttributeKey() const
 {
     return {};
+}
+
+int AbstractDownloader::requestDelayMs() const
+{
+    return 0;
+}
+
+bool AbstractDownloader::isFetchSuccessful(const QString &/*url*/, const QString &content) const
+{
+    return !content.isEmpty();
 }
 
 bool AbstractDownloader::supportsFileUrlDownload() const
@@ -130,12 +143,19 @@ QFuture<void> AbstractDownloader::parseSpecificUrls(const QStringList &urls)
                  << m_pending.size() << "pending";
     }
 
+    int alreadyVisited = 0;
+    int alreadyPending = 0;
+    for (const QString &url : urls) {
+        if (m_visited.contains(url))       { ++alreadyVisited; }
+        else if (m_pendingSet.contains(url)) { ++alreadyPending; }
+    }
     const int beforeSize = m_pending.size();
     enqueuePending(urls);
     const int added = m_pending.size() - beforeSize;
     qDebug() << getId() << ": parseSpecificUrls: enqueuePending" << urls.size() << "URLs"
              << "→ added" << added
-             << "(already visited or pending:" << (urls.size() - added) << ")";
+             << "(already visited:" << alreadyVisited
+             << ", already pending:" << alreadyPending << ")";
 
     qDebug() << getId() << ": starting specific-URLs parse with" << m_pending.size() << "pending URLs";
 
@@ -172,31 +192,72 @@ void AbstractDownloader::processNext(QSharedPointer<QPromise<void>> promise)
     qDebug() << getId() << ": fetching" << url
              << "(" << m_pending.size() << "remaining)";
 
-    fetchUrl(url).then(this, [this, url, promise](const QString &content) {
-        markVisited(url);
-        const QHash<QString, QString> attrs = getAttributeValues(url, content);
-        const QStringList newUrls = m_followLinks ? getUrlsToParse(content) : QStringList{};
-        qDebug() << getId() << ": parsed" << url
-                 << "— attrs keys:" << attrs.keys()
-                 << "— new URLs:" << newUrls.size();
-        if (m_onPageParsed) {
-            // Await the callback's future so async work (e.g. image fetches) completes
-            // before advancing to the next URL.  The event loop remains free throughout.
-            m_onPageParsed(url, attrs).then(this, [this, newUrls, promise](bool /*accepted*/) {
+    auto doFetch = [this, url, promise]() {
+        fetchUrl(url).then(this, [this, url, promise](const QString &content) {
+            if (!isFetchSuccessful(url, content)) {
+                // Server returned a degraded response (e.g. rate-limited short page).
+                // Re-enqueue at end of queue so it is retried later; do NOT mark visited.
+                qDebug() << getId() << ": fetch degraded for" << url
+                         << "(content length:" << content.length() << ") — re-enqueued for retry";
+
+                // Save the degraded content to disk for inspection.
+                if (m_workingDir.exists()) {
+                    QDir debugDir(m_workingDir.filePath(QStringLiteral("debug_pages")));
+                    debugDir.mkpath(QStringLiteral("."));
+                    const QString urlPath = QUrl(url).path();
+                    QString baseName = urlPath.section(QLatin1Char('/'), -1);
+                    if (baseName.isEmpty()) {
+                        baseName = QStringLiteral("root");
+                    }
+                    // Truncate to 80 chars to stay within filename limits.
+                    if (baseName.length() > 80) {
+                        baseName = baseName.left(80);
+                    }
+                    const QString filePath = debugDir.filePath(baseName + QStringLiteral(".txt"));
+                    QFile f(filePath);
+                    if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                        f.write(content.toUtf8());
+                        f.close();
+                        qDebug() << getId() << ": degraded content saved to" << filePath;
+                    }
+                }
+
+                enqueuePending({url});
+                processNext(promise);
+                return;
+            }
+            markVisited(url);
+            const QHash<QString, QString> attrs = getAttributeValues(url, content);
+            const QStringList newUrls = m_followLinks ? getUrlsToParse(content) : QStringList{};
+            qDebug() << getId() << ": parsed" << url
+                     << "— attrs keys:" << attrs.keys()
+                     << "— new URLs:" << newUrls.size();
+            if (m_onPageParsed) {
+                // Await the callback's future so async work (e.g. image fetches) completes
+                // before advancing to the next URL.  The event loop remains free throughout.
+                m_onPageParsed(url, attrs).then(this, [this, newUrls, promise](bool /*accepted*/) {
+                    enqueuePending(newUrls);
+                    processNext(promise);
+                }).onFailed(this, [this, newUrls, promise](const QException &) {
+                    enqueuePending(newUrls);
+                    processNext(promise);
+                });
+            } else {
                 enqueuePending(newUrls);
                 processNext(promise);
-            }).onFailed(this, [this, newUrls, promise](const QException &) {
-                enqueuePending(newUrls);
-                processNext(promise);
-            });
-        } else {
-            enqueuePending(newUrls);
-            processNext(promise);
-        }
-    }).onFailed(this, [this, url, promise](const QException &e) {
-        qDebug() << getId() << ": failed to fetch" << url << ":" << e.what();
-        processNext(promise); // skip and continue
-    });
+            }
+        }).onFailed(this, [this, url, promise](const QException &e) {
+            qDebug() << getId() << ": failed to fetch" << url << ":" << e.what();
+            processNext(promise); // skip and continue
+        });
+    };
+
+    const int delay = requestDelayMs();
+    if (delay > 0) {
+        QTimer::singleShot(delay, this, std::move(doFetch));
+    } else {
+        doFetch();
+    }
 }
 
 // --- Persistence ---
