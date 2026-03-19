@@ -82,7 +82,7 @@ public:
     bool isFetchSuccessful(const QString &url, const QString &content) const override;
 
     // Seeds with a set of known pradize.com collection page URLs, from which
-    // getUrlsToParse() discovers product and further collection URLs.
+    // getUrlsToParseenregistré() discovers product and further collection URLs.
     QStringList getSeedUrls() const override;
 
     // Returns PRADIZE_IMAGE_URLS_KEY so WidgetDownloader knows which text

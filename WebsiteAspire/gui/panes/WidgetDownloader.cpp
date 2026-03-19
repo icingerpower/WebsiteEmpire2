@@ -648,18 +648,26 @@ void WidgetDownloader::copyCommand()
         return;
     }
     const QString workingDir = WorkingDirectoryManager::instance()->workingDir().path();
-    const QString downloaderId = m_dowanloadedPageTable->downloader()->getId();
-    const QString command =
+    const AbstractDownloader *dl = m_dowanloadedPageTable->downloader();
+    const QString downloaderId = dl->getId();
+    const QString baseCommand =
         QStringLiteral("WebsiteAspire --%1 \"%2\" --%3 %4")
             .arg(AbstractLauncher::OPTION_WORKING_DIR,
                  workingDir,
                  LauncherDownload::OPTION_NAME,
                  downloaderId);
-    QMessageBox::information(this,
-                             tr("Copy Command"),
-                             tr("Run the following command in a terminal to download "
-                                "without launching the UI:\n\n%1")
-                                 .arg(command));
+
+    QString message = tr("Run the following command in a terminal to download "
+                         "without launching the UI:\n\n%1").arg(baseCommand);
+
+    if (dl->supportsFileUrlDownload()) {
+        const QString urlsCommand = baseCommand
+            + QStringLiteral(" --urls \"/path/to/urls.txt\"");
+        message += tr("\n\nOr download from a list of URLs in a text file (one URL per line):\n\n%1")
+                       .arg(urlsCommand);
+    }
+
+    QMessageBox::information(this, tr("Copy Command"), message);
 }
 
 // ---------------------------------------------------------------------------

@@ -32,6 +32,12 @@ int main(int argc, char *argv[])
         QStringLiteral("dir"));
     parser.addOption(workingDirOption);
 
+    const QCommandLineOption urlsOption(
+        QStringLiteral("urls"),
+        QCoreApplication::tr("Path to a text file with one URL per line (used by downloaders that support file URL download)."),
+        QStringLiteral("filepath"));
+    parser.addOption(urlsOption);
+
     for (AbstractLauncher *launcher : AbstractLauncher::ALL_LAUNCHERS()) {
         parser.addOption(QCommandLineOption(
             launcher->getOptionName(),

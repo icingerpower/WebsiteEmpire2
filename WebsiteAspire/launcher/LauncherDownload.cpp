@@ -3,14 +3,17 @@
 #include <csignal>
 #include <unistd.h>
 
+#include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QImage>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPromise>
 #include <QSocketNotifier>
+#include <QTextStream>
 
 #include "aspire/attributes/AbstractPageAttributes.h"
 #include "aspire/attributes/PageAttributesProduct.h"
@@ -169,5 +172,35 @@ void LauncherDownload::run(const QString &value)
         });
     }
 
-    dl->parse(dl->getSeedUrls());
+    // --- Resolve --urls file path if provided ---
+    QCommandLineParser argsParser;
+    argsParser.setSingleDashWordOptionMode(QCommandLineParser::ParseAsLongOptions);
+    const QCommandLineOption urlsOpt(QStringLiteral("urls"), QString(), QStringLiteral("filepath"));
+    argsParser.addOption(urlsOpt);
+    argsParser.parse(QCoreApplication::arguments()); // parse(), not process(): ignore unknown opts
+
+    const QString urlsFilePath = argsParser.value(urlsOpt);
+
+    if (!urlsFilePath.isEmpty() && dl->supportsFileUrlDownload()) {
+        QFile file(urlsFilePath);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qWarning() << "LauncherDownload: cannot open URLs file:" << urlsFilePath;
+            QCoreApplication::quit();
+            return;
+        }
+
+        QStringList urls;
+        QTextStream in(&file);
+        while (!in.atEnd()) {
+            const QString line = in.readLine().trimmed();
+            if (!line.isEmpty()) {
+                urls << line;
+            }
+        }
+
+        qDebug() << "LauncherDownload: launching from file URLs, count:" << urls.size();
+        dl->parseSpecificUrls(urls);
+    } else {
+        dl->parse(dl->getSeedUrls());
+    }
 }
