@@ -21,9 +21,9 @@
 #include "aspire/downloader/DownloadedPagesTable.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
 
-DECLARE_LAUNCHER(LauncherDownload)
-
 const QString LauncherDownload::OPTION_NAME = QStringLiteral("download");
+
+DECLARE_LAUNCHER(LauncherDownload)
 
 // Self-pipe used to relay SIGINT from the async-signal context into Qt's event loop.
 static int s_sigIntPipe[2] = {-1, -1};

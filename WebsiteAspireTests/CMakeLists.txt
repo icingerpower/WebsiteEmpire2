@@ -37,3 +37,13 @@ add_test(NAME Test_Downloader_Pradize COMMAND Test_Downloader_Pradize)
 set_tests_properties(Test_Downloader_Pradize PROPERTIES TIMEOUT 700)
 target_link_libraries(Test_Downloader_Pradize PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Sql Qt${QT_VERSION_MAJOR}::Network QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
 target_include_directories(Test_Downloader_Pradize PRIVATE ../WebsiteEmpireLib)
+
+add_executable(Test_Generator_Factories test_generator_factories.cpp)
+add_test(NAME Test_Generator_Factories COMMAND Test_Generator_Factories)
+target_link_libraries(Test_Generator_Factories PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Sql QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+target_include_directories(Test_Generator_Factories PRIVATE ../WebsiteEmpireLib)
+
+add_executable(Test_Params_Model test_params_model.cpp)
+add_test(NAME Test_Params_Model COMMAND Test_Params_Model)
+target_link_libraries(Test_Params_Model PRIVATE Qt${QT_VERSION_MAJOR}::Test QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+target_include_directories(Test_Params_Model PRIVATE ../WebsiteEmpireLib)

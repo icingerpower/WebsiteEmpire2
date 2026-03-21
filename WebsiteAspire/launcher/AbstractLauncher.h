@@ -4,6 +4,8 @@
 #include <QMap>
 #include <QString>
 
+class QCommandLineParser;
+
 // Base class for headless launch modes triggered by CLI arguments.
 //
 // Subclasses register themselves via DECLARE_LAUNCHER() and are invoked
@@ -24,6 +26,10 @@ public:
 
     // The CLI option name (without "--") that triggers this launcher, e.g. "download".
     virtual QString getOptionName() const = 0;
+
+    // Called by main() before parser.process() so each launcher can register
+    // its own sub-options (e.g. --getjob, --sessions).  Default: no-op.
+    virtual void registerOptions(QCommandLineParser &parser);
 
     // Execute the launcher with the value passed after the option name.
     virtual void run(const QString &value) = 0;

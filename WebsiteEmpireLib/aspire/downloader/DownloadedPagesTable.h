@@ -36,6 +36,15 @@ public:
                                   AbstractDownloader *downloader,
                                   QObject *parent = nullptr);
 
+    // Downloader-free constructor: uses tableId as the database filename stem and
+    // takes ownership of pageAttributes.  downloader() returns nullptr for instances
+    // created with this overload.  Useful for generator result tables where no
+    // AbstractDownloader exists.
+    explicit DownloadedPagesTable(const QDir &workingDir,
+                                  const QString &tableId,
+                                  AbstractPageAttributes *pageAttributes,
+                                  QObject *parent = nullptr);
+
     ~DownloadedPagesTable() override;
 
     // Validates idAttr_value / idAttr_imageValue via the downloader's page-

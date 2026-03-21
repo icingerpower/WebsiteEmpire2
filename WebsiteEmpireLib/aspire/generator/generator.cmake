@@ -1,0 +1,8 @@
+set(ASPIRE_GENERATOR_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractGenerator.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractGenerator.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/GeneratorFactories.h
+    ${CMAKE_CURRENT_LIST_DIR}/GeneratorFactories.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ParamsModel.h
+    ${CMAKE_CURRENT_LIST_DIR}/ParamsModel.cpp
+)

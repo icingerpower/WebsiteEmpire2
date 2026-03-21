@@ -1,6 +1,12 @@
 #include "AbstractLauncher.h"
 
+#include <QCommandLineParser>
+
 const QString AbstractLauncher::OPTION_WORKING_DIR = QStringLiteral("workingDir");
+
+void AbstractLauncher::registerOptions(QCommandLineParser &)
+{
+}
 
 AbstractLauncher::Recorder::Recorder(AbstractLauncher *launcher)
 {

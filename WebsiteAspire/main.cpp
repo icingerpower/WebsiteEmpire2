@@ -43,6 +43,7 @@ int main(int argc, char *argv[])
             launcher->getOptionName(),
             QCoreApplication::tr("Run launcher '%1' with <value>.").arg(launcher->getOptionName()),
             QStringLiteral("value")));
+        launcher->registerOptions(parser);
     }
 
     parser.process(a);

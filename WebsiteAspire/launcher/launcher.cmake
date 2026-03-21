@@ -1,6 +1,12 @@
 set(LAUNCHER_FILES
     ${CMAKE_CURRENT_LIST_DIR}/AbstractLauncher.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractLauncher.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ClaudeRunner.h
+    ${CMAKE_CURRENT_LIST_DIR}/ClaudeRunner.cpp
     ${CMAKE_CURRENT_LIST_DIR}/LauncherDownload.h
     ${CMAKE_CURRENT_LIST_DIR}/LauncherDownload.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/LancherGenerator.h
+    ${CMAKE_CURRENT_LIST_DIR}/LancherGenerator.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/LauncherRunJobs.h
+    ${CMAKE_CURRENT_LIST_DIR}/LauncherRunJobs.cpp
 )

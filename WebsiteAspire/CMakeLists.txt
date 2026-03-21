@@ -29,6 +29,8 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         ${PROJECT_SOURCES}
         gui/panes/PaneAspire.h gui/panes/PaneAspire.cpp gui/panes/PaneAspire.ui
         gui/panes/WidgetDownloader.h gui/panes/WidgetDownloader.cpp gui/panes/WidgetDownloader.ui
+        gui/panes/PaneDatabaseGen.h gui/panes/PaneDatabaseGen.cpp gui/panes/PaneDatabaseGen.ui
+        gui/panes/WidgetGenerator.h gui/panes/WidgetGenerator.cpp gui/panes/WidgetGenerator.ui
     )
 else()
     if(ANDROID)

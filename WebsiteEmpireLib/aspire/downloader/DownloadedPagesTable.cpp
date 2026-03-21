@@ -65,6 +65,30 @@ DownloadedPagesTable::DownloadedPagesTable(const QDir &workingDir,
     select();
 }
 
+DownloadedPagesTable::DownloadedPagesTable(const QDir &workingDir,
+                                           const QString &tableId,
+                                           AbstractPageAttributes *pageAttributes,
+                                           QObject *parent)
+    : QSqlTableModel(parent, openViewConnection(workingDir, tableId))
+    , m_aspiredDb(workingDir.path(), tableId)
+    , m_downloader(nullptr)
+    , m_pageAttributes(pageAttributes)
+{
+    const auto &attrsPtr = m_pageAttributes->getAttributes();
+    if (attrsPtr) {
+        m_attributes = *attrsPtr;
+    }
+    for (const auto &attr : std::as_const(m_attributes)) {
+        if (attr.isImage) {
+            m_imageAttributeIds.insert(attr.id);
+        }
+    }
+    m_aspiredDb.createTableIdNeed(m_attributes);
+    setTable(AspiredDb::TABLE_NAME);
+    setEditStrategy(QSqlTableModel::OnManualSubmit);
+    select();
+}
+
 DownloadedPagesTable::~DownloadedPagesTable()
 {
     // QSqlTableModel stores the connection in its private d->db member, which
@@ -95,17 +119,13 @@ AbstractDownloader *DownloadedPagesTable::downloader() const
 
 bool DownloadedPagesTable::select()
 {
-    // Build a SELECT that avoids loading full image BLOBs.  For image columns
-    // we fetch only the first 4 bytes (the QDataStream-serialised qint32 image
-    // count) so data() can display "N images" without touching the pixel data.
-    // Full BLOBs are still read on-demand through imagesAt().
+    // Build a SELECT that excludes image BLOB columns entirely.
+    // Full image data is fetched on-demand through imagesAt().
     QStringList cols;
     cols.reserve(m_attributes.size() + 1);
     cols << QStringLiteral("id");
     for (const auto &attr : std::as_const(m_attributes)) {
-        if (m_imageAttributeIds.contains(attr.id)) {
-            cols << QStringLiteral("substr(%1, 1, 4) AS %1").arg(attr.id);
-        } else {
+        if (!m_imageAttributeIds.contains(attr.id)) {
             cols << attr.id;
         }
     }
