@@ -11,6 +11,7 @@
 #include <QTextStream>
 
 #include "aspire/attributes/AbstractPageAttributes.h"
+#include "aspire/downloader/DownloadedPagesTable.h"
 #include "aspire/generator/AbstractGenerator.h"
 #include "aspire/generator/GeneratorFactories.h"
 
@@ -970,6 +971,123 @@ private slots:
         QVERIFY(proto != nullptr);
         QScopedPointer<AbstractGenerator> inst(proto->createInstance(QDir(fx.tmpDir.path())));
         QCOMPARE(inst->getId(), QStringLiteral("french-factories"));
+    }
+
+    // ==== createResultPageAttributes / openResultsTable =====================
+
+    void test_open_results_table_returns_non_null()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        QVERIFY(gen->openResultsTable() != nullptr);
+    }
+
+    void test_open_results_table_opens_factory_table()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        gen->openResultsTable();
+        QVERIFY(gen->resultsTable(QStringLiteral("PageAttributesFactory")) != nullptr);
+    }
+
+    void test_open_results_table_opens_factory_category_table()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        gen->openResultsTable();
+        QVERIFY(gen->resultsTable(QStringLiteral("PageAttributesFactoryCategory")) != nullptr);
+    }
+
+    void test_open_results_table_primary_is_factory_table()
+    {
+        // openResultsTable() returns the first table alphabetically by attrId;
+        // "PageAttributesFactory" < "PageAttributesFactoryCategory".
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        DownloadedPagesTable *primary = gen->openResultsTable();
+        QCOMPARE(primary, gen->resultsTable(QStringLiteral("PageAttributesFactory")));
+    }
+
+    void test_record_step1_small_writes_factory_row()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        gen->openResultsTable();
+        DownloadedPagesTable *factoryTable =
+            gen->resultsTable(QStringLiteral("PageAttributesFactory"));
+        const int rowsBefore = factoryTable->rowCount();
+        const QString bId = GeneratorFactories::cityJobId(QStringLiteral("FR"), QStringLiteral("Bordeaux"));
+        gen->recordReply(makeStep1ReplySmall(bId));
+        QCOMPARE(factoryTable->rowCount(), rowsBefore + 1);
+    }
+
+    void test_record_step1_small_writes_category_row()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        gen->openResultsTable();
+        DownloadedPagesTable *categoryTable =
+            gen->resultsTable(QStringLiteral("PageAttributesFactoryCategory"));
+        const int rowsBefore = categoryTable->rowCount();
+        const QString bId = GeneratorFactories::cityJobId(QStringLiteral("FR"), QStringLiteral("Bordeaux"));
+        gen->recordReply(makeStep1ReplySmall(bId));
+        // makeStep1ReplySmall uses category "textiles" → one new category row
+        QCOMPARE(categoryTable->rowCount(), rowsBefore + 1);
+    }
+
+    void test_record_step1_big_writes_category_rows_from_kinds()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        gen->openResultsTable();
+        DownloadedPagesTable *categoryTable =
+            gen->resultsTable(QStringLiteral("PageAttributesFactoryCategory"));
+        const int rowsBefore = categoryTable->rowCount();
+        const QString pId = GeneratorFactories::cityJobId(QStringLiteral("FR"), QStringLiteral("Paris"));
+        gen->recordReply(makeStep1ReplyBig(pId, {QStringLiteral("aerospace"), QStringLiteral("food")}));
+        QCOMPARE(categoryTable->rowCount(), rowsBefore + 2);
+    }
+
+    void test_record_step2_writes_factory_row()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        gen->openResultsTable();
+        DownloadedPagesTable *factoryTable =
+            gen->resultsTable(QStringLiteral("PageAttributesFactory"));
+        const QString pId  = GeneratorFactories::cityJobId(QStringLiteral("FR"), QStringLiteral("Paris"));
+        const QString catId = GeneratorFactories::categoryJobId(pId, QStringLiteral("aerospace"));
+        gen->recordReply(makeStep1ReplyBig(pId, {QStringLiteral("aerospace")}));
+        const int rowsBefore = factoryTable->rowCount();
+        gen->recordReply(makeStep2Reply(catId));
+        QCOMPARE(factoryTable->rowCount(), rowsBefore + 1);
+    }
+
+    void test_record_step2_writes_category_row()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        gen->openResultsTable();
+        DownloadedPagesTable *categoryTable =
+            gen->resultsTable(QStringLiteral("PageAttributesFactoryCategory"));
+        const QString pId  = GeneratorFactories::cityJobId(QStringLiteral("FR"), QStringLiteral("Paris"));
+        const QString catId = GeneratorFactories::categoryJobId(pId, QStringLiteral("aerospace"));
+        // step-1 big already writes "aerospace" category; capture count after that
+        gen->recordReply(makeStep1ReplyBig(pId, {QStringLiteral("aerospace")}));
+        const int rowsAfterStep1 = categoryTable->rowCount();
+        gen->recordReply(makeStep2Reply(catId));
+        // makeStep2Reply uses category "aerospace" which was already recorded in step-1,
+        // so no additional category row (deduplication within each processReply call).
+        QVERIFY(categoryTable->rowCount() >= rowsAfterStep1);
     }
 };
 

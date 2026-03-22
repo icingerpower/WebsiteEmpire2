@@ -31,6 +31,9 @@ static QSqlDatabase openViewConnection(const QDir &workingDir,
                 .arg(downloaderId, db.lastError().text()));
         ex.raise();
     }
+    // WAL mode lets the write connection (AspiredDb) insert rows without waiting
+    // for this read connection to finish its open SELECT cursor.
+    QSqlQuery{db}.exec(QStringLiteral("PRAGMA journal_mode=WAL"));
     return db;
 }
 
@@ -138,6 +141,11 @@ bool DownloadedPagesTable::select()
     // setQuery() puts QSqlTableModel into raw-query mode; writes still go
     // exclusively through m_aspiredDb so this is safe.
     QSqlTableModel::setQuery(std::move(q));
+    // setQuery() fetches rows lazily in batches of 256. Drain remaining batches
+    // immediately so rowCount() always reflects the true row count.
+    while (canFetchMore()) {
+        fetchMore();
+    }
     return !lastError().isValid();
 }
 

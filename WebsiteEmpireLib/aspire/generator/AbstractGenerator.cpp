@@ -92,6 +92,9 @@ QString AbstractGenerator::getNextJob()
     const QString jobId = m_pending.at(m_jobIndex);
     ++m_jobIndex;
 
+    qDebug() << getId() << "- job requested:" << jobId
+             << "(" << (m_pending.size() - m_jobIndex) << "remaining)";
+
     QJsonObject payload = buildJobPayload(jobId);
     payload.insert(QStringLiteral("jobId"), jobId);
     return QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact));
@@ -119,6 +122,9 @@ bool AbstractGenerator::recordReply(const QString &jsonReply)
     }
 
     processReply(jobId, obj); // may throw ExceptionWithTitleText
+
+    qDebug() << getId() << "- reply recorded:" << jobId
+             << "(" << (m_pending.size() - 1) << "remaining)";
 
     m_pending.removeAt(idx);
     if (idx < m_jobIndex) {
@@ -208,32 +214,60 @@ void AbstractGenerator::resetState()
 
 // ---- Results table ---------------------------------------------------------
 
-AbstractPageAttributes *AbstractGenerator::createResultPageAttributes() const
+QMap<QString, AbstractPageAttributes *> AbstractGenerator::createResultPageAttributes() const
 {
-    return nullptr;
+    return {};
 }
 
 DownloadedPagesTable *AbstractGenerator::openResultsTable()
 {
-    if (!m_resultsTable) {
-        AbstractPageAttributes *attrs = createResultPageAttributes();
-        if (attrs) {
-            QDir resultsDir(m_workingDir.filePath(QStringLiteral("results_db")));
-            resultsDir.mkpath(QStringLiteral("."));
-            m_resultsTable = new DownloadedPagesTable(resultsDir, getId(), attrs, this);
-        }
+    if (!m_resultsTables.isEmpty()) {
+        return m_resultsTables.first();
     }
-    return m_resultsTable;
+
+    const QMap<QString, AbstractPageAttributes *> attrMap = createResultPageAttributes();
+    if (attrMap.isEmpty()) {
+        return nullptr;
+    }
+
+    QDir resultsDir(m_workingDir.filePath(QStringLiteral("results_db")));
+    resultsDir.mkpath(QStringLiteral("."));
+
+    for (auto it = attrMap.constBegin(); it != attrMap.constEnd(); ++it) {
+        AbstractPageAttributes *attrs = it.value();
+        const QString tableId = attrs->getId();
+        m_resultTableOrder << qMakePair(it.key(), tableId);
+        m_resultsTables.insert(tableId,
+            new DownloadedPagesTable(resultsDir, tableId, attrs, this));
+    }
+    return m_resultsTables.first();
+}
+
+QList<QPair<QString, DownloadedPagesTable *>> AbstractGenerator::openResultsTables()
+{
+    openResultsTable(); // ensure all tables are open
+    QList<QPair<QString, DownloadedPagesTable *>> result;
+    for (const auto &pair : std::as_const(m_resultTableOrder)) {
+        result << qMakePair(pair.first, m_resultsTables.value(pair.second));
+    }
+    return result;
 }
 
 DownloadedPagesTable *AbstractGenerator::resultsTable() const
 {
-    return m_resultsTable;
+    return m_resultsTables.isEmpty() ? nullptr : m_resultsTables.first();
 }
 
-void AbstractGenerator::recordResultPage(const QHash<QString, QString> &attrs)
+DownloadedPagesTable *AbstractGenerator::resultsTable(const QString &attrId) const
 {
-    if (m_resultsTable) {
-        m_resultsTable->recordPage(attrs);
+    return m_resultsTables.value(attrId, nullptr);
+}
+
+void AbstractGenerator::recordResultPage(const QString &attrId,
+                                         const QHash<QString, QString> &attrs)
+{
+    DownloadedPagesTable *table = m_resultsTables.value(attrId, nullptr);
+    if (table) {
+        table->recordPage(attrs);
     }
 }

@@ -3,10 +3,16 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QSet>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QTextStream>
+#include <QUuid>
 
 #include "aspire/attributes/AbstractPageAttributes.h"
 #include "aspire/attributes/PageAttributesFactory.h"
+#include "aspire/attributes/PageAttributesFactoryCategory.h"
+#include "aspire/downloader/DownloadedPagesTable.h"
 
 DECLARE_GENERATOR(GeneratorFactories)
 
@@ -234,6 +240,83 @@ QJsonObject GeneratorFactories::buildFactorySchema()
     return schema;
 }
 
+// ---- Helpers ---------------------------------------------------------------
+
+QStringList GeneratorFactories::loadExistingCategories() const
+{
+    // Prefer reading from the already-open table model to avoid opening a second
+    // SQLite connection, which causes "database is locked" under concurrent access.
+    const DownloadedPagesTable *table =
+        resultsTable(QStringLiteral("PageAttributesFactoryCategory"));
+    if (table) {
+        const int col = table->fieldIndex(
+            PageAttributesFactoryCategory::ID_FACTORY_CATEGORY);
+        QStringList cats;
+        const int rows = table->rowCount();
+        for (int row = 0; row < rows; ++row) {
+            const QString cat = table->data(table->index(row, col)).toString();
+            if (!cat.isEmpty()) {
+                cats << cat;
+            }
+        }
+        cats.sort(Qt::CaseInsensitive);
+        qDebug() << "GeneratorFactories: loaded" << cats.size()
+                 << "existing category/ies from model";
+        return cats;
+    }
+
+    // Fall back to a temporary connection when the table has not been opened yet
+    // (e.g., previewing jobs before openResultsTable() is called).
+    const QString dbPath = workingDir().filePath(
+        QStringLiteral("results_db/PageAttributesFactoryCategory.db"));
+    if (!QFile::exists(dbPath)) {
+        return {};
+    }
+    const QString connName = getId() + QLatin1Char('_')
+                             + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    QStringList categories;
+    {
+        // Inner scope: db and q must be destroyed before removeDatabase() is called,
+        // otherwise Qt warns "connection still in use" and SQLite holds a read lock
+        // that blocks any concurrent write on the same file.
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+        db.setDatabaseName(dbPath);
+        if (db.open()) {
+            QSqlQuery q(db);
+            if (q.exec(QStringLiteral(
+                    "SELECT factory_category_name FROM records "
+                    "ORDER BY factory_category_name COLLATE NOCASE"))) {
+                while (q.next()) {
+                    categories << q.value(0).toString();
+                }
+            }
+        }
+    } // db and q destroyed here — connection fully released
+    QSqlDatabase::removeDatabase(connName);
+    qDebug() << "GeneratorFactories: loaded" << categories.size()
+             << "existing category/ies from DB";
+    return categories;
+}
+
+QString GeneratorFactories::resolveKindName(const QString &cityKey,
+                                             const QString &slug) const
+{
+    const QString safeId = QString(cityKey).replace(QLatin1Char('/'), QLatin1Char('_'));
+    QFile file(workingDir().filePath(
+        QStringLiteral("results/") + safeId + QStringLiteral(".json")));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return slug;
+    }
+    const QJsonObject step1 = QJsonDocument::fromJson(file.readAll()).object();
+    for (const QJsonValue &v : step1.value(QStringLiteral("factoryKinds")).toArray()) {
+        const QString kind = v.toString().trimmed();
+        if (slugify(kind) == slug) {
+            return kind;
+        }
+    }
+    return slug;
+}
+
 // ---- AbstractGenerator implementation -----------------------------------------
 
 QStringList GeneratorFactories::buildInitialJobIds() const
@@ -272,6 +355,15 @@ QJsonObject GeneratorFactories::buildStep1Payload(const QString &jobId) const
     if (city->population > 0) {
         payload[QStringLiteral("population")] = city->population;
     }
+    const QStringList existingCats = loadExistingCategories();
+    if (!existingCats.isEmpty()) {
+        QJsonArray arr;
+        for (const auto &c : std::as_const(existingCats)) {
+            arr << c;
+        }
+        payload[QStringLiteral("availableCategories")] = arr;
+    }
+
     payload[QStringLiteral("instructions")] = tr(
         "IMPORTANT: Reply ONLY with the raw JSON object shown in 'replyFormat' below — "
         "no prose, no markdown, no text outside the JSON.\n\n"
@@ -279,9 +371,13 @@ QJsonObject GeneratorFactories::buildStep1Payload(const QString &jobId) const
         "1. 'postalCode': the most common postal code.\n"
         "2. 'estimatedFactoryCount': total estimated number of manufacturing factories.\n"
         "   - If the count is %1 or fewer: populate 'factories' with one entry per factory "
-        "using all required fields from the factorySchema.\n"
+        "using all required fields from the factorySchema.  Set each factory's 'category' "
+        "field to the best matching name from 'availableCategories'; only use a new name "
+        "if none of the existing ones accurately describes this factory type.\n"
         "   - If the count exceeds %1: leave 'factories' as an empty array and populate "
-        "'factoryKinds' with the list of distinct manufacturing category names.")
+        "'factoryKinds' with the list of distinct manufacturing category names.  Reuse "
+        "names from 'availableCategories' where they apply; add a new name only for a "
+        "category that is genuinely absent from the list.")
         .arg(FACTORY_COUNT_THRESHOLD);
     payload[QStringLiteral("factorySchema")] = buildFactorySchema();
 
@@ -299,24 +395,39 @@ QJsonObject GeneratorFactories::buildStep1Payload(const QString &jobId) const
 QJsonObject GeneratorFactories::buildStep2Payload(const QString &jobId) const
 {
     const QString cityKey  = cityKeyFromStep2Id(jobId);
-    const QString category = categoryFromStep2Id(jobId);
+    const QString slug     = categoryFromStep2Id(jobId);
+    // Resolve the URL-safe slug back to the original human-readable factoryKind name.
+    const QString category = resolveKindName(cityKey, slug);
+    if (category != slug) {
+        qDebug() << "GeneratorFactories: resolved category" << slug << "->" << category;
+    }
     const CityData *city   = findCity(cityKey);
     if (!city || category.isEmpty()) {
         return {};
     }
 
+    const QStringList existingCats = loadExistingCategories();
+    QJsonArray availableCategoriesArr;
+    for (const QString &cat : existingCats) {
+        availableCategoriesArr.append(cat);
+    }
+
     QJsonObject payload;
-    payload[QStringLiteral("task")]     = STEP2_TASK;
-    payload[QStringLiteral("city")]     = city->cityName;
-    payload[QStringLiteral("country")]  = city->country;
-    payload[QStringLiteral("region")]   = city->region;
-    payload[QStringLiteral("iso2")]     = city->iso2;
-    payload[QStringLiteral("category")] = category;
+    payload[QStringLiteral("task")]                = STEP2_TASK;
+    payload[QStringLiteral("city")]                = city->cityName;
+    payload[QStringLiteral("country")]             = city->country;
+    payload[QStringLiteral("region")]              = city->region;
+    payload[QStringLiteral("iso2")]                = city->iso2;
+    payload[QStringLiteral("categoryHint")]        = category;
+    payload[QStringLiteral("availableCategories")] = availableCategoriesArr;
     payload[QStringLiteral("instructions")] = tr(
         "IMPORTANT: Reply ONLY with the raw JSON object shown in 'replyFormat' below — "
         "no prose, no markdown, no text outside the JSON.\n\n"
-        "List all manufacturing factories of category '%1' in %2, %3. "
-        "Populate 'factories' with one entry per factory using all required fields from the factorySchema.")
+        "List all manufacturing factories related to '%1' in %2, %3. "
+        "Populate 'factories' with one entry per factory using all required fields from the factorySchema. "
+        "IMPORTANT: set the 'category' field of every factory to the single best-matching name "
+        "from 'availableCategories' — you MUST use one of those exact strings, no variations. "
+        "The 'categoryHint' field is a guide; pick whichever available category fits best.")
         .arg(category, city->cityName, city->country);
     payload[QStringLiteral("factorySchema")] = buildFactorySchema();
 
@@ -332,8 +443,18 @@ void GeneratorFactories::processReply(const QString &jobId, const QJsonObject &r
 {
     saveResult(jobId, reply);
 
-    // Store each individual factory entry in the results table.
+    // Store each individual factory entry in the factories results table.
+    // Collect unique category names while iterating to populate the category table.
     const QJsonArray factories = reply.value(QStringLiteral("factories")).toArray();
+    const QJsonArray kinds     = reply.value(QStringLiteral("factoryKinds")).toArray();
+    qDebug() << "GeneratorFactories: processing" << jobId
+             << "-" << factories.size() << "factory/ies,"
+             << kinds.size() << "kind(s)";
+
+    // Pre-populate with categories already in the DB so we never insert duplicates.
+    const QStringList existingCats = loadExistingCategories();
+    QSet<QString> seenCategories(existingCats.begin(), existingCats.end());
+
     for (const QJsonValue &val : std::as_const(factories)) {
         if (!val.isObject()) {
             continue;
@@ -343,23 +464,55 @@ void GeneratorFactories::processReply(const QString &jobId, const QJsonObject &r
         for (auto it = factoryObj.constBegin(); it != factoryObj.constEnd(); ++it) {
             attrs.insert(it.key(), it.value().toString());
         }
-        recordResultPage(attrs);
+        recordResultPage(QStringLiteral("PageAttributesFactory"), attrs);
+
+        const QString category = factoryObj.value(QStringLiteral("category")).toString().trimmed();
+        if (!category.isEmpty() && !seenCategories.contains(category)) {
+            seenCategories.insert(category);
+            QHash<QString, QString> catAttrs;
+            catAttrs.insert(PageAttributesFactoryCategory::ID_FACTORY_CATEGORY, category);
+            recordResultPage(QStringLiteral("PageAttributesFactoryCategory"), catAttrs);
+        }
     }
 
     if (isStep1JobId(jobId)) {
-        const QJsonArray kinds = reply.value(QStringLiteral("factoryKinds")).toArray();
-        for (const QJsonValue &val : kinds) {
+        for (const QJsonValue &val : std::as_const(kinds)) {
             const QString kind = val.toString().trimmed();
             if (!kind.isEmpty()) {
+                if (!seenCategories.contains(kind)) {
+                    seenCategories.insert(kind);
+                    QHash<QString, QString> catAttrs;
+                    catAttrs.insert(PageAttributesFactoryCategory::ID_FACTORY_CATEGORY, kind);
+                    recordResultPage(QStringLiteral("PageAttributesFactoryCategory"), catAttrs);
+                }
                 addDiscoveredJob(categoryJobId(jobId, kind));
             }
         }
     }
+
+    // Use COUNT(*) rather than rowCount() — QSqlTableModel loads rows lazily
+    // in batches of 256, so rowCount() would be capped at 256 once the table
+    // exceeds that size.
+    auto dbCount = [](const DownloadedPagesTable *table) -> int {
+        if (!table) {
+            return 0;
+        }
+        QSqlQuery q(table->database());
+        return (q.exec(QStringLiteral("SELECT COUNT(*) FROM records")) && q.next())
+                   ? q.value(0).toInt()
+                   : 0;
+    };
+    qDebug() << "GeneratorFactories: totals —"
+             << dbCount(resultsTable(QStringLiteral("PageAttributesFactory"))) << "factories,"
+             << dbCount(resultsTable(QStringLiteral("PageAttributesFactoryCategory"))) << "categories";
 }
 
-AbstractPageAttributes *GeneratorFactories::createResultPageAttributes() const
+QMap<QString, AbstractPageAttributes *> GeneratorFactories::createResultPageAttributes() const
 {
-    return new PageAttributesFactory();
+    return {
+        {tr("Factories"),          new PageAttributesFactory()},
+        {tr("Factory Categories"), new PageAttributesFactoryCategory()},
+    };
 }
 
 // ---- Parameters ------------------------------------------------------------

@@ -42,6 +42,74 @@ The project has three layers:
 
 **`AspiredDb`** manages an SQLite database per scraper. It creates tables from the scraper's `AbstractPageAttributes` schema (`createTableIdNeed()`), adds missing columns via `ALTER TABLE` on schema changes, and validates + inserts records (`record()`). Validation errors throw `ExceptionWithTitleText`.
 
+### Generators with Multiple Result Tables (`createResultPageAttributes`)
+
+`AbstractGenerator::createResultPageAttributes()` returns `QMap<QString, AbstractPageAttributes *>`:
+- **Key** = human-readable display name wrapped in `tr()` — used only for the UI list. It is NOT stable and NOT persisted. Changing it is safe.
+- **Value** = freshly heap-allocated `AbstractPageAttributes *` whose `getId()` is the stable DB filename stem (e.g. `"PageAttributesFactory"` → `PageAttributesFactory.db`). This ID must never change once data exists.
+
+#### Recording values into a referenced table (no duplicates)
+
+When one table references another (e.g. `PageAttributesFactory.category` → `PageAttributesFactoryCategory`), the referenced table acts as a controlled vocabulary. Follow this pattern in `processReply()`:
+
+```cpp
+// 1. Pre-populate seenValues from the ALREADY-OPEN model — never open a second
+//    connection to the same .db file while a DownloadedPagesTable is open on it.
+//    A second connection causes "database is locked" under SQLite journal mode.
+const DownloadedPagesTable *refTable = resultsTable("PageAttributesRefTable");
+QSet<QString> seenValues;
+if (refTable) {
+    const int col = refTable->fieldIndex(PageAttributesRefTable::ID_VALUE);
+    for (int i = 0; i < refTable->rowCount(); ++i) {
+        seenValues.insert(refTable->data(refTable->index(i, col)).toString());
+    }
+}
+
+// 2. For each item in the reply, record it and add its referenced value only if new.
+for (const QJsonValue &val : std::as_const(items)) {
+    recordResultPage("PageAttributesMainTable", attrs);
+
+    const QString refValue = itemObj.value("refField").toString().trimmed();
+    if (!refValue.isEmpty() && !seenValues.contains(refValue)) {
+        seenValues.insert(refValue);  // guard: only insert once per processReply AND across calls
+        QHash<QString, QString> refAttrs;
+        refAttrs.insert(PageAttributesRefTable::ID_VALUE, refValue);
+        recordResultPage("PageAttributesRefTable", refAttrs);
+    }
+}
+```
+
+**Why pre-populate `seenValues` from the model instead of starting empty:** `processReply()` is called once per job. Without pre-population, every job re-inserts values that previous jobs already wrote, causing duplicates.
+
+**Why use `resultsTable()` instead of opening a temporary `QSqlDatabase`:** `DownloadedPagesTable` already holds an open read connection to the `.db` file. Opening a second connection on the same file while the first is active causes `"database is locked"` errors when the write connection tries to INSERT. Always read from the already-open model.
+
+**If you must open a temporary `QSqlDatabase`** (e.g. before `openResultsTable()` is called), ensure both the `QSqlQuery` and `QSqlDatabase` objects are destroyed in a nested scope **before** calling `QSqlDatabase::removeDatabase()`:
+```cpp
+QStringList values;
+{
+    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", connName);
+    // ... open, query, fetch into values ...
+} // db and query destroyed here — SQLite lock released
+QSqlDatabase::removeDatabase(connName); // safe: no references remain
+```
+Calling `removeDatabase()` while a `QSqlDatabase` variable is still in scope triggers Qt's `"connection still in use"` warning and leaves a dangling SQLite read lock.
+
+#### Constraining Claude to a fixed vocabulary
+
+When a field must come from a fixed list (e.g. canonical category names), pass the list explicitly in the job payload and enforce it in the instruction:
+
+```cpp
+// In buildJobPayload():
+const QStringList existing = loadExistingValues(); // reads from model (see above)
+QJsonArray arr;
+for (const QString &v : existing) { arr.append(v); }
+payload["availableValues"] = arr;
+payload["instructions"] = tr("... set the 'field' to the best match from "
+    "'availableValues' — you MUST use one of those exact strings, no variations.");
+```
+
+Without this, Claude invents slight variations on each run (e.g. `"Pharmaceuticals & Biotechnology"` vs `"Pharmaceutical & Biotechnology Manufacturing"`), causing the referenced table to grow unboundedly with near-duplicates.
+
 # Qt / C++ Rules
 
 ## Exception Handling

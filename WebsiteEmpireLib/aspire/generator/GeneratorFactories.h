@@ -54,7 +54,7 @@ public:
 
     QList<Param>         getParams()                        const override;
     QString              checkParams(const QList<Param> &)  const override;
-    AbstractPageAttributes *createResultPageAttributes()    const override;
+    QMap<QString, AbstractPageAttributes *> createResultPageAttributes() const override;
 
     // ---- Job-ID helpers (public for testability) --------------------------------
 
@@ -105,6 +105,15 @@ private:
 
     // Builds the factorySchema object from the live PageAttributesFactory registry entry.
     static QJsonObject buildFactorySchema();
+
+    // Loads all existing factory category names from the category results DB.
+    // Returns an empty list if the DB does not yet exist.
+    QStringList loadExistingCategories() const;
+
+    // Given a step-2 city key and the slugified category, returns the original
+    // human-readable factoryKind name by loading the step-1 result JSON.
+    // Falls back to slug if the JSON is missing or the slug is not found.
+    QString resolveKindName(const QString &cityKey, const QString &slug) const;
 
     QJsonObject buildStep1Payload(const QString &jobId) const;
     QJsonObject buildStep2Payload(const QString &jobId) const;

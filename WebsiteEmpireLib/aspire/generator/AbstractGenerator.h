@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QList>
 #include <QMap>
+#include <QPair>
 #include <QObject>
 #include <QScopedPointer>
 #include <QSettings>
@@ -96,21 +97,32 @@ public:
 
     // ---- Results table ----------------------------------------------------
 
-    // Override to return a freshly allocated AbstractPageAttributes that describes
-    // the schema of this generator's result rows.  The returned object is owned by
-    // the DownloadedPagesTable created by openResultsTable().
-    // Default: nullptr — no results table is created.
-    virtual AbstractPageAttributes *createResultPageAttributes() const;
+    // Override to return a map of freshly allocated AbstractPageAttributes that
+    // describe the schemas of this generator's result tables.
+    // Key   = human-readable display name for the table (use tr(); not persisted).
+    // Value = AbstractPageAttributes* whose getId() is used as the stable DB
+    //         table-id filename stem.  Ownership transfers to openResultsTable().
+    // Default: empty map — no results tables are created.
+    virtual QMap<QString, AbstractPageAttributes *> createResultPageAttributes() const;
 
-    // Creates (if not yet open) and returns the DownloadedPagesTable for this
-    // generator's results.  Returns nullptr when createResultPageAttributes()
-    // returns nullptr.  The table is parented to this generator and lives as
-    // long as the generator does.
+    // Creates (if not yet open) all results tables declared by
+    // createResultPageAttributes() and returns the first one (keyed alphabetically
+    // by attrs->getId()).  Returns nullptr when createResultPageAttributes() is empty.
+    // Tables are parented to this generator and live as long as the generator does.
     DownloadedPagesTable *openResultsTable();
 
-    // Returns the already-opened results table, or nullptr if openResultsTable()
-    // was never called or createResultPageAttributes() returned nullptr.
+    // Same as openResultsTable() but returns all tables as ordered pairs of
+    // (displayName, table), in the same order as createResultPageAttributes().
+    // Useful for building multi-table UIs.
+    QList<QPair<QString, DownloadedPagesTable *>> openResultsTables();
+
+    // Returns the first already-opened results table, or nullptr if
+    // openResultsTable() was never called or createResultPageAttributes() was empty.
     DownloadedPagesTable *resultsTable() const;
+
+    // Returns the already-opened results table whose AbstractPageAttributes::getId()
+    // equals attrId, or nullptr if no such table was opened.
+    DownloadedPagesTable *resultsTable(const QString &attrId) const;
 
     // ---- Parameters -------------------------------------------------------
 
@@ -168,9 +180,11 @@ protected:
     // Persisted Done/Discovered data in the .ini is NOT modified.
     void resetState();
 
-    // Inserts attrs as a new row in resultsTable().  No-op when resultsTable()
-    // is nullptr.  May throw ExceptionWithTitleText on validation failure.
-    void recordResultPage(const QHash<QString, QString> &attrs);
+    // Inserts attrs as a new row in the results table identified by attrId
+    // (the AbstractPageAttributes::getId() value of the target table).
+    // No-op when no table with that id was opened.
+    // May throw ExceptionWithTitleText on validation failure.
+    void recordResultPage(const QString &attrId, const QHash<QString, QString> &attrs);
 
 private:
     QSettings &settings() const;
@@ -184,7 +198,10 @@ private:
 
     static QMap<QString, const AbstractGenerator *> &getGenerators();
 
-    DownloadedPagesTable *m_resultsTable = nullptr;
+    // Keyed by AbstractPageAttributes::getId() — stable across tr() renames.
+    QMap<QString, DownloadedPagesTable *> m_resultsTables;
+    // Ordered list of {displayName, attrId} in createResultPageAttributes() order.
+    QList<QPair<QString, QString>> m_resultTableOrder;
 };
 
 // Registers a generator prototype.  Passes QDir{} explicitly so subclasses

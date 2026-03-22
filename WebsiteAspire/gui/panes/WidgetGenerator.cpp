@@ -3,6 +3,12 @@
 
 #include <QClipboard>
 #include <QDir>
+#include <QHeaderView>
+#include <QLabel>
+#include <QListWidget>
+#include <QStackedWidget>
+#include <QTableView>
+#include <QVBoxLayout>
 #include <QException>
 #include <QFileDialog>
 #include <QGuiApplication>
@@ -37,7 +43,7 @@ WidgetGenerator::WidgetGenerator(QWidget *parent)
     ui->buttonRun->setEnabled(false);
     ui->tableViewParams->hide();
     ui->labelParamError->hide();
-    ui->tableViewResults->hide();
+    ui->splitterResults->hide();
 
     connect(ui->buttonGetJobs,     &QPushButton::clicked,  this, &WidgetGenerator::getJobs);
     connect(ui->buttonCopyJobs,    &QPushButton::clicked,  this, &WidgetGenerator::copyJobs);
@@ -92,11 +98,49 @@ void WidgetGenerator::init(AbstractGenerator *generator)
                 this, &WidgetGenerator::_onParamChanged);
     }
 
-    // ---- Results table -----------------------------------------------------
-    DownloadedPagesTable *resultsTable = m_generator->openResultsTable();
-    if (resultsTable) {
-        ui->tableViewResults->setModel(resultsTable);
-        ui->tableViewResults->show();
+    // ---- Results tables ----------------------------------------------------
+    const auto tablesList = m_generator->openResultsTables();
+    if (!tablesList.isEmpty()) {
+        for (const auto &pair : tablesList) {
+            ui->listWidgetResultTables->addItem(pair.first);
+
+            auto *page   = new QWidget(ui->stackedWidgetResults);
+            auto *layout = new QVBoxLayout(page);
+            layout->setContentsMargins(0, 0, 0, 0);
+            layout->setSpacing(2);
+
+            auto *countLabel = new QLabel(page);
+            layout->addWidget(countLabel);
+
+            auto *tableView = new QTableView(page);
+            tableView->setModel(pair.second);
+            tableView->setEditTriggers(QAbstractItemView::DoubleClicked);
+            tableView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+            tableView->setSelectionBehavior(QAbstractItemView::SelectRows);
+            tableView->horizontalHeader()->setStretchLastSection(true);
+            tableView->verticalHeader()->hide();
+            layout->addWidget(tableView);
+
+            QAbstractItemModel *model = pair.second;
+            auto updateCount = [countLabel, model]() {
+                countLabel->setText(WidgetGenerator::tr("%1 entries").arg(model->rowCount()));
+            };
+            updateCount();
+            connect(model, &QAbstractItemModel::rowsInserted,  countLabel, updateCount);
+            connect(model, &QAbstractItemModel::rowsRemoved,   countLabel, updateCount);
+            connect(model, &QAbstractItemModel::modelReset,    countLabel, updateCount);
+            connect(model, &QAbstractItemModel::layoutChanged, countLabel, updateCount);
+
+            ui->stackedWidgetResults->addWidget(page);
+        }
+
+        ui->listWidgetResultTables->setCurrentRow(0);
+        ui->listWidgetResultTables->setVisible(tablesList.size() > 1);
+
+        connect(ui->listWidgetResultTables, &QListWidget::currentRowChanged,
+                ui->stackedWidgetResults,   &QStackedWidget::setCurrentIndex);
+
+        ui->splitterResults->show();
     }
 
     _validateParams();

@@ -1,7 +1,7 @@
 #include <QObject>
 
 #include "PageAttributesFactory.h"
-#include "PageAttributesProductCategory.h"
+#include "PageAttributesFactoryCategory.h"
 #include "PageAttributesCertifications.h"
 
 const QString PageAttributesFactory::ID_CATEGORY = "category";
@@ -44,7 +44,7 @@ QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesFactory::
                             }
                             , std::nullopt // No relevant schema mapping yet
                             , false
-                            , ReferenceSpec{PageAttributesProductCategory::ID_PRODUCT_CATEGORY, ReferenceSpec::Cardinality::Multiple}
+                            , ReferenceSpec{PageAttributesFactoryCategory::ID_FACTORY_CATEGORY, ReferenceSpec::Cardinality::Multiple}
     };
 
     *attributes << Attribute{ID_DESCRIPTION

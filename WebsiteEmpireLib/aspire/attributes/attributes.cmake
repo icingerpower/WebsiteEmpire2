@@ -3,6 +3,8 @@ set(ASPIRE_ATTRIBUTES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/AbstractPageAttributes.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFactory.h
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFactory.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFactoryCategory.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFactoryCategory.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesAddress.h
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesAddress.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesAddressAndContact.h
