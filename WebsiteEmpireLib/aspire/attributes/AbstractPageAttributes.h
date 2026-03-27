@@ -52,7 +52,9 @@ public:
         QString description; // Use tr
         QString valueExemple;
         QString valueDefault;
-        std::function<QString(const QString &)> validate = [](const QString &) { return QString{}; }; // If a non-empty QString is returned, it is an error
+        std::function<QString(const QString &)> validate = [](const QString &value) {
+            return value.isEmpty() ? QObject::tr("Value can't be empty") : QString{};
+        }; // If a non-empty QString is returned, it is an error
         std::optional<Schema> schema = std::nullopt;
         bool optional = false;
         std::optional<ReferenceSpec> reference = std::nullopt;

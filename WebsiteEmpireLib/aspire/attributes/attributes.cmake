@@ -1,3 +1,5 @@
+include(${CMAKE_CURRENT_LIST_DIR}/health/health.cmake)
+
 set(ASPIRE_ATTRIBUTES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/AbstractPageAttributes.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractPageAttributes.cpp
@@ -19,4 +21,5 @@ set(ASPIRE_ATTRIBUTES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesProductPetFood.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesProductFashion.h
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesProductFashion.cpp
+    ${ASPIRE_ATTRIBUTES_HEALTH_FILES}
 )

@@ -1,0 +1,14 @@
+set(ASPIRE_ATTRIBUTES_HEALTH_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthBodyPart.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthBodyPart.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthSymptom.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthSymptom.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthOrgan.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthOrgan.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthInjury.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthInjury.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthCondition.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthCondition.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthMentalCondition.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthMentalCondition.cpp
+)
