@@ -5,4 +5,6 @@ set(ASPIRE_GENERATOR_FILES
     ${CMAKE_CURRENT_LIST_DIR}/GeneratorFactories.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ParamsModel.h
     ${CMAKE_CURRENT_LIST_DIR}/ParamsModel.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/GeneratorHealth.h
+    ${CMAKE_CURRENT_LIST_DIR}/GeneratorHealth.cpp
 )
