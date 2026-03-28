@@ -7,4 +7,6 @@ set(ASPIRE_GENERATOR_FILES
     ${CMAKE_CURRENT_LIST_DIR}/ParamsModel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/GeneratorHealth.h
     ${CMAKE_CURRENT_LIST_DIR}/GeneratorHealth.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/GeneratorLanguages.h
+    ${CMAKE_CURRENT_LIST_DIR}/GeneratorLanguages.cpp
 )

@@ -1,0 +1,10 @@
+set(ASPIRE_ATTRIBUTES_LANGUAGES_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesLangCode.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesLangCode.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesLangTag.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesLangTag.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesLangIdiom.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesLangIdiom.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesLangWord.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesLangWord.cpp
+)
