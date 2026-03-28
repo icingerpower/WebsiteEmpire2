@@ -11,4 +11,6 @@ set(ASPIRE_ATTRIBUTES_HEALTH_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthCondition.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthMentalCondition.h
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthMentalCondition.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthGoal.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesHealthGoal.cpp
 )

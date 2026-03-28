@@ -54,6 +54,7 @@ public:
     static const QString TASK_RECENT_CONDITIONS;
     static const QString TASK_CONDITION_DIFFICULTY;
     static const QString TASK_MENTAL_CONDITION_DIFFICULTY;
+    static const QString TASK_GOALS;
 
     // Logical pipeline steps in execution order.
     enum class Step {
@@ -69,6 +70,7 @@ public:
         RecentConditions,           // recent/*
         ConditionDifficulty,        // difficulty/condition/*
         MentalConditionDifficulty,  // difficulty/mental/*
+        Goals,                      // goal/*
     };
 
     explicit GeneratorHealth(const QDir &workingDir = QDir(), QObject *parent = nullptr);
@@ -106,6 +108,7 @@ public:
     static bool isRecentJobId                 (const QString &jobId);
     static bool isConditionDifficultyJobId    (const QString &jobId);
     static bool isMentalDifficultyJobId       (const QString &jobId);
+    static bool isGoalsJobId                  (const QString &jobId);
 
 protected:
     QStringList buildInitialJobIds()                                    const override;
@@ -143,6 +146,7 @@ private:
     // Builds a payload that asks Claude to assign healingDifficulty to a batch of
     // conditions (physical or mental) that currently have no score in the DB.
     QJsonObject buildDifficultyPayload      (bool isMental, int page)    const;
+    QJsonObject buildGoalsPayload           (int page)                   const;
 
     // Records condition objects from a reply, skipping names already in seen.
     // Updates seen with newly inserted names.
@@ -153,6 +157,7 @@ private:
     // healingDifficulty column is NULL or empty.  Always queries at offset 0: once
     // a batch has been scored via UPDATE the rows no longer match the WHERE clause.
     QStringList loadUnscoredConditionNames(bool isMental) const;
+    QStringList loadGoals() const;
 
     // ---- Step completion ---------------------------------------------------
     // Reads AbstractGenerator's .ini to find all job IDs with the given prefix

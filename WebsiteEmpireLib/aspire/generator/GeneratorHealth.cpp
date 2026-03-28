@@ -7,6 +7,7 @@
 
 #include "aspire/attributes/health/PageAttributesHealthBodyPart.h"
 #include "aspire/attributes/health/PageAttributesHealthCondition.h"
+#include "aspire/attributes/health/PageAttributesHealthGoal.h"
 #include "aspire/attributes/health/PageAttributesHealthInjury.h"
 #include "aspire/attributes/health/PageAttributesHealthMentalCondition.h"
 #include "aspire/attributes/health/PageAttributesHealthOrgan.h"
@@ -30,6 +31,7 @@ const QString GeneratorHealth::TASK_MENTAL_COMPLETION          = QStringLiteral(
 const QString GeneratorHealth::TASK_RECENT_CONDITIONS          = QStringLiteral("recent_conditions");
 const QString GeneratorHealth::TASK_CONDITION_DIFFICULTY       = QStringLiteral("condition_healing_difficulty");
 const QString GeneratorHealth::TASK_MENTAL_CONDITION_DIFFICULTY = QStringLiteral("mental_condition_healing_difficulty");
+const QString GeneratorHealth::TASK_GOALS                      = QStringLiteral("health_goals");
 
 // ---- File-local helpers -----------------------------------------------------
 
@@ -127,6 +129,7 @@ QMap<QString, AbstractPageAttributes *> GeneratorHealth::createResultPageAttribu
         {tr("Injuries"),          new PageAttributesHealthInjury()},
         {tr("Health Conditions"), new PageAttributesHealthCondition()},
         {tr("Mental Conditions"), new PageAttributesHealthMentalCondition()},
+        {tr("Health Goals"),      new PageAttributesHealthGoal()},
     };
 }
 
@@ -215,6 +218,10 @@ bool GeneratorHealth::isMentalDifficultyJobId(const QString &j)
 {
     return j.startsWith(QLatin1String("difficulty/mental/"));
 }
+bool GeneratorHealth::isGoalsJobId(const QString &j)
+{
+    return j.startsWith(QLatin1String("goal/"));
+}
 
 // ---- Initial job list -------------------------------------------------------
 
@@ -235,6 +242,8 @@ QStringList GeneratorHealth::buildInitialJobIds() const
         // inserted with the score directly via the updated conditionEntrySchema().
         QStringLiteral("difficulty/condition/0"),
         QStringLiteral("difficulty/mental/0"),
+        // Health goals: generated once body parts are available (referenced optionally).
+        QStringLiteral("goal/0"),
     };
 }
 
@@ -335,6 +344,8 @@ bool GeneratorHealth::isStepComplete(Step step) const
         return stepSettings().value(QStringLiteral("Steps/condition_difficulty/complete")).toBool();
     case Step::MentalConditionDifficulty:
         return stepSettings().value(QStringLiteral("Steps/mental_difficulty/complete")).toBool();
+    case Step::Goals:
+        return stepSettings().value(QStringLiteral("Steps/goals/complete")).toBool();
     }
     return false;
 }
@@ -422,6 +433,12 @@ QStringList GeneratorHealth::loadMentalConditions() const
 {
     return loadFieldValues(QStringLiteral("PageAttributesHealthMentalCondition"),
                            PageAttributesHealthMentalCondition::ID_NAME);
+}
+
+QStringList GeneratorHealth::loadGoals() const
+{
+    return loadFieldValues(QStringLiteral("PageAttributesHealthGoal"),
+                           PageAttributesHealthGoal::ID_NAME);
 }
 
 QStringList GeneratorHealth::loadUnscoredConditionNames(bool isMental) const
@@ -883,6 +900,58 @@ QJsonObject GeneratorHealth::buildRecentPayload(int page) const
     return payload;
 }
 
+QJsonObject GeneratorHealth::buildGoalsPayload(int page) const
+{
+    const QStringList existing  = loadGoals();
+    const QStringList bodyParts = loadAllBodyParts();
+    const QStringList organs    = loadOrgans();
+
+    QJsonObject payload;
+    payload[QStringLiteral("task")]               = TASK_GOALS;
+    payload[QStringLiteral("page")]               = page;
+    payload[QStringLiteral("maxResults")]         = MAX_RESULTS_PER_JOB;
+    payload[QStringLiteral("existingCount")]      = existing.size();
+    payload[QStringLiteral("existingGoals")]      = toJsonArray(existing);
+    payload[QStringLiteral("availableBodyParts")] = toJsonArray(bodyParts);
+    payload[QStringLiteral("availableOrgans")]    = toJsonArray(organs);
+    payload[QStringLiteral("instructions")]       = tr(
+        "IMPORTANT: Reply ONLY with the raw JSON object shown in 'replyFormat' — "
+        "no prose, no markdown, no text outside the JSON.\n\n"
+        "List up to %1 distinct health or wellness goals (e.g. \"Lose Weight\", "
+        "\"Build Muscle\", \"Reduce Anxiety\", \"Improve Sleep\", \"Quit Smoking\", "
+        "\"Lower Blood Pressure\", \"Increase Flexibility\"). "
+        "Goals should be broad, aspirational outcomes that many people seek — not "
+        "disease treatments or medical procedures. "
+        "Do NOT include any goal already in 'existingGoals'. "
+        "For each goal provide:\n"
+        "  • name — the goal name (concise, title-case)\n"
+        "  • difficulty — integer 1, 2, or 3:\n"
+        "      1 = achievable without too much effort\n"
+        "      2 = some people achieve it permanently but requires significant effort; "
+        "standard approaches often fail\n"
+        "      3 = almost no one achieves it permanently; claimed successes are not "
+        "fully verified\n"
+        "  • bodyParts — array of body parts from 'availableBodyParts' primarily "
+        "involved (empty array if none apply or availableBodyParts is empty)\n"
+        "  • organs — array of organs from 'availableOrgans' whose proper function "
+        "is key to achieving this goal (e.g. Liver for detox goals, Heart for "
+        "cardiovascular goals; empty array if none apply or availableOrgans is empty)\n"
+        "Use ONLY names that appear exactly in the available lists.")
+        .arg(MAX_RESULTS_PER_JOB);
+
+    QJsonObject entrySchema;
+    entrySchema[QStringLiteral("name")]       = QStringLiteral("string — goal name");
+    entrySchema[QStringLiteral("difficulty")] = QStringLiteral("integer 1, 2, or 3");
+    entrySchema[QStringLiteral("bodyParts")]  = QJsonArray{};
+    entrySchema[QStringLiteral("organs")]     = QJsonArray{};
+
+    QJsonObject replyFormat;
+    replyFormat[QStringLiteral("jobId")] = QString{};
+    replyFormat[QStringLiteral("goals")] = QJsonArray{entrySchema};
+    payload[QStringLiteral("replyFormat")] = replyFormat;
+    return payload;
+}
+
 QJsonObject GeneratorHealth::buildDifficultyPayload(bool isMental, int page) const
 {
     const QStringList unscored = loadUnscoredConditionNames(isMental);
@@ -954,6 +1023,9 @@ QJsonObject GeneratorHealth::buildJobPayload(const QString &jobId) const
     }
     if (isMentalDifficultyJobId(jobId)) {
         return buildDifficultyPayload(/*isMental=*/true, pageFromJobId(jobId));
+    }
+    if (isGoalsJobId(jobId)) {
+        return buildGoalsPayload(pageFromJobId(jobId));
     }
     qDebug() << "GeneratorHealth: unknown job ID:" << jobId;
     return {};
@@ -1360,6 +1432,64 @@ void GeneratorHealth::processReply(const QString &jobId, const QJsonObject &repl
             const QString prefix = isMental ? QStringLiteral("difficulty/mental/")
                                             : QStringLiteral("difficulty/condition/");
             addDiscoveredJob(prefix + QString::number(page + 1));
+        }
+        return;
+    }
+
+    // --- Health goals ---------------------------------------------------------
+    if (isGoalsJobId(jobId)) {
+        const int        page  = pageFromJobId(jobId);
+        const QJsonArray goals = reply.value(QStringLiteral("goals")).toArray();
+
+        const QStringList existingList = loadGoals();
+        QSet<QString> seen(existingList.begin(), existingList.end());
+
+        const QStringList bpList  = loadAllBodyParts();
+        const QStringList orgList = loadOrgans();
+        const QSet<QString> availBp (bpList.begin(),  bpList.end());
+        const QSet<QString> availOrg(orgList.begin(), orgList.end());
+
+        int inserted = 0;
+        for (const QJsonValue &val : goals) {
+            if (!val.isObject()) {
+                continue;
+            }
+            const QJsonObject obj = val.toObject();
+            const QString name    = obj.value(QStringLiteral("name")).toString().trimmed();
+            if (name.isEmpty() || seen.contains(name)) {
+                continue;
+            }
+            seen.insert(name);
+
+            const QString diff = cleanDifficulty(
+                obj.value(QStringLiteral("difficulty")).toVariant().toString());
+            const QString bps  = toCommaSeparated(
+                obj.value(QStringLiteral("bodyParts")).toArray(), availBp);
+            const QString orgs = toCommaSeparated(
+                obj.value(QStringLiteral("organs")).toArray(), availOrg);
+
+            QHash<QString, QString> attrs;
+            attrs.insert(PageAttributesHealthGoal::ID_NAME, name);
+            attrs.insert(PageAttributesHealthGoal::ID_DIFFICULTY, diff);
+            if (!bps.isEmpty()) {
+                attrs.insert(PageAttributesHealthGoal::ID_BODY_PARTS, bps);
+            }
+            if (!orgs.isEmpty()) {
+                attrs.insert(PageAttributesHealthGoal::ID_ORGANS, orgs);
+            }
+            recordResultPage(QStringLiteral("PageAttributesHealthGoal"), attrs);
+            ++inserted;
+        }
+
+        qDebug() << "GeneratorHealth: health goals page" << page
+                 << "—" << goals.size() << "received,"
+                 << inserted << "new,"
+                 << dbCount(QStringLiteral("PageAttributesHealthGoal")) << "total in DB";
+
+        if (goals.size() < MAX_RESULTS_PER_JOB) {
+            markPaginatedStepDone(QStringLiteral("goals"));
+        } else {
+            addDiscoveredJob(QStringLiteral("goal/") + QString::number(page + 1));
         }
         return;
     }
