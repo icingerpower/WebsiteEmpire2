@@ -26,8 +26,10 @@ const QString GeneratorHealth::TASK_SYMPTOMS_FOR_BP        = QStringLiteral("sym
 const QString GeneratorHealth::TASK_ORGANS_FOR_BP          = QStringLiteral("organs_for_body_part");
 const QString GeneratorHealth::TASK_CONDITIONS_FOR_SYMPTOM = QStringLiteral("conditions_for_symptom");
 const QString GeneratorHealth::TASK_MENTAL_FOR_BRAIN_PART  = QStringLiteral("mental_conditions_for_brain_part");
-const QString GeneratorHealth::TASK_MENTAL_COMPLETION      = QStringLiteral("mental_conditions_completion");
-const QString GeneratorHealth::TASK_RECENT_CONDITIONS      = QStringLiteral("recent_conditions");
+const QString GeneratorHealth::TASK_MENTAL_COMPLETION          = QStringLiteral("mental_conditions_completion");
+const QString GeneratorHealth::TASK_RECENT_CONDITIONS          = QStringLiteral("recent_conditions");
+const QString GeneratorHealth::TASK_CONDITION_DIFFICULTY       = QStringLiteral("condition_healing_difficulty");
+const QString GeneratorHealth::TASK_MENTAL_CONDITION_DIFFICULTY = QStringLiteral("mental_condition_healing_difficulty");
 
 // ---- File-local helpers -----------------------------------------------------
 
@@ -54,6 +56,23 @@ QString toCommaSeparated(const QJsonArray &arr, const QSet<QString> &allowed)
         }
     }
     return parts.join(QLatin1Char(','));
+}
+
+// Returns "1", "2", or "3" by extracting the first valid digit from Claude's answer.
+// Falls back to "1" (most conservative score) if no valid digit is found.
+QString cleanDifficulty(const QString &raw)
+{
+    bool ok;
+    const int v = raw.trimmed().toInt(&ok);
+    if (ok && v >= 1 && v <= 3) {
+        return QString::number(v);
+    }
+    for (const QChar c : raw) {
+        if (c == QLatin1Char('1') || c == QLatin1Char('2') || c == QLatin1Char('3')) {
+            return QString(c);
+        }
+    }
+    return QStringLiteral("1");
 }
 
 // Strips non-numeric characters (keeps digits and a single '.') so that
@@ -188,6 +207,14 @@ bool GeneratorHealth::isRecentJobId(const QString &j)
 {
     return j.startsWith(QLatin1String("recent/"));
 }
+bool GeneratorHealth::isConditionDifficultyJobId(const QString &j)
+{
+    return j.startsWith(QLatin1String("difficulty/condition/"));
+}
+bool GeneratorHealth::isMentalDifficultyJobId(const QString &j)
+{
+    return j.startsWith(QLatin1String("difficulty/mental/"));
+}
 
 // ---- Initial job list -------------------------------------------------------
 
@@ -203,6 +230,11 @@ QStringList GeneratorHealth::buildInitialJobIds() const
         QStringLiteral("bp/brain/0"),
         QStringLiteral("organ/0"),
         QStringLiteral("injury/0"),
+        // Backfill jobs: score existing DB rows that predate the healingDifficulty column.
+        // On a fresh run these terminate immediately (no unscored rows); new conditions are
+        // inserted with the score directly via the updated conditionEntrySchema().
+        QStringLiteral("difficulty/condition/0"),
+        QStringLiteral("difficulty/mental/0"),
     };
 }
 
@@ -299,6 +331,10 @@ bool GeneratorHealth::isStepComplete(Step step) const
         return stepSettings().value(QStringLiteral("Steps/mental_completion/complete")).toBool();
     case Step::RecentConditions:
         return stepSettings().value(QStringLiteral("Steps/recent/complete")).toBool();
+    case Step::ConditionDifficulty:
+        return stepSettings().value(QStringLiteral("Steps/condition_difficulty/complete")).toBool();
+    case Step::MentalConditionDifficulty:
+        return stepSettings().value(QStringLiteral("Steps/mental_difficulty/complete")).toBool();
     }
     return false;
 }
@@ -386,6 +422,40 @@ QStringList GeneratorHealth::loadMentalConditions() const
 {
     return loadFieldValues(QStringLiteral("PageAttributesHealthMentalCondition"),
                            PageAttributesHealthMentalCondition::ID_NAME);
+}
+
+QStringList GeneratorHealth::loadUnscoredConditionNames(bool isMental) const
+{
+    const QString attrId  = isMental
+        ? QStringLiteral("PageAttributesHealthMentalCondition")
+        : QStringLiteral("PageAttributesHealthCondition");
+    const QString nameCol = isMental
+        ? PageAttributesHealthMentalCondition::ID_NAME
+        : PageAttributesHealthCondition::ID_NAME;
+    const QString diffCol = isMental
+        ? PageAttributesHealthMentalCondition::ID_HEALING_DIFFICULTY
+        : PageAttributesHealthCondition::ID_HEALING_DIFFICULTY;
+    const DownloadedPagesTable *table = resultsTable(attrId);
+    if (!table) {
+        return {};
+    }
+    QSqlQuery q(table->database());
+    // Always offset 0: once a batch is UPDATE-d the rows no longer match the WHERE clause,
+    // so the next page is always the first batch of still-unscored conditions.
+    const QString sql = QStringLiteral(
+        "SELECT \"%1\" FROM records WHERE \"%2\" IS NULL OR \"%2\" = '' LIMIT %3")
+        .arg(nameCol, diffCol)
+        .arg(MAX_RESULTS_PER_JOB);
+    QStringList names;
+    if (q.exec(sql)) {
+        while (q.next()) {
+            const QString v = q.value(0).toString().trimmed();
+            if (!v.isEmpty()) {
+                names << v;
+            }
+        }
+    }
+    return names;
 }
 
 int GeneratorHealth::dbCount(const QString &attrId) const
@@ -602,6 +672,7 @@ static QJsonObject conditionEntrySchema()
     QJsonObject s;
     s[QStringLiteral("name")]                 = QStringLiteral("string — condition name");
     s[QStringLiteral("populationPercentage")] = QStringLiteral("number string 0–100");
+    s[QStringLiteral("healingDifficulty")]    = QStringLiteral("integer 1, 2, or 3");
     s[QStringLiteral("bodyParts")]            = QJsonArray{};
     s[QStringLiteral("symptoms")]             = QJsonArray{};
     s[QStringLiteral("organs")]               = QJsonArray{};
@@ -636,6 +707,10 @@ QJsonObject GeneratorHealth::buildCondForSymptomPayload(const QString &symptomSl
         "For each condition provide:\n"
         "  • name — condition name\n"
         "  • populationPercentage — estimated %% of global population affected (0–100)\n"
+        "  • healingDifficulty — integer 1, 2, or 3:\n"
+        "      1 = can be resolved without too much effort\n"
+        "      2 = some people resolve it permanently but requires effort; normal medicine often fails\n"
+        "      3 = almost no one resolves it permanently; claimed recoveries are not fully verified\n"
         "  • bodyParts — array of body parts from 'availableBodyParts' most affected "
         "(empty array if none)\n"
         "  • symptoms — array of symptoms from 'availableSymptoms' commonly seen "
@@ -682,6 +757,10 @@ QJsonObject GeneratorHealth::buildMentalForBpPayload(const QString &brainSlug) c
         "For each condition provide:\n"
         "  • name — condition name\n"
         "  • populationPercentage — estimated %% of global population affected (0–100)\n"
+        "  • healingDifficulty — integer 1, 2, or 3:\n"
+        "      1 = can be resolved without too much effort\n"
+        "      2 = some people resolve it permanently but requires effort; normal medicine often fails\n"
+        "      3 = almost no one resolves it permanently; claimed recoveries are not fully verified\n"
         "  • bodyParts — array of body parts from 'availableBodyParts' most affected\n"
         "  • symptoms — array of symptoms from 'availableSymptoms' commonly seen "
         "(empty array if none apply)\n"
@@ -726,6 +805,10 @@ QJsonObject GeneratorHealth::buildMentalCompPayload(int page) const
         "For each condition provide:\n"
         "  • name — condition name\n"
         "  • populationPercentage — estimated %% of global population affected (0–100)\n"
+        "  • healingDifficulty — integer 1, 2, or 3:\n"
+        "      1 = can be resolved without too much effort\n"
+        "      2 = some people resolve it permanently but requires effort; normal medicine often fails\n"
+        "      3 = almost no one resolves it permanently; claimed recoveries are not fully verified\n"
         "  • bodyParts — array of body parts from 'availableBodyParts' most affected\n"
         "  • symptoms — array of symptoms from 'availableSymptoms' commonly seen "
         "(empty array if none apply)\n"
@@ -775,6 +858,10 @@ QJsonObject GeneratorHealth::buildRecentPayload(int page) const
         "  • name — condition name\n"
         "  • isMental — true if mental health condition, false otherwise\n"
         "  • populationPercentage — estimated %% of global population affected (0–100)\n"
+        "  • healingDifficulty — integer 1, 2, or 3:\n"
+        "      1 = can be resolved without too much effort\n"
+        "      2 = some people resolve it permanently but requires effort; normal medicine often fails\n"
+        "      3 = almost no one resolves it permanently; claimed recoveries are not fully verified\n"
         "  • bodyParts — array of body parts from 'availableBodyParts' most affected "
         "(empty array if none)\n"
         "  • symptoms — array of symptoms from 'availableSymptoms' commonly seen "
@@ -793,6 +880,38 @@ QJsonObject GeneratorHealth::buildRecentPayload(int page) const
     replyFormat[QStringLiteral("jobId")]      = QString{};
     replyFormat[QStringLiteral("conditions")] = QJsonArray{schema};
     payload[QStringLiteral("replyFormat")]    = replyFormat;
+    return payload;
+}
+
+QJsonObject GeneratorHealth::buildDifficultyPayload(bool isMental, int page) const
+{
+    const QStringList unscored = loadUnscoredConditionNames(isMental);
+
+    QJsonObject payload;
+    payload[QStringLiteral("task")]       = isMental ? TASK_MENTAL_CONDITION_DIFFICULTY
+                                                     : TASK_CONDITION_DIFFICULTY;
+    payload[QStringLiteral("page")]       = page;
+    payload[QStringLiteral("maxResults")] = MAX_RESULTS_PER_JOB;
+    payload[QStringLiteral("conditions")] = toJsonArray(unscored);
+    payload[QStringLiteral("instructions")] = tr(
+        "IMPORTANT: Reply ONLY with the raw JSON object shown in 'replyFormat' — "
+        "no prose, no markdown, no text outside the JSON.\n\n"
+        "For each condition listed in 'conditions', assign a healingDifficulty score:\n"
+        "  • 1 — can be resolved without too much effort\n"
+        "  • 2 — some people resolve it permanently but requires significant effort; "
+        "normal medicine often fails\n"
+        "  • 3 — almost no one resolves it permanently; claimed recoveries are not fully verified\n"
+        "Return exactly one entry per condition. Do NOT omit any condition from the list. "
+        "If 'conditions' is empty, return an empty 'scoredConditions' array.");
+
+    QJsonObject entrySchema;
+    entrySchema[QStringLiteral("name")]              = QStringLiteral("string — condition name");
+    entrySchema[QStringLiteral("healingDifficulty")] = QStringLiteral("integer 1, 2, or 3");
+
+    QJsonObject replyFormat;
+    replyFormat[QStringLiteral("jobId")]            = QString{};
+    replyFormat[QStringLiteral("scoredConditions")] = QJsonArray{entrySchema};
+    payload[QStringLiteral("replyFormat")] = replyFormat;
     return payload;
 }
 
@@ -830,6 +949,12 @@ QJsonObject GeneratorHealth::buildJobPayload(const QString &jobId) const
     if (isRecentJobId(jobId)) {
         return buildRecentPayload(pageFromJobId(jobId));
     }
+    if (isConditionDifficultyJobId(jobId)) {
+        return buildDifficultyPayload(/*isMental=*/false, pageFromJobId(jobId));
+    }
+    if (isMentalDifficultyJobId(jobId)) {
+        return buildDifficultyPayload(/*isMental=*/true, pageFromJobId(jobId));
+    }
     qDebug() << "GeneratorHealth: unknown job ID:" << jobId;
     return {};
 }
@@ -860,6 +985,9 @@ void GeneratorHealth::recordConditions(const QJsonArray &conditions, bool isMent
     const QString &idInjs   = isMental
         ? PageAttributesHealthMentalCondition::ID_INJURIES
         : PageAttributesHealthCondition::ID_INJURIES;
+    const QString &idDiff   = isMental
+        ? PageAttributesHealthMentalCondition::ID_HEALING_DIFFICULTY
+        : PageAttributesHealthCondition::ID_HEALING_DIFFICULTY;
 
     // Build allowed-value sets to prevent Claude from referencing non-existent entries.
     const QStringList bpList  = loadAllBodyParts();
@@ -884,6 +1012,8 @@ void GeneratorHealth::recordConditions(const QJsonArray &conditions, bool isMent
 
         const QString pct  = cleanPercentage(
             obj.value(QStringLiteral("populationPercentage")).toVariant().toString());
+        const QString diff = cleanDifficulty(
+            obj.value(QStringLiteral("healingDifficulty")).toVariant().toString());
         const QString bps  = toCommaSeparated(
             obj.value(QStringLiteral("bodyParts")).toArray(), availBp);
         const QString syms = toCommaSeparated(
@@ -896,6 +1026,7 @@ void GeneratorHealth::recordConditions(const QJsonArray &conditions, bool isMent
         QHash<QString, QString> attrs;
         attrs.insert(idName, name);
         attrs.insert(idPct, pct);
+        attrs.insert(idDiff, diff);
         if (!bps.isEmpty()) {
             attrs.insert(idBps, bps);
         }
@@ -1172,6 +1303,63 @@ void GeneratorHealth::processReply(const QString &jobId, const QJsonObject &repl
             markPaginatedStepDone(QStringLiteral("recent"));
         } else {
             addDiscoveredJob(QStringLiteral("recent/") + QString::number(page + 1));
+        }
+        return;
+    }
+
+    // --- Backfill: healingDifficulty for existing conditions -------------------
+    if (isConditionDifficultyJobId(jobId) || isMentalDifficultyJobId(jobId)) {
+        const bool isMental = isMentalDifficultyJobId(jobId);
+        const int  page     = pageFromJobId(jobId);
+        const QJsonArray scored = reply.value(QStringLiteral("scoredConditions")).toArray();
+
+        const QString attrId  = isMental
+            ? QStringLiteral("PageAttributesHealthMentalCondition")
+            : QStringLiteral("PageAttributesHealthCondition");
+        const QString nameCol = isMental
+            ? PageAttributesHealthMentalCondition::ID_NAME
+            : PageAttributesHealthCondition::ID_NAME;
+        const QString diffCol = isMental
+            ? PageAttributesHealthMentalCondition::ID_HEALING_DIFFICULTY
+            : PageAttributesHealthCondition::ID_HEALING_DIFFICULTY;
+
+        int updated = 0;
+        const DownloadedPagesTable *table = resultsTable(attrId);
+        if (table && !scored.isEmpty()) {
+            QSqlQuery q(table->database());
+            q.prepare(QStringLiteral("UPDATE records SET \"%1\" = :val WHERE \"%2\" = :name")
+                          .arg(diffCol, nameCol));
+            for (const QJsonValue &val : scored) {
+                if (!val.isObject()) {
+                    continue;
+                }
+                const QJsonObject obj = val.toObject();
+                const QString name = obj.value(QStringLiteral("name")).toString().trimmed();
+                const QString diff = cleanDifficulty(
+                    obj.value(QStringLiteral("healingDifficulty")).toVariant().toString());
+                if (name.isEmpty()) {
+                    continue;
+                }
+                q.bindValue(QStringLiteral(":val"), diff);
+                q.bindValue(QStringLiteral(":name"), name);
+                if (q.exec()) {
+                    ++updated;
+                }
+            }
+        }
+
+        qDebug() << "GeneratorHealth: difficulty backfill" << (isMental ? "mental" : "physical")
+                 << "page" << page << "—" << scored.size() << "received," << updated << "updated";
+
+        // After updating, query again at offset 0: scored rows are gone from the WHERE clause.
+        const QStringList remaining = loadUnscoredConditionNames(isMental);
+        if (remaining.isEmpty()) {
+            markPaginatedStepDone(isMental ? QStringLiteral("mental_difficulty")
+                                           : QStringLiteral("condition_difficulty"));
+        } else {
+            const QString prefix = isMental ? QStringLiteral("difficulty/mental/")
+                                            : QStringLiteral("difficulty/condition/");
+            addDiscoveredJob(prefix + QString::number(page + 1));
         }
         return;
     }

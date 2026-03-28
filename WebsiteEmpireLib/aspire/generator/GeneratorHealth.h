@@ -52,6 +52,8 @@ public:
     static const QString TASK_MENTAL_FOR_BRAIN_PART;
     static const QString TASK_MENTAL_COMPLETION;
     static const QString TASK_RECENT_CONDITIONS;
+    static const QString TASK_CONDITION_DIFFICULTY;
+    static const QString TASK_MENTAL_CONDITION_DIFFICULTY;
 
     // Logical pipeline steps in execution order.
     enum class Step {
@@ -63,8 +65,10 @@ public:
         OrgansPerBodyPart,     // organ/bp/*
         ConditionsPerSymptom,  // condition/symptom/*
         MentalPerBrainPart,    // mental/bp/*
-        MentalCompletion,      // mental/completion/*
-        RecentConditions,      // recent/*
+        MentalCompletion,           // mental/completion/*
+        RecentConditions,           // recent/*
+        ConditionDifficulty,        // difficulty/condition/*
+        MentalConditionDifficulty,  // difficulty/mental/*
     };
 
     explicit GeneratorHealth(const QDir &workingDir = QDir(), QObject *parent = nullptr);
@@ -98,8 +102,10 @@ public:
     static bool isOrgansForBpJobId          (const QString &jobId);
     static bool isConditionsForSymptomJobId (const QString &jobId);
     static bool isMentalForBrainPartJobId   (const QString &jobId);
-    static bool isMentalCompletionJobId     (const QString &jobId);
-    static bool isRecentJobId               (const QString &jobId);
+    static bool isMentalCompletionJobId       (const QString &jobId);
+    static bool isRecentJobId                 (const QString &jobId);
+    static bool isConditionDifficultyJobId    (const QString &jobId);
+    static bool isMentalDifficultyJobId       (const QString &jobId);
 
 protected:
     QStringList buildInitialJobIds()                                    const override;
@@ -132,13 +138,21 @@ private:
     QJsonObject buildOrgansForBpPayload   (const QString &bpSlug)      const;
     QJsonObject buildCondForSymptomPayload(const QString &symptomSlug) const;
     QJsonObject buildMentalForBpPayload   (const QString &brainSlug)   const;
-    QJsonObject buildMentalCompPayload    (int page)                   const;
-    QJsonObject buildRecentPayload        (int page)                   const;
+    QJsonObject buildMentalCompPayload      (int page)                   const;
+    QJsonObject buildRecentPayload          (int page)                   const;
+    // Builds a payload that asks Claude to assign healingDifficulty to a batch of
+    // conditions (physical or mental) that currently have no score in the DB.
+    QJsonObject buildDifficultyPayload      (bool isMental, int page)    const;
 
     // Records condition objects from a reply, skipping names already in seen.
     // Updates seen with newly inserted names.
     void recordConditions(const QJsonArray &conditions, bool isMental,
                           QSet<QString> &seen);
+
+    // Returns up to MAX_RESULTS_PER_JOB condition names (physical or mental) whose
+    // healingDifficulty column is NULL or empty.  Always queries at offset 0: once
+    // a batch has been scored via UPDATE the rows no longer match the WHERE clause.
+    QStringList loadUnscoredConditionNames(bool isMental) const;
 
     // ---- Step completion ---------------------------------------------------
     // Reads AbstractGenerator's .ini to find all job IDs with the given prefix
