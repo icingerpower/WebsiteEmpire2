@@ -2,6 +2,11 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QScopedPointer>
+
+#include "website/HostTable.h"
+
+class AbstractEngine;
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -16,6 +21,10 @@ public:
     ~MainWindow();
 
 private:
-    Ui::MainWindow *ui;
+    void _init();
+
+    Ui::MainWindow              *ui;
+    QScopedPointer<HostTable>    m_hostTable;
+    QScopedPointer<AbstractEngine> m_engine;
 };
 #endif // MAINWINDOW_H

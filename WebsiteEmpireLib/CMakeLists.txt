@@ -19,6 +19,8 @@ add_library(WebsiteEmpireLib STATIC
     WebsiteEmpireLib.h
     ExceptionWithTitleText.h
     ExceptionWithTitleText.cpp
+    CountryLangManager.h
+    CountryLangManager.cpp
     ${ASPIRE_FILES}
     ${WEBSITE_FILES}
     ${UTILS_FILES}

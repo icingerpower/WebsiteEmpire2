@@ -17,6 +17,7 @@
 #include "aspire/downloader/DownloadedPagesTable.h"
 #include "aspire/generator/AbstractGenerator.h"
 #include "aspire/generator/GeneratorLanguages.h"
+#include "CountryLangManager.h"
 
 // ---------------------------------------------------------------------------
 // Test fixtures helpers
@@ -873,17 +874,17 @@ private slots:
 
     void test_default_lang_codes_count()
     {
-        QCOMPARE(GeneratorLanguages::defaultLangCodes().size(), 40);
+        QCOMPARE(CountryLangManager::instance()->defaultLangCodes().size(), 40);
     }
 
     void test_default_lang_codes_no_english()
     {
-        QVERIFY(!GeneratorLanguages::defaultLangCodes().contains(QStringLiteral("en")));
+        QVERIFY(!CountryLangManager::instance()->defaultLangCodes().contains(QStringLiteral("en")));
     }
 
     void test_default_lang_codes_includes_french()
     {
-        QVERIFY(GeneratorLanguages::defaultLangCodes().contains(QStringLiteral("fr")));
+        QVERIFY(CountryLangManager::instance()->defaultLangCodes().contains(QStringLiteral("fr")));
     }
 };
 

@@ -96,8 +96,6 @@ public:
     // "trans/fr/apple" or "word/en/apple" → "apple"
     static QString wordSlugFromJobId(const QString &jobId);
 
-    // BCP-47 codes of the 40 most-spoken languages, excluding English.
-    static QStringList defaultLangCodes();
 
 protected:
     QStringList buildInitialJobIds()                                            const override;

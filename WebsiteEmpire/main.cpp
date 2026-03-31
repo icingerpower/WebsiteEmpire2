@@ -3,6 +3,7 @@
 #include "../../common/types/types.h"
 
 #include "gui/MainWindow.h"
+#include "gui/dialogs/DialogPickEngine.h"
 
 #include <QApplication>
 #include <QSet>
@@ -23,6 +24,14 @@ int main(int argc, char *argv[])
     dialog.exec();
     if (dialog.wasRejected()) {
         return 0;
+    }
+
+    const auto settings = WorkingDirectoryManager::instance()->settings();
+    if (settings->value(DialogPickEngine::settingsKey()).toString().isEmpty()) {
+        DialogPickEngine pickDialog;
+        if (pickDialog.exec() != QDialog::Accepted) {
+            return 0;
+        }
     }
 
     MainWindow w;

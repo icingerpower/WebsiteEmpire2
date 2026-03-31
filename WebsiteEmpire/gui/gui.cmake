@@ -2,4 +2,13 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/MainWindow.cpp
     ${CMAKE_CURRENT_LIST_DIR}/MainWindow.h
     ${CMAKE_CURRENT_LIST_DIR}/MainWindow.ui
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneDomains.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneDomains.h
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneDomains.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogEditHosts.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogEditHosts.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogEditHosts.ui
 )

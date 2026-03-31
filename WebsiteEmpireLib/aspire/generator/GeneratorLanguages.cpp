@@ -1,5 +1,7 @@
 #include "GeneratorLanguages.h"
 
+#include "CountryLangManager.h"
+
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -144,25 +146,6 @@ QString GeneratorLanguages::wordSlugFromJobId(const QString &jobId)
     return p.at(2);
 }
 
-QStringList GeneratorLanguages::defaultLangCodes()
-{
-    return {
-        QStringLiteral("zh"), QStringLiteral("es"), QStringLiteral("hi"),
-        QStringLiteral("ar"), QStringLiteral("bn"), QStringLiteral("pt"),
-        QStringLiteral("ru"), QStringLiteral("ja"), QStringLiteral("pa"),
-        QStringLiteral("de"), QStringLiteral("ko"), QStringLiteral("fr"),
-        QStringLiteral("te"), QStringLiteral("mr"), QStringLiteral("tr"),
-        QStringLiteral("ta"), QStringLiteral("vi"), QStringLiteral("ur"),
-        QStringLiteral("it"), QStringLiteral("fa"), QStringLiteral("pl"),
-        QStringLiteral("uk"), QStringLiteral("ms"), QStringLiteral("ro"),
-        QStringLiteral("nl"), QStringLiteral("su"), QStringLiteral("ku"),
-        QStringLiteral("hr"), QStringLiteral("hu"), QStringLiteral("el"),
-        QStringLiteral("th"), QStringLiteral("cs"), QStringLiteral("az"),
-        QStringLiteral("sv"), QStringLiteral("fi"), QStringLiteral("no"),
-        QStringLiteral("da"), QStringLiteral("he"), QStringLiteral("id"),
-        QStringLiteral("sw"),
-    };
-}
 
 // ---- Word list loading ------------------------------------------------------
 
@@ -232,7 +215,7 @@ QStringList GeneratorLanguages::targetLangCodes() const
                                   .split(QLatin1Char(','), Qt::SkipEmptyParts)
                             : m_langCodes;
     if (codes.isEmpty()) {
-        codes = defaultLangCodes();
+        codes = CountryLangManager::instance()->defaultLangCodes();
     }
     // English is always the source language; never translate back to it.
     codes.removeAll(QStringLiteral("en"));
@@ -960,7 +943,7 @@ QList<AbstractGenerator::Param> GeneratorLanguages::getParams() const
     langs.name         = tr("Target Language Codes");
     langs.tooltip      = tr("Comma-separated BCP-47 codes of the languages to generate data for "
                             "(e.g. \"fr,de,es\"). Defaults to the 40 most-spoken languages.");
-    langs.defaultValue = defaultLangCodes().join(QLatin1Char(','));
+    langs.defaultValue = CountryLangManager::instance()->defaultLangCodes().join(QLatin1Char(','));
 
     return {words, langs};
 }

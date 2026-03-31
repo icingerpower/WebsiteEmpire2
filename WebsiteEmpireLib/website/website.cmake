@@ -1,4 +1,10 @@
 set(WEBSITE_FILES
     ${CMAKE_CURRENT_LIST_DIR}/AbstractBlock.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractBlock.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractEngine.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractEngine.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/HostTable.h
+    ${CMAKE_CURRENT_LIST_DIR}/HostTable.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/EngineLanguages.h
+    ${CMAKE_CURRENT_LIST_DIR}/EngineLanguages.cpp
 )
