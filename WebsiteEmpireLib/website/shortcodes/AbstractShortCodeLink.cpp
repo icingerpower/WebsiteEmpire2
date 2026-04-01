@@ -26,7 +26,7 @@ void AbstractShortCodeLink::addCode(QStringView     origContent,
     const ParsedShortCode &parsed = parseAndValidate(origContent);
     const QString &url        = parsed.arguments.value(QStringLiteral("url"));
     const QString &relFromArgs = parsed.arguments.value(QStringLiteral("rel"));
-    const QString  rel         = relFromArgs.isEmpty() ? QStringLiteral("dofollow") : relFromArgs;
+    const QString &rel         = relFromArgs.isEmpty() ? QStringLiteral("dofollow") : relFromArgs;
     // Seven direct appends — no intermediate QString allocation (avoids .arg()).
     html += QStringLiteral("<a href=\"");
     html += url;

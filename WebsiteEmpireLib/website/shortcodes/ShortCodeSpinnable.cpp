@@ -99,9 +99,9 @@ void ShortCodeSpinnable::validateSpinnableSyntax(const QString &content)
     }
 }
 
-QStringList ShortCodeSpinnable::splitTopLevel(const QString &text)
+QList<QStringView> ShortCodeSpinnable::splitTopLevel(QStringView text)
 {
-    QStringList parts;
+    QList<QStringView> parts;
     int depth = 0;
     int start = 0;
     for (int i = 0; i < text.length(); ++i) {
@@ -119,7 +119,7 @@ QStringList ShortCodeSpinnable::splitTopLevel(const QString &text)
     return parts;
 }
 
-QString ShortCodeSpinnable::spin(const QString &text, QRandomGenerator &rng)
+QString ShortCodeSpinnable::spin(QStringView text, QRandomGenerator &rng)
 {
     QString result;
     result.reserve(text.length());
@@ -139,8 +139,8 @@ QString ShortCodeSpinnable::spin(const QString &text, QRandomGenerator &rng)
                 j++;
             }
             // text[start .. j-2] is the content between the matched braces.
-            const QString inner = text.mid(start, j - start - 1);
-            const QStringList options = splitTopLevel(inner);
+            const QStringView inner = text.mid(start, j - start - 1);
+            const auto &options = splitTopLevel(inner);
             const int choice = static_cast<int>(rng.bounded(static_cast<quint32>(options.size())));
             result += spin(options.at(choice), rng);
             i = j;

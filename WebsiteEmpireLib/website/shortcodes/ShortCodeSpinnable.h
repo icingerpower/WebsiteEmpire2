@@ -74,13 +74,14 @@ private:
      * Recursively resolves all {opt1|opt2|...} groups in text using rng.
      * Text outside spin groups is copied verbatim (preserving shortcode tags, etc.).
      */
-    static QString spin(const QString &text, QRandomGenerator &rng);
+    static QString spin(QStringView text, QRandomGenerator &rng);
 
     /**
      * Splits text on top-level '|' characters (depth-0 only).
      * Pipes inside nested { } groups are ignored.
+     * Returns views into text — callers must not outlive text's backing storage.
      */
-    static QStringList splitTopLevel(const QString &text);
+    static QList<QStringView> splitTopLevel(QStringView text);
 };
 
 #endif // SHORTCODESPINNABLE_H
