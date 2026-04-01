@@ -1,0 +1,7 @@
+set(BLOCS_WIDGETS_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractPageBlockWidget.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractPageBlockWidget.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocTextWidget.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocTextWidget.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocTextWidget.ui
+)
