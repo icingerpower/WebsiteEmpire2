@@ -1,5 +1,6 @@
 #include "ShortCodeSpinnable.h"
 
+#include "dialogs/ShortCodeSpinnableDialog.h"
 #include "ExceptionWithTitleText.h"
 
 #include <QCoreApplication>
@@ -178,6 +179,40 @@ void ShortCodeSpinnable::addCode(QStringView     origContent,
     Q_UNUSED(js)
     Q_UNUSED(cssDoneIds)
     Q_UNUSED(jsDoneIds)
+}
+
+QDialog *ShortCodeSpinnable::createEditDialog(QWidget *parent) const
+{
+    return new ShortCodeSpinnableDialog(parent);
+}
+
+QString ShortCodeSpinnable::getTextBegin(const QDialog *dialog) const
+{
+    const auto *d = qobject_cast<const ShortCodeSpinnableDialog *>(dialog);
+    Q_ASSERT(d != nullptr);
+    QString text;
+    text += QStringLiteral("[SPINNABLE id=\"");
+    text += QString::number(d->spinnableId());
+    text += QStringLiteral("\" random=\"");
+    text += d->random() ? QStringLiteral("true") : QStringLiteral("false");
+    text += QStringLiteral("\"]");
+    return text;
+}
+
+QString ShortCodeSpinnable::getTextEnd(const QDialog *dialog) const
+{
+    Q_UNUSED(dialog)
+    return QStringLiteral("[/SPINNABLE]");
+}
+
+QString ShortCodeSpinnable::getButtonName() const
+{
+    return tr("Spinnable");
+}
+
+QString ShortCodeSpinnable::getButtonToolTip() const
+{
+    return tr("Insert a spinnable text shortcode");
 }
 
 DECLARE_SHORTCODE(ShortCodeSpinnable)

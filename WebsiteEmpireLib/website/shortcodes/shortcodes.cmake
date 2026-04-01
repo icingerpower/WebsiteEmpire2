@@ -17,4 +17,21 @@ set(SHORTCODES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/ShortCodeImageFix.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ShortCodeImageTr.h
     ${CMAKE_CURRENT_LIST_DIR}/ShortCodeImageTr.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeTitle.h
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeTitle.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeVideoDialog.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeVideoDialog.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeVideoDialog.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeImageDialog.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeImageDialog.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeImageDialog.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeLinkDialog.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeLinkDialog.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeLinkDialog.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeSpinnableDialog.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeSpinnableDialog.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeSpinnableDialog.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeTitleDialog.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeTitleDialog.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeTitleDialog.ui
 )

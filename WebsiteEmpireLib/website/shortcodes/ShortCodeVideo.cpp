@@ -1,5 +1,15 @@
 #include "ShortCodeVideo.h"
 
+#include "dialogs/ShortCodeVideoDialog.h"
+
+#include <QCoreApplication>
+
+// File-local tr() carries the correct translation context without QObject inheritance.
+static QString tr(const char *key)
+{
+    return QCoreApplication::translate("ShortCodeVideo", key);
+}
+
 QString ShortCodeVideo::getTag() const
 {
     return QStringLiteral("VIDEO");
@@ -37,6 +47,38 @@ void ShortCodeVideo::addCode(QStringView     origContent,
     Q_UNUSED(js)
     Q_UNUSED(cssDoneIds)
     Q_UNUSED(jsDoneIds)
+}
+
+QDialog *ShortCodeVideo::createEditDialog(QWidget *parent) const
+{
+    return new ShortCodeVideoDialog(parent);
+}
+
+QString ShortCodeVideo::getTextBegin(const QDialog *dialog) const
+{
+    const auto *d = qobject_cast<const ShortCodeVideoDialog *>(dialog);
+    Q_ASSERT(d != nullptr);
+    QString text;
+    text += QStringLiteral("[VIDEO url=\"");
+    text += d->url();
+    text += QStringLiteral("\"]");
+    return text;
+}
+
+QString ShortCodeVideo::getTextEnd(const QDialog *dialog) const
+{
+    Q_UNUSED(dialog)
+    return QStringLiteral("[/VIDEO]");
+}
+
+QString ShortCodeVideo::getButtonName() const
+{
+    return tr("Video");
+}
+
+QString ShortCodeVideo::getButtonToolTip() const
+{
+    return tr("Insert a video shortcode");
 }
 
 DECLARE_SHORTCODE(ShortCodeVideo)

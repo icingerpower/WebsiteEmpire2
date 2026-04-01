@@ -65,6 +65,21 @@ public:
                  QSet<QString>  &cssDoneIds,
                  QSet<QString>  &jsDoneIds) const override;
 
+    /**
+     * Builds the opening tag from the ShortCodeImageDialog's fields, e.g.
+     *   [IMGFIX id="hero" fileName="hero.jpg" alt="Hero" width="1200"]
+     * width and height are omitted when the spinbox is 0.
+     * Uses getTag() so both IMGFIX and IMGTR produce the correct tag name.
+     * Subclasses (ShortCodeImageFix, ShortCodeImageTr) inherit this.
+     */
+    QString getTextBegin(const QDialog *dialog) const override;
+
+    /**
+     * Returns "[/TAG]" where TAG comes from getTag().
+     * Subclasses (ShortCodeImageFix, ShortCodeImageTr) inherit this.
+     */
+    QString getTextEnd(const QDialog *dialog) const override;
+
 protected:
     /** Translatability of the id argument — No for IMGFIX, Yes for IMGTR. */
     virtual Translatable idTranslatable() const = 0;

@@ -61,6 +61,12 @@ public:
                  QSet<QString>  &cssDoneIds,
                  QSet<QString>  &jsDoneIds) const override;
 
+    QDialog *createEditDialog(QWidget *parent = nullptr) const override;
+    QString getTextBegin(const QDialog *dialog) const override;
+    QString getTextEnd(const QDialog *dialog) const override;
+    QString getButtonName() const override;
+    QString getButtonToolTip() const override;
+
 private:
     /**
      * Validates spinning syntax:

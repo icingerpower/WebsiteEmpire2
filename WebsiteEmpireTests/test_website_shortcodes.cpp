@@ -7,6 +7,7 @@
 #include "website/shortcodes/ShortCodeSpinnable.h"
 #include "website/shortcodes/ShortCodeImageFix.h"
 #include "website/shortcodes/ShortCodeImageTr.h"
+#include "website/shortcodes/ShortCodeTitle.h"
 #include "ExceptionWithTitleText.h"
 
 // =============================================================================
@@ -257,6 +258,37 @@ private slots:
     void test_spinnable_add_code_nested_unmatched_brace_throws();
     void test_spinnable_add_code_malformed_shortcode_throws();
     void test_spinnable_add_code_mismatched_tags_throws();
+
+    // --- ShortCodeTitle: identity & argument contract ---
+    void test_title_tag_name();
+    void test_title_available_arguments_count();
+    void test_title_level_argument_id();
+    void test_title_level_argument_is_mandatory();
+    void test_title_level_argument_has_six_allowed_values();
+    void test_title_level_argument_not_translatable();
+
+    // --- ShortCodeTitle: registry & factory ---
+    void test_title_registered_in_all_shortcodes();
+    void test_title_for_tag_returns_instance();
+
+    // --- ShortCodeTitle: addCode output ---
+    void test_title_add_code_h1_tag_in_html();
+    void test_title_add_code_h3_tag_in_html();
+    void test_title_add_code_h6_tag_in_html();
+    void test_title_add_code_inner_content_in_html();
+    void test_title_add_code_appends_to_existing_html();
+    void test_title_add_code_does_not_touch_css();
+    void test_title_add_code_does_not_touch_js();
+    void test_title_add_code_via_for_tag();
+
+    // --- ShortCodeTitle: validation error cases ---
+    void test_title_add_code_missing_level_throws();
+    void test_title_add_code_invalid_level_zero_throws();
+    void test_title_add_code_invalid_level_seven_throws();
+    void test_title_add_code_invalid_level_alpha_throws();
+    void test_title_add_code_unknown_argument_throws();
+    void test_title_add_code_mismatched_tags_throws();
+    void test_title_add_code_duplicate_argument_throws();
 };
 
 // =============================================================================
@@ -1829,6 +1861,230 @@ void Test_Website_ShortCodes::test_spinnable_add_code_mismatched_tags_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[SPINNABLE id=\"1\"]{a|b}[/VIDEO]"),
+                   html, css, js, cssDoneIds, jsDoneIds);
+    }));
+}
+
+// =============================================================================
+// ShortCodeTitle — identity & argument contract
+// =============================================================================
+
+void Test_Website_ShortCodes::test_title_tag_name()
+{
+    ShortCodeTitle sc;
+    QCOMPARE(sc.getTag(), QStringLiteral("TITLE"));
+}
+
+void Test_Website_ShortCodes::test_title_available_arguments_count()
+{
+    ShortCodeTitle sc;
+    QCOMPARE(sc.availableArguments().size(), 1);
+}
+
+void Test_Website_ShortCodes::test_title_level_argument_id()
+{
+    ShortCodeTitle sc;
+    const auto &args = sc.availableArguments();
+    QVERIFY(!args.isEmpty());
+    QCOMPARE(args.first().id, QStringLiteral("level"));
+}
+
+void Test_Website_ShortCodes::test_title_level_argument_is_mandatory()
+{
+    ShortCodeTitle sc;
+    const auto &args = sc.availableArguments();
+    QVERIFY(!args.isEmpty());
+    QVERIFY(args.first().mandatory);
+}
+
+void Test_Website_ShortCodes::test_title_level_argument_has_six_allowed_values()
+{
+    ShortCodeTitle sc;
+    const auto &args = sc.availableArguments();
+    QVERIFY(!args.isEmpty());
+    const QStringList &allowed = args.first().allowedValues;
+    QCOMPARE(allowed.size(), 6);
+    QVERIFY(allowed.contains(QStringLiteral("1")));
+    QVERIFY(allowed.contains(QStringLiteral("6")));
+}
+
+void Test_Website_ShortCodes::test_title_level_argument_not_translatable()
+{
+    ShortCodeTitle sc;
+    const auto &args = sc.availableArguments();
+    QVERIFY(!args.isEmpty());
+    QVERIFY(args.first().translatable == AbstractShortCode::Translatable::No);
+}
+
+// =============================================================================
+// ShortCodeTitle — registry & factory
+// =============================================================================
+
+void Test_Website_ShortCodes::test_title_registered_in_all_shortcodes()
+{
+    const auto &all = AbstractShortCode::ALL_SHORTCODES();
+    QVERIFY(all.contains(QStringLiteral("TITLE")));
+    QVERIFY(all.value(QStringLiteral("TITLE")) != nullptr);
+}
+
+void Test_Website_ShortCodes::test_title_for_tag_returns_instance()
+{
+    const AbstractShortCode *sc = AbstractShortCode::forTag(u"TITLE");
+    QVERIFY(sc != nullptr);
+    QCOMPARE(sc->getTag(), QStringLiteral("TITLE"));
+}
+
+// =============================================================================
+// ShortCodeTitle — addCode output
+// =============================================================================
+
+void Test_Website_ShortCodes::test_title_add_code_h1_tag_in_html()
+{
+    ShortCodeTitle sc;
+    const QString html = htmlFrom(sc, QStringLiteral("[TITLE level=\"1\"]Hello[/TITLE]"));
+    QCOMPARE(html, QStringLiteral("<h1>Hello</h1>"));
+}
+
+void Test_Website_ShortCodes::test_title_add_code_h3_tag_in_html()
+{
+    ShortCodeTitle sc;
+    const QString html = htmlFrom(sc, QStringLiteral("[TITLE level=\"3\"]Section[/TITLE]"));
+    QCOMPARE(html, QStringLiteral("<h3>Section</h3>"));
+}
+
+void Test_Website_ShortCodes::test_title_add_code_h6_tag_in_html()
+{
+    ShortCodeTitle sc;
+    const QString html = htmlFrom(sc, QStringLiteral("[TITLE level=\"6\"]Fine print[/TITLE]"));
+    QCOMPARE(html, QStringLiteral("<h6>Fine print</h6>"));
+}
+
+void Test_Website_ShortCodes::test_title_add_code_inner_content_in_html()
+{
+    ShortCodeTitle sc;
+    const QString html = htmlFrom(sc, QStringLiteral("[TITLE level=\"2\"]My heading[/TITLE]"));
+    QVERIFY(html.contains(QStringLiteral("My heading")));
+}
+
+void Test_Website_ShortCodes::test_title_add_code_appends_to_existing_html()
+{
+    ShortCodeTitle sc;
+    const QString prefix = QStringLiteral("<p>before</p>");
+    QString html = prefix;
+    QString css, js;
+    QSet<QString> cssDoneIds, jsDoneIds;
+    sc.addCode(QStringLiteral("[TITLE level=\"1\"]Hi[/TITLE]"), html, css, js, cssDoneIds, jsDoneIds);
+    QVERIFY(html.startsWith(prefix));
+    QVERIFY(html.size() > prefix.size());
+}
+
+void Test_Website_ShortCodes::test_title_add_code_does_not_touch_css()
+{
+    ShortCodeTitle sc;
+    QString html, js;
+    QString css = QStringLiteral("existing-css");
+    QSet<QString> cssDoneIds, jsDoneIds;
+    sc.addCode(QStringLiteral("[TITLE level=\"1\"]Hi[/TITLE]"), html, css, js, cssDoneIds, jsDoneIds);
+    QCOMPARE(css, QStringLiteral("existing-css"));
+    QVERIFY(cssDoneIds.isEmpty());
+}
+
+void Test_Website_ShortCodes::test_title_add_code_does_not_touch_js()
+{
+    ShortCodeTitle sc;
+    QString html, css;
+    QString js = QStringLiteral("existing-js");
+    QSet<QString> cssDoneIds, jsDoneIds;
+    sc.addCode(QStringLiteral("[TITLE level=\"1\"]Hi[/TITLE]"), html, css, js, cssDoneIds, jsDoneIds);
+    QCOMPARE(js, QStringLiteral("existing-js"));
+    QVERIFY(jsDoneIds.isEmpty());
+}
+
+void Test_Website_ShortCodes::test_title_add_code_via_for_tag()
+{
+    const AbstractShortCode *sc = AbstractShortCode::forTag(u"TITLE");
+    QVERIFY(sc != nullptr);
+    const QString html = htmlFrom(*sc, QStringLiteral("[TITLE level=\"4\"]Via factory[/TITLE]"));
+    QCOMPARE(html, QStringLiteral("<h4>Via factory</h4>"));
+}
+
+// =============================================================================
+// ShortCodeTitle — validation error cases
+// =============================================================================
+
+void Test_Website_ShortCodes::test_title_add_code_missing_level_throws()
+{
+    ShortCodeTitle sc;
+    QVERIFY(throwsShortCodeException([&sc] {
+        QString html, css, js;
+        QSet<QString> cssDoneIds, jsDoneIds;
+        sc.addCode(QStringLiteral("[TITLE]Hello[/TITLE]"),
+                   html, css, js, cssDoneIds, jsDoneIds);
+    }));
+}
+
+void Test_Website_ShortCodes::test_title_add_code_invalid_level_zero_throws()
+{
+    ShortCodeTitle sc;
+    QVERIFY(throwsShortCodeException([&sc] {
+        QString html, css, js;
+        QSet<QString> cssDoneIds, jsDoneIds;
+        sc.addCode(QStringLiteral("[TITLE level=\"0\"]Hello[/TITLE]"),
+                   html, css, js, cssDoneIds, jsDoneIds);
+    }));
+}
+
+void Test_Website_ShortCodes::test_title_add_code_invalid_level_seven_throws()
+{
+    ShortCodeTitle sc;
+    QVERIFY(throwsShortCodeException([&sc] {
+        QString html, css, js;
+        QSet<QString> cssDoneIds, jsDoneIds;
+        sc.addCode(QStringLiteral("[TITLE level=\"7\"]Hello[/TITLE]"),
+                   html, css, js, cssDoneIds, jsDoneIds);
+    }));
+}
+
+void Test_Website_ShortCodes::test_title_add_code_invalid_level_alpha_throws()
+{
+    ShortCodeTitle sc;
+    QVERIFY(throwsShortCodeException([&sc] {
+        QString html, css, js;
+        QSet<QString> cssDoneIds, jsDoneIds;
+        sc.addCode(QStringLiteral("[TITLE level=\"h2\"]Hello[/TITLE]"),
+                   html, css, js, cssDoneIds, jsDoneIds);
+    }));
+}
+
+void Test_Website_ShortCodes::test_title_add_code_unknown_argument_throws()
+{
+    ShortCodeTitle sc;
+    QVERIFY(throwsShortCodeException([&sc] {
+        QString html, css, js;
+        QSet<QString> cssDoneIds, jsDoneIds;
+        sc.addCode(QStringLiteral("[TITLE level=\"1\" class=\"big\"]Hello[/TITLE]"),
+                   html, css, js, cssDoneIds, jsDoneIds);
+    }));
+}
+
+void Test_Website_ShortCodes::test_title_add_code_mismatched_tags_throws()
+{
+    ShortCodeTitle sc;
+    QVERIFY(throwsShortCodeException([&sc] {
+        QString html, css, js;
+        QSet<QString> cssDoneIds, jsDoneIds;
+        sc.addCode(QStringLiteral("[TITLE level=\"1\"]Hello[/VIDEO]"),
+                   html, css, js, cssDoneIds, jsDoneIds);
+    }));
+}
+
+void Test_Website_ShortCodes::test_title_add_code_duplicate_argument_throws()
+{
+    ShortCodeTitle sc;
+    QVERIFY(throwsShortCodeException([&sc] {
+        QString html, css, js;
+        QSet<QString> cssDoneIds, jsDoneIds;
+        sc.addCode(QStringLiteral("[TITLE level=\"1\" level=\"2\"]Hello[/TITLE]"),
                    html, css, js, cssDoneIds, jsDoneIds);
     }));
 }

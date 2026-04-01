@@ -25,6 +25,10 @@ class ShortCodeLinkFix : public AbstractShortCodeLink
 public:
     QString getTag() const override;
 
+    QDialog *createEditDialog(QWidget *parent = nullptr) const override;
+    QString getButtonName() const override;
+    QString getButtonToolTip() const override;
+
 protected:
     /** url is mandatory and never translated. */
     ArgumentDef urlArgumentDef() const override;

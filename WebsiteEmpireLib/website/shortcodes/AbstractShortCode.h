@@ -9,6 +9,9 @@
 #include <QStringList>
 #include <QStringView>
 
+class QDialog;
+class QWidget;
+
 /**
  * Base class for all shortcode implementations using the Recorder self-registration pattern.
  *
@@ -98,6 +101,42 @@ public:
     // is declared pure virtual in WebCodeAdder and must be implemented by each
     // concrete shortcode. Implementations should call parseAndValidate() internally.
     // Use cssDoneIds / jsDoneIds to avoid emitting the same CSS / JS block twice.
+
+    // -------------------------------------------------------------------------
+    // UI integration — editor dialogs
+    // -------------------------------------------------------------------------
+
+    /**
+     * Creates and returns a heap-allocated QDialog for editing this shortcode.
+     * The caller takes ownership and is responsible for deleting it.
+     * Each implementation must set a descriptive windowTitle, either in the
+     * dialog's .ui file or via setWindowTitle() for shared dialog classes.
+     */
+    virtual QDialog *createEditDialog(QWidget *parent = nullptr) const = 0;
+
+    /**
+     * Returns the opening shortcode tag text built from the dialog's current
+     * field values (e.g. [VIDEO url="https://..."]).
+     * The dialog must have been created by createEditDialog().
+     */
+    virtual QString getTextBegin(const QDialog *dialog) const = 0;
+
+    /**
+     * Returns the closing shortcode tag text (e.g. [/VIDEO]).
+     * The dialog must have been created by createEditDialog().
+     */
+    virtual QString getTextEnd(const QDialog *dialog) const = 0;
+
+    /**
+     * Short label for the toolbar/palette button that triggers this shortcode's
+     * edit dialog (e.g. "Video", "Image (fixed)").
+     */
+    virtual QString getButtonName() const = 0;
+
+    /**
+     * Tooltip for the toolbar/palette button (e.g. "Insert a video shortcode").
+     */
+    virtual QString getButtonToolTip() const = 0;
 
     // -------------------------------------------------------------------------
     // Factory / registry

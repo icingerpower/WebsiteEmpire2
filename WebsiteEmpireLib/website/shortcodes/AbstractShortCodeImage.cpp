@@ -1,5 +1,7 @@
 #include "AbstractShortCodeImage.h"
 
+#include "dialogs/ShortCodeImageDialog.h"
+
 #include <QRegularExpression>
 
 QList<AbstractShortCode::ArgumentDef> AbstractShortCodeImage::availableArguments() const
@@ -59,4 +61,42 @@ void AbstractShortCodeImage::addCode(QStringView     origContent,
     Q_UNUSED(js)
     Q_UNUSED(cssDoneIds)
     Q_UNUSED(jsDoneIds)
+}
+
+QString AbstractShortCodeImage::getTextBegin(const QDialog *dialog) const
+{
+    const auto *d = qobject_cast<const ShortCodeImageDialog *>(dialog);
+    Q_ASSERT(d != nullptr);
+    QString text;
+    text += QStringLiteral("[");
+    text += getTag();
+    text += QStringLiteral(" id=\"");
+    text += d->id();
+    text += QStringLiteral("\" fileName=\"");
+    text += d->fileName();
+    text += QStringLiteral("\" alt=\"");
+    text += d->alt();
+    text += QStringLiteral("\"");
+    if (d->imageWidth() > 0) {
+        text += QStringLiteral(" width=\"");
+        text += QString::number(d->imageWidth());
+        text += QStringLiteral("\"");
+    }
+    if (d->imageHeight() > 0) {
+        text += QStringLiteral(" height=\"");
+        text += QString::number(d->imageHeight());
+        text += QStringLiteral("\"");
+    }
+    text += QStringLiteral("]");
+    return text;
+}
+
+QString AbstractShortCodeImage::getTextEnd(const QDialog *dialog) const
+{
+    Q_UNUSED(dialog)
+    QString text;
+    text += QStringLiteral("[/");
+    text += getTag();
+    text += QStringLiteral("]");
+    return text;
 }

@@ -50,6 +50,20 @@ public:
                  QSet<QString>  &cssDoneIds,
                  QSet<QString>  &jsDoneIds) const override;
 
+    /**
+     * Builds the opening tag from the ShortCodeLinkDialog's fields, e.g.
+     *   [LINKFIX url="https://example.com" rel="nofollow"]
+     * Uses getTag() so both LINKFIX and LINKTR produce the correct tag name.
+     * Subclasses (ShortCodeLinkFix, ShortCodeLinkTr) inherit this.
+     */
+    QString getTextBegin(const QDialog *dialog) const override;
+
+    /**
+     * Returns "[/TAG]" where TAG comes from getTag().
+     * Subclasses (ShortCodeLinkFix, ShortCodeLinkTr) inherit this.
+     */
+    QString getTextEnd(const QDialog *dialog) const override;
+
 protected:
     /** Returns the ArgumentDef for the "url" argument (subclass-specific). */
     virtual ArgumentDef urlArgumentDef() const = 0;

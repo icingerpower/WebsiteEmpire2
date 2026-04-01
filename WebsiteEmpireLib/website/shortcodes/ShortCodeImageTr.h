@@ -25,6 +25,10 @@ class ShortCodeImageTr : public AbstractShortCodeImage
 public:
     QString getTag() const override;
 
+    QDialog *createEditDialog(QWidget *parent = nullptr) const override;
+    QString getButtonName() const override;
+    QString getButtonToolTip() const override;
+
 protected:
     Translatable idTranslatable() const override;
     Translatable fileNameTranslatable() const override;

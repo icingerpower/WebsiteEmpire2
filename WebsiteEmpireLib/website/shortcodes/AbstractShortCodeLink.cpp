@@ -1,5 +1,7 @@
 #include "AbstractShortCodeLink.h"
 
+#include "dialogs/ShortCodeLinkDialog.h"
+
 QList<AbstractShortCode::ArgumentDef> AbstractShortCodeLink::availableArguments() const
 {
     return {
@@ -39,4 +41,29 @@ void AbstractShortCodeLink::addCode(QStringView     origContent,
     Q_UNUSED(js)
     Q_UNUSED(cssDoneIds)
     Q_UNUSED(jsDoneIds)
+}
+
+QString AbstractShortCodeLink::getTextBegin(const QDialog *dialog) const
+{
+    const auto *d = qobject_cast<const ShortCodeLinkDialog *>(dialog);
+    Q_ASSERT(d != nullptr);
+    QString text;
+    text += QStringLiteral("[");
+    text += getTag();
+    text += QStringLiteral(" url=\"");
+    text += d->url();
+    text += QStringLiteral("\" rel=\"");
+    text += d->rel();
+    text += QStringLiteral("\"]");
+    return text;
+}
+
+QString AbstractShortCodeLink::getTextEnd(const QDialog *dialog) const
+{
+    Q_UNUSED(dialog)
+    QString text;
+    text += QStringLiteral("[/");
+    text += getTag();
+    text += QStringLiteral("]");
+    return text;
 }

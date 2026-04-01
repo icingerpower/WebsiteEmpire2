@@ -1,36 +1,38 @@
-#ifndef SHORTCODEVIDEO_H
-#define SHORTCODEVIDEO_H
+#ifndef SHORTCODETITLE_H
+#define SHORTCODETITLE_H
 
 #include "AbstractShortCode.h"
 
 /**
- * ShortCode [VIDEO][/VIDEO]
+ * ShortCode [TITLE][/TITLE]
  *
- * Embeds a video via a <video> element.
+ * Wraps inner content in a heading element at the requested level.
  *
  * Arguments:
- *   url (mandatory, Translatable::No) — the full video URL
+ *   level (mandatory, Translatable::No) — heading level; must be "1" through "6"
+ *
+ * Output:
+ *   <h{level}>inner content</h{level}>
  *
  * Example:
- *   [VIDEO url="https://youtu.be?id=abc123"][/VIDEO]
+ *   [TITLE level="2"]Introduction[/TITLE]   →   <h2>Introduction</h2>
  */
-class ShortCodeVideo : public AbstractShortCode
+class ShortCodeTitle : public AbstractShortCode
 {
 public:
-    static constexpr const char *ID_URL = "url";
+    static constexpr const char *ID_LEVEL = "level";
 
     QString getTag() const override;
     QList<ArgumentDef> availableArguments() const override;
 
     /**
-     * Validates that the url argument is a non-empty string.
-     * Returns true for all other arguments.
+     * level is fully covered by allowedValues ("1"–"6"); always returns true.
      */
     bool isArgumentValueValid(const QString &argId, const QString &value) const override;
 
     /**
-     * Parses and validates origContent, then appends a <video> element to html.
-     * css, js, cssDoneIds and jsDoneIds are left unchanged (VIDEO emits no CSS or JS).
+     * Parses and validates origContent, then appends <hN>innerContent</hN> to html.
+     * css, js, cssDoneIds and jsDoneIds are left unchanged (TITLE emits no CSS or JS).
      */
     void addCode(QStringView     origContent,
                  QString        &html,
@@ -46,4 +48,4 @@ public:
     QString getButtonToolTip() const override;
 };
 
-#endif // SHORTCODEVIDEO_H
+#endif // SHORTCODETITLE_H
