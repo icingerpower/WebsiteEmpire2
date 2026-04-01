@@ -1,4 +1,7 @@
+include(${CMAKE_CURRENT_LIST_DIR}/shortcodes/shortcodes.cmake)
+
 set(WEBSITE_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/WebCodeAdder.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractBlock.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractBlock.cpp
     ${CMAKE_CURRENT_LIST_DIR}/AbstractEngine.h
@@ -7,4 +10,5 @@ set(WEBSITE_FILES
     ${CMAKE_CURRENT_LIST_DIR}/HostTable.cpp
     ${CMAKE_CURRENT_LIST_DIR}/EngineLanguages.h
     ${CMAKE_CURRENT_LIST_DIR}/EngineLanguages.cpp
+    ${SHORTCODES_FILES}
 )

@@ -84,7 +84,11 @@ QVariant HostTable::data(const QModelIndex &index, int role) const
         case COL_URL:      return row.url;
         case COL_PORT:     return row.port;
         case COL_USERNAME: return row.username;
-        case COL_PASSWORD: return row.password;
+        case COL_PASSWORD:
+            if (role == Qt::DisplayRole) {
+                return row.password.isEmpty() ? QString() : QStringLiteral("****");
+            }
+            return row.password;
         default:           break;
         }
     }

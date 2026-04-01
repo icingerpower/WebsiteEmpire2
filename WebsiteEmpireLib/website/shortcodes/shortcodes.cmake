@@ -1,0 +1,20 @@
+set(SHORTCODES_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractShortCode.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractShortCode.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractShortCodeLink.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractShortCodeLink.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeVideo.h
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeVideo.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeLinkFix.h
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeLinkFix.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeLinkTr.h
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeLinkTr.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeSpinnable.h
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeSpinnable.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractShortCodeImage.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractShortCodeImage.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeImageFix.h
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeImageFix.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeImageTr.h
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeImageTr.cpp
+)

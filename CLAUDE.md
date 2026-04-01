@@ -21,6 +21,41 @@ ctest
 
 Dependencies: Qt6, QCoro6, and a shared `../../common/` directory (sibling to this repo).
 
+## Testing
+
+### Test method naming
+Each Qt test slot name must make the tested class and scenario immediately readable
+without opening the file.  Use the pattern:
+
+```
+test_<shortcode_or_class>_<what_is_tested>
+```
+
+- **`test_video_`**, **`test_linkfix_`**, **`test_linktr_`** — one prefix per concrete class
+- **`test_registry_`** — for behaviour that belongs to no single class (e.g. `forTag` with an unknown tag)
+- Never use a generic prefix like `test_` alone when the test targets a specific class.
+
+```cpp
+// BAD  — impossible to tell which shortcode this covers at a glance
+void test_for_tag_unknown_returns_nullptr();
+void test_add_code_inner_content_in_html();
+
+// GOOD
+void test_registry_for_tag_unknown_returns_nullptr();
+void test_linkfix_add_code_inner_content_in_html();
+void test_linktr_add_code_inner_content_in_html();
+```
+
+### What to cover per shortcode
+For every new shortcode, the test class must include slots for:
+- Tag name (`getTag()`)
+- Argument count, id, mandatory flag, allowedValues, translatability — one slot each
+- Registry presence (`ALL_SHORTCODES`) and `forTag` round-trip
+- `addCode` output: url/content appear in html, default argument values, css/js untouched, append behaviour
+- `addCode` via `forTag` (exercises the full production path)
+- Parse errors: mismatched tags, malformed input, duplicate argument
+- Validation errors: missing mandatory argument, empty value, unknown argument
+
 ## Architecture
 
 The project has three layers:
@@ -213,3 +248,44 @@ This pattern allows users to add missing configuration during operations without
 
 ### Algorithms
 - When Qt containers are compatible, prefer `std` algorithms (`std::find_if`, `std::transform`, etc.) over manual loops for performance and readability.
+
+### AbstractShortCode::addCode — zero-copy rules
+`addCode` is called once per shortcode occurrence per page and is on the hot path for
+generating millions of pages. Every implementation must minimise allocations and copies:
+
+- **Bind hash lookups with `const QString &`** — `QHash::value()` returns by value; capture
+  the result as `const QString &` to avoid an extra copy:
+  ```cpp
+  // BAD  — copies the QString out of the hash
+  const QString url = parsed.arguments.value(QStringLiteral("url"));
+
+  // GOOD — reference into the hash's storage
+  const QString &url = parsed.arguments.value(QStringLiteral("url"));
+  ```
+- **Use `QStringLiteral` for all string literals** — data lives in the binary; no heap
+  allocation, no UTF-8→UTF-16 conversion at runtime. Do **not** wrap them in
+  `static const QString`: `QStringLiteral` is already zero-cost.
+  ```cpp
+  // BAD  — heap-allocates on every call
+  QString tag("<video src=\"");
+
+  // BAD  — static allocation helps nothing; QStringLiteral needs no static wrapper
+  static const QString tag = QStringLiteral("<video src=\"");
+
+  // GOOD — compile-time data, stack wrapper, zero alloc
+  html += QStringLiteral("<video src=\"");
+  ```
+- **Append in parts instead of using `.arg()`** — `.arg()` allocates a new `QString` for
+  the substituted result. Multiple `+=` calls append directly into `html`'s existing buffer:
+  ```cpp
+  // BAD  — one extra heap allocation per call
+  html += QStringLiteral("<video src=\"%1\" controls></video>").arg(url);
+
+  // GOOD — zero intermediate allocations
+  html += QStringLiteral("<video src=\"");
+  html += url;
+  html += QStringLiteral("\" controls></video>");
+  ```
+- **Check `cssDoneIds` / `jsDoneIds` before appending CSS or JS** — identical blocks must
+  be emitted only once per page. Insert the block's id into the set on first write and
+  skip if already present.
