@@ -1,5 +1,6 @@
 #include <QtTest>
 
+#include "website/pages/AbstractPageBlockWidget.h"
 #include "website/pages/PageBlockText.h"
 #include "ExceptionWithTitleText.h"
 
@@ -88,7 +89,7 @@ private slots:
 void Test_Website_PageBlockText::test_pageblocktext_create_edit_widget_returns_non_null()
 {
     PageBlockText block;
-    QWidget *w = block.createEditWidget();
+    AbstractPageBlockWidget *w = block.createEditWidget();
     QVERIFY(w != nullptr);   // 1
     delete w;
 }
@@ -96,7 +97,7 @@ void Test_Website_PageBlockText::test_pageblocktext_create_edit_widget_returns_n
 void Test_Website_PageBlockText::test_pageblocktext_create_edit_widget_has_no_parent()
 {
     PageBlockText block;
-    QWidget *w = block.createEditWidget();
+    AbstractPageBlockWidget *w = block.createEditWidget();
     QVERIFY(w->parent() == nullptr);   // 2
     delete w;
 }
