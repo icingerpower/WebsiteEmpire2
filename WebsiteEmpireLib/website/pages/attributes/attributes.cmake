@@ -1,0 +1,10 @@
+set(ATTRIBUTES_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractAttribute.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractAttribute.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/AttributeCategory.h
+    ${CMAKE_CURRENT_LIST_DIR}/AttributeCategory.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/AttributeProperty.h
+    ${CMAKE_CURRENT_LIST_DIR}/AttributeProperty.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/AttributeQuality.h
+    ${CMAKE_CURRENT_LIST_DIR}/AttributeQuality.cpp
+)

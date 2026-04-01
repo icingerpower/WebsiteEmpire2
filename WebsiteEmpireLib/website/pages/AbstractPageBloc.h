@@ -3,7 +3,10 @@
 
 #include "website/WebCodeAdder.h"
 
+#include <QList>
+
 class AbstractPageBlockWidget;
+class AbstractAttribute;
 
 /**
  * Base class for a page bloc: a self-contained unit that can both contribute
@@ -22,6 +25,16 @@ public:
      * Ownership is transferred to the caller.
      */
     virtual AbstractPageBlockWidget *createEditWidget() = 0;
+
+    /**
+     * Returns the semantic attributes this bloc exposes for indexing and
+     * faceted search (categories, properties, qualities).
+     *
+     * The returned list contains raw pointers to static const instances owned
+     * by the concrete subclass — no allocation, no ownership transfer.
+     * The default implementation returns an empty list.
+     */
+    virtual QList<const AbstractAttribute *> getAttributes() const;
 };
 
 #endif // ABSTRACTPAGEBLOC_H

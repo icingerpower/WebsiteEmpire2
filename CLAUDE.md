@@ -17,9 +17,12 @@ ctest
 ./WebsiteAspireTests/Test_Aspired_Db
 ./WebsiteAspireTests/Test_Aspire_Page_Attributes
 ./WebsiteEmpireTests/Test_Website_Blocks
+./StaticWebsiteServeTests/Test_StaticServe_Db
 ```
 
-Dependencies: Qt6, QCoro6, and a shared `../../common/` directory (sibling to this repo).
+Dependencies: Qt6, QCoro6, Drogon, and a shared `../../common/` directory (sibling to this repo).
+SQLiteCpp is fetched automatically by CMake FetchContent — no manual install needed.
+Drogon must be built from source; see the install instructions in `StaticWebsiteServe/CMakeLists.txt`.
 
 ## Testing
 
@@ -58,9 +61,11 @@ For every new shortcode, the test class must include slots for:
 
 ## Architecture
 
-The project has three layers:
+The project has two independent stacks:
 
-**`WebsiteEmpireLib/`** — static library shared by both apps:
+**Qt stack (Qt6 + QCoro6):**
+
+**`WebsiteEmpireLib/`** — static library shared by both Qt apps:
 - `aspire/` — web scraping framework
 - `website/` — website generation (early stage)
 - `ExceptionWithTitleText` — custom Qt exception used throughout
@@ -68,6 +73,21 @@ The project has three layers:
 **`WebsiteAspire/`** — GUI app for running scrapers and generating databases
 
 **`WebsiteEmpire/`** — GUI app for building websites from scraped data
+
+**Serve stack (Drogon + SQLiteCpp, Qt-free):**
+
+**`StaticWebsiteServeLib/`** — Qt-free static library (pure C++/STL + SQLiteCpp):
+- `db/` — `ContentDb`, `ImageDb`, `StatsDb` — open SQLite files and ensure schema
+- `model/` — `PageRecord`, `ImageRecord` — plain value structs
+- `repository/` — `IPageRepository`, `IImageRepository`, `IStatsWriter`, `IStatsReader` interfaces + `StatsWriterSQLite` implementation
+
+**`StaticWebsiteServe/`** — Drogon HTTP server executable:
+- `controllers/` — `PageController` (serves gzip HTML), `ImageController` (serves image blobs), `StatsController` (receives JS beacon POSTs)
+- Drogon auto-creates controllers; inject dependencies via static setters before `app().run()`
+
+**`StaticWebsiteServeTests/`** — Drogon test framework (`drogon_test.h`):
+- Tests hit real temporary SQLite files — no mocking
+- Use `CHECK(a == b)` for equality; Drogon has no `CHECK_EQ`
 
 ### Aspire Module
 
