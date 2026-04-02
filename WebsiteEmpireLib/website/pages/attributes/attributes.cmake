@@ -7,4 +7,8 @@ set(ATTRIBUTES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/AttributeProperty.cpp
     ${CMAKE_CURRENT_LIST_DIR}/AttributeQuality.h
     ${CMAKE_CURRENT_LIST_DIR}/AttributeQuality.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CategoryTable.h
+    ${CMAKE_CURRENT_LIST_DIR}/CategoryTable.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CategoryTreeModel.h
+    ${CMAKE_CURRENT_LIST_DIR}/CategoryTreeModel.cpp
 )

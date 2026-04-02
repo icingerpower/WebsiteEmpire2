@@ -4,4 +4,7 @@ set(BLOCS_WIDGETS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocTextWidget.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocTextWidget.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocTextWidget.ui
+    ${CMAKE_CURRENT_LIST_DIR}/CategoryEditorWidget.h
+    ${CMAKE_CURRENT_LIST_DIR}/CategoryEditorWidget.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CategoryEditorWidget.ui
 )
