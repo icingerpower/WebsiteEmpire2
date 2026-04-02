@@ -20,3 +20,17 @@ target_include_directories(Test_StaticServe_Db
 )
 
 add_test(NAME Test_StaticServe_Db COMMAND Test_StaticServe_Db)
+
+add_executable(Test_StaticServe_Repositories
+    test_repositories.cpp
+)
+
+target_link_libraries(Test_StaticServe_Repositories
+    PRIVATE Drogon::Drogon StaticWebsiteServeLib
+)
+
+target_include_directories(Test_StaticServe_Repositories
+    PRIVATE ../StaticWebsiteServeLib
+)
+
+add_test(NAME Test_StaticServe_Repositories COMMAND Test_StaticServe_Repositories)

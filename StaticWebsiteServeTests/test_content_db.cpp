@@ -7,19 +7,79 @@
 #include "db/StatsDb.h"
 
 // ---------------------------------------------------------------------------
-// ContentDb
+// ContentDb — pages table
 // ---------------------------------------------------------------------------
 
-DROGON_TEST(test_contentdb_schema_created_on_open)
+DROGON_TEST(test_contentdb_pages_table_created)
 {
-    const std::string path = std::filesystem::temp_directory_path() / "test_content.db";
+    const std::string path = std::filesystem::temp_directory_path() / "test_content_pages.db";
     std::filesystem::remove(path);
 
     ContentDb db(path);
 
-    // Schema must exist — querying the table must not throw.
-    SQLite::Statement q(db.database(), "SELECT COUNT(*) FROM pages");
-    CHECK(q.executeStep());
+    SQLite::Statement q(db.database(),
+        "SELECT id, path, domain, lang, etag, updated_at FROM pages LIMIT 0");
+    CHECK(q.executeStep() == false);  // table exists and schema is correct
+
+    std::filesystem::remove(path);
+}
+
+DROGON_TEST(test_contentdb_page_variants_table_created)
+{
+    const std::string path = std::filesystem::temp_directory_path() / "test_content_variants.db";
+    std::filesystem::remove(path);
+
+    ContentDb db(path);
+
+    SQLite::Statement q(db.database(),
+        "SELECT id, page_id, label, is_active, html_gz, etag FROM page_variants LIMIT 0");
+    CHECK(q.executeStep() == false);
+
+    std::filesystem::remove(path);
+}
+
+DROGON_TEST(test_contentdb_menu_fragments_table_created)
+{
+    const std::string path = std::filesystem::temp_directory_path() / "test_content_menu.db";
+    std::filesystem::remove(path);
+
+    ContentDb db(path);
+
+    SQLite::Statement q(db.database(),
+        "SELECT id, domain, lang, html_gz, version_id, updated_at FROM menu_fragments LIMIT 0");
+    CHECK(q.executeStep() == false);
+
+    std::filesystem::remove(path);
+}
+
+DROGON_TEST(test_contentdb_redirects_table_created)
+{
+    const std::string path = std::filesystem::temp_directory_path() / "test_content_redirects.db";
+    std::filesystem::remove(path);
+
+    ContentDb db(path);
+
+    SQLite::Statement q(db.database(),
+        "SELECT old_path, new_path, status_code FROM redirects LIMIT 0");
+    CHECK(q.executeStep() == false);
+
+    std::filesystem::remove(path);
+}
+
+DROGON_TEST(test_contentdb_schema_idempotent)
+{
+    // Opening the same DB twice must not throw (CREATE TABLE IF NOT EXISTS).
+    const std::string path = std::filesystem::temp_directory_path() / "test_content_idempotent.db";
+    std::filesystem::remove(path);
+
+    {
+        ContentDb db(path);
+    }
+    {
+        ContentDb db(path);  // second open — must not throw
+        SQLite::Statement q(db.database(), "SELECT COUNT(*) FROM pages");
+        CHECK(q.executeStep());
+    }
 
     std::filesystem::remove(path);
 }

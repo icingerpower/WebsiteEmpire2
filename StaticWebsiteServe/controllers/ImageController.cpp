@@ -2,17 +2,35 @@
 
 #include <drogon/HttpResponse.h>
 
-ImageDb *ImageController::s_imageDb = nullptr;
+IImageRepository *ImageController::s_imageRepo = nullptr;
 
-void ImageController::setImageDb(ImageDb *db)
+void ImageController::setImageRepository(IImageRepository *repo)
 {
-    s_imageDb = db;
+    s_imageRepo = repo;
 }
 
 void ImageController::serveImage(const drogon::HttpRequestPtr                          &req,
                                   std::function<void(const drogon::HttpResponsePtr &)> &&callback,
                                   const std::string                                     &filename)
 {
-    // TODO: extract domain from req->getHeader("Host"), resolve name→id, stream blob.
-    callback(drogon::HttpResponse::newNotFoundResponse());
+    // Extract bare hostname from Host header (strip port if present).
+    std::string domain = req->getHeader("Host");
+    const auto colonPos = domain.find(':');
+    if (colonPos != std::string::npos) {
+        domain = domain.substr(0, colonPos);
+    }
+
+    const auto imageOpt = s_imageRepo->findByDomainAndFilename(domain, filename);
+    if (!imageOpt) {
+        callback(drogon::HttpResponse::newNotFoundResponse());
+        return;
+    }
+
+    auto resp = drogon::HttpResponse::newHttpResponse();
+    resp->setStatusCode(drogon::k200OK);
+    resp->addHeader("Content-Type", imageOpt->mimeType);
+    resp->addHeader("Cache-Control", "public, max-age=31536000, immutable");
+    resp->setBody(std::string(reinterpret_cast<const char *>(imageOpt->blob.data()),
+                               imageOpt->blob.size()));
+    callback(resp);
 }

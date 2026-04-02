@@ -20,6 +20,10 @@ add_library(StaticWebsiteServeLib STATIC
     db/ImageDb.cpp
     db/StatsDb.cpp
     repository/StatsWriterSQLite.cpp
+    repository/PageRepositorySQLite.cpp
+    repository/MenuRepositorySQLite.cpp
+    repository/RedirectRepositorySQLite.cpp
+    repository/ImageRepositorySQLite.cpp
 )
 
 target_include_directories(StaticWebsiteServeLib
