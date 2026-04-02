@@ -34,6 +34,19 @@ void PageBlocCategory::addCode(QStringView    origContent,
         return;
     }
 
+    // Resolve names first — skip the whole block if every id is unknown.
+    QStringList names;
+    names.reserve(ids.size());
+    for (const int id : std::as_const(ids)) {
+        const CategoryTable::CategoryRow *row = m_table.categoryById(id);
+        if (row) {
+            names.append(row->name);
+        }
+    }
+    if (names.isEmpty()) {
+        return;
+    }
+
     static const QString CSS_ID = QStringLiteral("page-bloc-category");
     if (!cssDoneIds.contains(CSS_ID)) {
         cssDoneIds.insert(CSS_ID);
@@ -45,13 +58,9 @@ void PageBlocCategory::addCode(QStringView    origContent,
     }
 
     html += QStringLiteral("<ul class=\"categories\">");
-    for (const int id : std::as_const(ids)) {
-        const CategoryTable::CategoryRow *row = m_table.categoryById(id);
-        if (!row) {
-            continue;
-        }
+    for (const QString &name : std::as_const(names)) {
         html += QStringLiteral("<li class=\"category\">");
-        html += row->name;
+        html += name;
         html += QStringLiteral("</li>");
     }
     html += QStringLiteral("</ul>");

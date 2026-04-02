@@ -30,3 +30,8 @@ add_executable(Test_Website_ShortCodes test_website_shortcodes.cpp)
 add_test(NAME Test_Website_ShortCodes COMMAND Test_Website_ShortCodes)
 target_link_libraries(Test_Website_ShortCodes PRIVATE Qt${QT_VERSION_MAJOR}::Test QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
 target_include_directories(Test_Website_ShortCodes PRIVATE ../WebsiteEmpireLib)
+
+add_executable(Test_Website_Engine_Articles test_website_engine_articles.cpp)
+add_test(NAME Test_Website_Engine_Articles COMMAND Test_Website_Engine_Articles)
+target_link_libraries(Test_Website_Engine_Articles PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Widgets QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+target_include_directories(Test_Website_Engine_Articles PRIVATE ../WebsiteEmpireLib)

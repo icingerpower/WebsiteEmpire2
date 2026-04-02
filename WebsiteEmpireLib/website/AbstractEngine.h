@@ -8,6 +8,7 @@
 #include <QString>
 #include <QStringList>
 
+class AbstractPageType;
 class HostTable;
 
 // Base class for website-building engines.
@@ -53,6 +54,12 @@ public:
     // before the instance is usable.
     virtual AbstractEngine    *create(QObject *parent = nullptr) const = 0;
 
+    // Returns the page types that compose a page in this engine.
+    // The list is empty before init() is called; after init() it contains at
+    // least one entry.  Implementations must store the list as a member and
+    // return a const reference so that callers pay no allocation cost.
+    virtual const QList<const AbstractPageType *> &getPageTypes() const = 0;
+
     // Returns all registered engine prototypes keyed by getId().
     static const QMap<QString, const AbstractEngine *> &ALL_ENGINES();
 
@@ -80,6 +87,13 @@ public:
     bool          setData   (const QModelIndex &index, const QVariant &value,
                              int role = Qt::EditRole) override;
     Qt::ItemFlags flags     (const QModelIndex &index) const override;
+
+protected:
+    // Called at the end of init() with the resolved working directory.
+    // Subclasses override this to (re)create page types that depend on the
+    // working directory (e.g. a CategoryTable backed by that directory).
+    // The default implementation is a no-op.
+    virtual void _onInit(const QDir &workingDir);
 
 private:
     struct DomainRow {

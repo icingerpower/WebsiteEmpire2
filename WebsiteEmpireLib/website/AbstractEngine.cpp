@@ -44,7 +44,10 @@ void AbstractEngine::init(const QDir &workingDir, const HostTable &hostTable)
     m_workingDir = workingDir;
     m_hostTable  = &hostTable;
     _load();
+    _onInit(workingDir);
 }
+
+void AbstractEngine::_onInit(const QDir &) {} // default: no-op
 
 // ---- Public API -------------------------------------------------------------
 

@@ -1,6 +1,9 @@
 #include <QtTest>
 
+#include <QTemporaryDir>
+
 #include "website/pages/PageTypeArticle.h"
+#include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/blocs/AbstractPageBloc.h"
 
 // =============================================================================
@@ -8,6 +11,18 @@
 // =============================================================================
 
 namespace {
+
+// Owns the working directory and CategoryTable so PageTypeArticle stays valid.
+struct ArticleFixture {
+    QTemporaryDir   dir;
+    CategoryTable   categoryTable;
+    PageTypeArticle article;
+
+    ArticleFixture()
+        : categoryTable(QDir(dir.path()))
+        , article(categoryTable)
+    {}
+};
 
 // Runs article.addCode() and returns the html output.
 QString htmlFrom(PageTypeArticle &article, const QString &text)
@@ -71,21 +86,24 @@ private slots:
 
 void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_returns_one_bloc()
 {
-    PageTypeArticle article;
-    QVERIFY(article.getPageBlocs().size() == 1);   // 1
+    ArticleFixture f;
+    // Two blocs: PageBlocCategory (first) + PageBlocText (second).
+    QVERIFY(f.article.getPageBlocs().size() == 2);   // 1
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_bloc_is_non_null()
 {
-    PageTypeArticle article;
-    QVERIFY(article.getPageBlocs().first() != nullptr);   // 2
+    ArticleFixture f;
+    for (const AbstractPageBloc *bloc : f.article.getPageBlocs()) {
+        QVERIFY(bloc != nullptr);   // 2
+    }
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_returns_same_ref_on_repeated_calls()
 {
-    PageTypeArticle article;
-    const QList<const AbstractPageBloc *> *first  = &article.getPageBlocs();
-    const QList<const AbstractPageBloc *> *second = &article.getPageBlocs();
+    ArticleFixture f;
+    const QList<const AbstractPageBloc *> *first  = &f.article.getPageBlocs();
+    const QList<const AbstractPageBloc *> *second = &f.article.getPageBlocs();
     QVERIFY(first == second);   // 3
 }
 
@@ -95,17 +113,17 @@ void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_returns_same_ref_
 
 void Test_PageTypeArticle::test_pagetypearticle_get_attributes_empty_by_default()
 {
-    // PageBlocText exposes no attributes — the aggregated list must be empty.
-    PageTypeArticle article;
-    QVERIFY(article.getAttributes().isEmpty());   // 4
+    // Neither bloc has content set — the aggregated attribute list must be empty.
+    ArticleFixture f;
+    QVERIFY(f.article.getAttributes().isEmpty());   // 4
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_get_attributes_returns_same_ref_on_repeated_calls()
 {
     // The lazy cache must return the same list address every time.
-    PageTypeArticle article;
-    const QList<const AbstractAttribute *> *first  = &article.getAttributes();
-    const QList<const AbstractAttribute *> *second = &article.getAttributes();
+    ArticleFixture f;
+    const QList<const AbstractAttribute *> *first  = &f.article.getAttributes();
+    const QList<const AbstractAttribute *> *second = &f.article.getAttributes();
     QVERIFY(first == second);   // 5
 }
 
@@ -115,26 +133,26 @@ void Test_PageTypeArticle::test_pagetypearticle_get_attributes_returns_same_ref_
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_empty_content_no_html()
 {
-    PageTypeArticle article;
-    const auto &html = htmlFrom(article, QStringLiteral(""));
+    ArticleFixture f;
+    const auto &html = htmlFrom(f.article, QStringLiteral(""));
     QVERIFY(html.isEmpty());   // 6
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_whitespace_only_no_html()
 {
-    PageTypeArticle article;
-    const auto &html = htmlFrom(article, QStringLiteral("   \n\n   \n   "));
+    ArticleFixture f;
+    const auto &html = htmlFrom(f.article, QStringLiteral("   \n\n   \n   "));
     QVERIFY(html.isEmpty());   // 7
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_empty_content_leaves_css_js_unchanged()
 {
-    PageTypeArticle article;
+    ArticleFixture f;
     QString html;
     QString css = QStringLiteral("existing-css");
     QString js  = QStringLiteral("existing-js");
     QSet<QString> cssDoneIds, jsDoneIds;
-    article.addCode(QStringLiteral(""), html, css, js, cssDoneIds, jsDoneIds);
+    f.article.addCode(QStringLiteral(""), html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(css == QStringLiteral("existing-css"));   // 8
     QVERIFY(js  == QStringLiteral("existing-js"));    // 9
 }
@@ -145,44 +163,44 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_empty_content_leaves_css
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_single_para_wrapped_in_p()
 {
-    PageTypeArticle article;
-    const auto &html = htmlFrom(article, QStringLiteral("Hello world"));
+    ArticleFixture f;
+    const auto &html = htmlFrom(f.article, QStringLiteral("Hello world"));
     QVERIFY(html.startsWith(QStringLiteral("<p>")));   // 10
     QVERIFY(html.endsWith(QStringLiteral("</p>")));    // 11
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_single_para_text_preserved()
 {
-    PageTypeArticle article;
-    const auto &html = htmlFrom(article, QStringLiteral("Hello world"));
+    ArticleFixture f;
+    const auto &html = htmlFrom(f.article, QStringLiteral("Hello world"));
     QVERIFY(html.contains(QStringLiteral("Hello world")));   // 12
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_single_para_css_untouched()
 {
-    PageTypeArticle article;
+    ArticleFixture f;
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    article.addCode(QStringLiteral("Some text"), html, css, js, cssDoneIds, jsDoneIds);
+    f.article.addCode(QStringLiteral("Some text"), html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(css.isEmpty());   // 13
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_single_para_js_untouched()
 {
-    PageTypeArticle article;
+    ArticleFixture f;
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    article.addCode(QStringLiteral("Some text"), html, css, js, cssDoneIds, jsDoneIds);
+    f.article.addCode(QStringLiteral("Some text"), html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(js.isEmpty());   // 14
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_appends_to_existing_html()
 {
-    PageTypeArticle article;
+    ArticleFixture f;
     QString html = QStringLiteral("prefix");
     QString css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    article.addCode(QStringLiteral("new"), html, css, js, cssDoneIds, jsDoneIds);
+    f.article.addCode(QStringLiteral("new"), html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.startsWith(QStringLiteral("prefix")));        // 15
     QVERIFY(html.contains(QStringLiteral("<p>new</p>")));      // 16
 }
@@ -193,31 +211,31 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_appends_to_existing_html
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_two_paragraphs_produce_two_p_tags()
 {
-    PageTypeArticle article;
-    const auto &html = htmlFrom(article, QStringLiteral("first\n\nsecond"));
+    ArticleFixture f;
+    const auto &html = htmlFrom(f.article, QStringLiteral("first\n\nsecond"));
     QVERIFY(html.count(QStringLiteral("<p>"))  == 2);   // 17
     QVERIFY(html.count(QStringLiteral("</p>")) == 2);   // 18
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_two_paragraphs_content_preserved()
 {
-    PageTypeArticle article;
-    const auto &html = htmlFrom(article, QStringLiteral("first\n\nsecond"));
+    ArticleFixture f;
+    const auto &html = htmlFrom(f.article, QStringLiteral("first\n\nsecond"));
     QVERIFY(html.contains(QStringLiteral("first")));    // 19
     QVERIFY(html.contains(QStringLiteral("second")));   // 20
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_paragraphs_appear_in_order()
 {
-    PageTypeArticle article;
-    const auto &html = htmlFrom(article, QStringLiteral("alpha\n\nbeta"));
+    ArticleFixture f;
+    const auto &html = htmlFrom(f.article, QStringLiteral("alpha\n\nbeta"));
     QVERIFY(html.indexOf(QStringLiteral("alpha")) < html.indexOf(QStringLiteral("beta")));   // 21
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_three_paragraphs_produce_three_p_tags()
 {
-    PageTypeArticle article;
-    const auto &html = htmlFrom(article, QStringLiteral("x\n\ny\n\nz"));
+    ArticleFixture f;
+    const auto &html = htmlFrom(f.article, QStringLiteral("x\n\ny\n\nz"));
     QVERIFY(html.count(QStringLiteral("<p>"))  == 3);                          // 22
     QVERIFY(html.count(QStringLiteral("</p>")) == 3);                          // 23
     QVERIFY(html == QStringLiteral("<p>x</p><p>y</p><p>z</p>"));               // 24
@@ -229,27 +247,27 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_three_paragraphs_produce
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_video_shortcode_expanded()
 {
-    PageTypeArticle article;
+    ArticleFixture f;
     const auto &html = htmlFrom(
-        article,
+        f.article,
         QStringLiteral("[VIDEO url=\"https://example.com/video.mp4\"][/VIDEO]"));
     QVERIFY(html.contains(QStringLiteral("<video")));   // 25
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_video_shortcode_tag_absent_from_output()
 {
-    PageTypeArticle article;
+    ArticleFixture f;
     const auto &html = htmlFrom(
-        article,
+        f.article,
         QStringLiteral("[VIDEO url=\"https://example.com/video.mp4\"][/VIDEO]"));
     QVERIFY(!html.contains(QStringLiteral("[VIDEO")));   // 26
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_video_url_in_output()
 {
-    PageTypeArticle article;
+    ArticleFixture f;
     const auto &html = htmlFrom(
-        article,
+        f.article,
         QStringLiteral("[VIDEO url=\"https://example.com/video.mp4\"][/VIDEO]"));
     QVERIFY(html.contains(QStringLiteral("https://example.com/video.mp4")));   // 27
 }
@@ -261,11 +279,11 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_video_url_in_output()
 void Test_PageTypeArticle::test_pagetypearticle_addcode_two_calls_accumulate_html()
 {
     // Calling addCode twice on the same buffers must accumulate both outputs.
-    PageTypeArticle article;
+    ArticleFixture f;
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    article.addCode(QStringLiteral("first"), html, css, js, cssDoneIds, jsDoneIds);
-    article.addCode(QStringLiteral("second"), html, css, js, cssDoneIds, jsDoneIds);
+    f.article.addCode(QStringLiteral("first"), html, css, js, cssDoneIds, jsDoneIds);
+    f.article.addCode(QStringLiteral("second"), html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.contains(QStringLiteral("<p>first</p>")));    // 28
     QVERIFY(html.contains(QStringLiteral("<p>second</p>")));   // 29
     QVERIFY(html.indexOf(QStringLiteral("first")) < html.indexOf(QStringLiteral("second")));   // 30

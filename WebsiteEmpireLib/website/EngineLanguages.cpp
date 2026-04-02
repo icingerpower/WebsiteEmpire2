@@ -1,5 +1,8 @@
 #include "EngineLanguages.h"
+
 #include "CountryLangManager.h"
+#include "website/pages/PageTypeArticle.h"
+#include "website/pages/attributes/CategoryTable.h"
 
 #include <QLocale>
 
@@ -9,6 +12,8 @@ EngineLanguages::EngineLanguages(QObject *parent)
     : AbstractEngine(parent)
 {
 }
+
+EngineLanguages::~EngineLanguages() = default;
 
 QString EngineLanguages::getId() const
 {
@@ -35,4 +40,24 @@ QList<AbstractEngine::Variation> EngineLanguages::getVariations() const
         vars.append({ code, QLocale::languageToString(locale.language()) });
     }
     return vars;
+}
+
+const QList<const AbstractPageType *> &EngineLanguages::getPageTypes() const
+{
+    return m_pageTypes;
+}
+
+CategoryTable &EngineLanguages::categoryTable() const
+{
+    Q_ASSERT(m_categoryTable);
+    return *m_categoryTable;
+}
+
+void EngineLanguages::_onInit(const QDir &workingDir)
+{
+    m_articleType.reset();   // release CategoryTable & before destroying the table
+    m_categoryTable.reset(new CategoryTable(workingDir));
+    m_articleType.reset(new PageTypeArticle(*m_categoryTable));
+    m_pageTypes.clear();
+    m_pageTypes.append(m_articleType.data());
 }
