@@ -3,7 +3,9 @@
 
 #include "dialogs/DialogPickEngine.h"
 #include "panes/PaneDomains.h"
+#include "panes/PaneSettings.h"
 #include "website/AbstractEngine.h"
+#include "website/WebsiteSettingsTable.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
 
 #include <QSettings>
@@ -26,6 +28,8 @@ void MainWindow::_init()
     const QDir workingDir = WorkingDirectoryManager::instance()->workingDir();
 
     m_hostTable.reset(new HostTable(workingDir));
+    m_settingsTable.reset(new WebsiteSettingsTable(workingDir));
+    ui->tabSettings->setSettingsTable(m_settingsTable.data());
 
     const auto settings = WorkingDirectoryManager::instance()->settings();
     const QString engineId = settings->value(DialogPickEngine::settingsKey()).toString();

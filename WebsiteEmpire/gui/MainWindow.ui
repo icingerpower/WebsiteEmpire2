@@ -25,6 +25,11 @@
         <string>Domains</string>
        </attribute>
       </widget>
+      <widget class="PaneSettings" name="tabSettings">
+       <attribute name="title">
+        <string>Settings</string>
+       </attribute>
+      </widget>
      </widget>
     </item>
    </layout>
@@ -46,6 +51,12 @@
    <class>PaneDomains</class>
    <extends>QWidget</extends>
    <header>gui/panes/PaneDomains.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>PaneSettings</class>
+   <extends>QWidget</extends>
+   <header>gui/panes/PaneSettings.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

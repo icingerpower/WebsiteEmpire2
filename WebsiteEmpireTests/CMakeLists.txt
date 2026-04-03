@@ -35,3 +35,8 @@ add_executable(Test_Website_Engine_Articles test_website_engine_articles.cpp)
 add_test(NAME Test_Website_Engine_Articles COMMAND Test_Website_Engine_Articles)
 target_link_libraries(Test_Website_Engine_Articles PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Widgets QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
 target_include_directories(Test_Website_Engine_Articles PRIVATE ../WebsiteEmpireLib)
+
+add_executable(Test_Website_Settings test_website_settings.cpp)
+add_test(NAME Test_Website_Settings COMMAND Test_Website_Settings)
+target_link_libraries(Test_Website_Settings PRIVATE Qt${QT_VERSION_MAJOR}::Test QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+target_include_directories(Test_Website_Settings PRIVATE ../WebsiteEmpireLib)

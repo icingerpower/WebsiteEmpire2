@@ -7,6 +7,7 @@
 #include "website/HostTable.h"
 
 class AbstractEngine;
+class WebsiteSettingsTable;
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -23,8 +24,9 @@ public:
 private:
     void _init();
 
-    Ui::MainWindow              *ui;
-    QScopedPointer<HostTable>    m_hostTable;
-    QScopedPointer<AbstractEngine> m_engine;
+    Ui::MainWindow                      *ui;
+    QScopedPointer<HostTable>            m_hostTable;
+    QScopedPointer<AbstractEngine>       m_engine;
+    QScopedPointer<WebsiteSettingsTable> m_settingsTable;
 };
 #endif // MAINWINDOW_H

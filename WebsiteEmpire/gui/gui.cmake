@@ -5,6 +5,9 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneDomains.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneDomains.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneDomains.ui
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneSettings.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneSettings.h
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneSettings.ui
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.ui

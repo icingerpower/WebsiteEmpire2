@@ -13,6 +13,8 @@ set(WEBSITE_FILES
     ${CMAKE_CURRENT_LIST_DIR}/EngineLanguages.cpp
     ${CMAKE_CURRENT_LIST_DIR}/EngineArticles.h
     ${CMAKE_CURRENT_LIST_DIR}/EngineArticles.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/WebsiteSettingsTable.h
+    ${CMAKE_CURRENT_LIST_DIR}/WebsiteSettingsTable.cpp
     ${SHORTCODES_FILES}
     ${PAGES_FILES}
 )
