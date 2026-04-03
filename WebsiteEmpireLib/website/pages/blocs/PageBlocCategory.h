@@ -33,12 +33,26 @@ class PageBlocCategory : public QObject, public AbstractPageBloc
     Q_OBJECT
 
 public:
+    static constexpr const char *KEY_CATEGORIES = "categories";
+
     explicit PageBlocCategory(CategoryTable &table, QObject *parent = nullptr);
     ~PageBlocCategory() override = default;
 
     // Sets the current content (comma-separated category ids) and rebuilds
     // the attribute list returned by getAttributes().
     void setContent(const QString &content);
+
+    /**
+     * Reads KEY_CATEGORIES (comma-separated integer ids) from values.
+     * Delegates to setContent(). Unknown keys are silently ignored.
+     */
+    void load(const QHash<QString, QString> &values) override;
+
+    /**
+     * Writes the current selected ids as a comma-separated string under
+     * KEY_CATEGORIES. Ids are written in sorted order for stability.
+     */
+    void save(QHash<QString, QString> &values) const override;
 
     // WebCodeAdder interface.
     // Renders selected categories as <ul class="categories"><li>…</li></ul>.

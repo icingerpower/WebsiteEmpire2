@@ -5,10 +5,25 @@
 #include <QRegularExpression>
 
 // =============================================================================
+// load / save
+// =============================================================================
+
+void PageBlocText::load(const QHash<QString, QString> &values)
+{
+    // Unknown keys are silently ignored for forward compatibility.
+    m_text = values.value(QLatin1String(KEY_TEXT));
+}
+
+void PageBlocText::save(QHash<QString, QString> &values) const
+{
+    values.insert(QLatin1String(KEY_TEXT), m_text);
+}
+
+// =============================================================================
 // addCode
 // =============================================================================
 
-void PageBlocText::addCode(QStringView     origContent,
+void PageBlocText::addCode(QStringView     /*origContent*/,
                             QString        &html,
                             QString        &css,
                             QString        &js,
@@ -18,8 +33,7 @@ void PageBlocText::addCode(QStringView     origContent,
     // Split on one or more blank lines (handles both LF and CRLF line endings).
     static const QRegularExpression reParagraphSep(QStringLiteral("\\r?\\n\\r?\\n+"));
 
-    const auto &content    = origContent.toString();
-    const auto &paragraphs = content.split(reParagraphSep);
+    const auto &paragraphs = m_text.split(reParagraphSep);
 
     for (const QString &para : paragraphs) {
         const auto &trimmedPara = para.trimmed();

@@ -3,8 +3,10 @@
 
 #include "website/WebCodeAdder.h"
 
+#include <QHash>
 #include <QList>
 #include <QSet>
+#include <QString>
 
 class AbstractPageBloc;
 class AbstractAttribute;
@@ -33,6 +35,22 @@ public:
      * Pointers are const: callers may only invoke const methods on the blocs.
      */
     virtual const QList<const AbstractPageBloc *> &getPageBlocs() const = 0;
+
+    /**
+     * Loads all blocs from a flat key→value map produced by save().
+     * Each bloc's keys are namespaced by their position index: "<i>_<key>".
+     * Keys with unknown prefixes or unrecognised by a bloc are silently ignored.
+     *
+     * Non-const: mutates the blocs' internal state.
+     */
+    void load(const QHash<QString, QString> &values);
+
+    /**
+     * Saves all blocs into a flat key→value map suitable for database storage.
+     * Each bloc's keys are prefixed with "<i>_" where i is its position index
+     * in getPageBlocs(), ensuring no collision between blocs of the same type.
+     */
+    void save(QHash<QString, QString> &values) const;
 
     /**
      * Delegates addCode() to every bloc in order.

@@ -20,9 +20,23 @@
 class PageBlocText : public AbstractPageBloc
 {
 public:
+    static constexpr const char *KEY_TEXT = "text";
+
     PageBlocText() = default;
     ~PageBlocText() override = default;
 
+    /**
+     * Reads KEY_TEXT from values into m_text.
+     * Unknown keys are silently ignored.
+     */
+    void load(const QHash<QString, QString> &values) override;
+
+    /**
+     * Writes m_text under KEY_TEXT into values.
+     */
+    void save(QHash<QString, QString> &values) const override;
+
+    /** Renders m_text to html; origContent is ignored. */
     void addCode(QStringView     origContent,
                  QString        &html,
                  QString        &css,
@@ -34,6 +48,8 @@ public:
     AbstractPageBlockWidget *createEditWidget() override;
 
 private:
+    QString m_text;
+
     /**
      * Scans text for [TAG…][/TAG] blocks and delegates each to the registered
      * AbstractShortCode handler.  The handler's HTML output is recursively

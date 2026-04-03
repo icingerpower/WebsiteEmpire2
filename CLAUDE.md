@@ -16,7 +16,7 @@ ctest
 # Run a single test executable
 ./WebsiteAspireTests/Test_Aspired_Db
 ./WebsiteAspireTests/Test_Aspire_Page_Attributes
-./WebsiteEmpireTests/Test_Website_Blocks
+./WebsiteEmpireTests/Test_Website_PageBlocText
 ./StaticWebsiteServeTests/Test_StaticServe_Db
 ```
 

@@ -34,3 +34,17 @@ target_include_directories(Test_StaticServe_Repositories
 )
 
 add_test(NAME Test_StaticServe_Repositories COMMAND Test_StaticServe_Repositories)
+
+add_executable(Test_StaticServe_StatsWriter
+    test_stats_writer.cpp
+)
+
+target_link_libraries(Test_StaticServe_StatsWriter
+    PRIVATE Drogon::Drogon StaticWebsiteServeLib
+)
+
+target_include_directories(Test_StaticServe_StatsWriter
+    PRIVATE ../StaticWebsiteServeLib
+)
+
+add_test(NAME Test_StaticServe_StatsWriter COMMAND Test_StaticServe_StatsWriter)

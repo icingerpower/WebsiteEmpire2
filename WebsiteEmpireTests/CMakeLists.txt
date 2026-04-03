@@ -11,10 +11,10 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test Widgets Network)
 
 setup_qcoro(COMPONENTS Core)
 
-add_executable(Test_Website_Blocks test_blocks.cpp)
-add_test(NAME Test_Website_Blocks COMMAND Test_Website_Blocks)
-target_link_libraries(Test_Website_Blocks PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Widgets QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
-target_include_directories(Test_Website_Blocks PRIVATE ../WebsiteEmpireLib)
+add_executable(Test_Website_PageBlocText test_website_page_bloc_text.cpp)
+add_test(NAME Test_Website_PageBlocText COMMAND Test_Website_PageBlocText)
+target_link_libraries(Test_Website_PageBlocText PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Widgets QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+target_include_directories(Test_Website_PageBlocText PRIVATE ../WebsiteEmpireLib)
 
 add_executable(Test_Website_PageTypeArticle test_page_type_article.cpp)
 add_test(NAME Test_Website_PageTypeArticle COMMAND Test_Website_PageTypeArticle)

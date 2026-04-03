@@ -17,9 +17,28 @@ void PageBlocCategory::setContent(const QString &content)
     _rebuildAttributes();
 }
 
+// ---- load / save ------------------------------------------------------------
+
+void PageBlocCategory::load(const QHash<QString, QString> &values)
+{
+    // Unknown keys are silently ignored for forward compatibility.
+    setContent(values.value(QLatin1String(KEY_CATEGORIES)));
+}
+
+void PageBlocCategory::save(QHash<QString, QString> &values) const
+{
+    QStringList parts;
+    parts.reserve(m_selectedIds.size());
+    for (const int id : std::as_const(m_selectedIds)) {
+        parts.append(QString::number(id));
+    }
+    parts.sort();
+    values.insert(QLatin1String(KEY_CATEGORIES), parts.join(QLatin1Char(',')));
+}
+
 // ---- WebCodeAdder -----------------------------------------------------------
 
-void PageBlocCategory::addCode(QStringView    origContent,
+void PageBlocCategory::addCode(QStringView    /*origContent*/,
                                QString       &html,
                                QString       &css,
                                QString       &js,
@@ -29,7 +48,8 @@ void PageBlocCategory::addCode(QStringView    origContent,
     Q_UNUSED(js)
     Q_UNUSED(jsDoneIds)
 
-    const QList<int> ids = _parseIds(origContent.toString());
+    // Use the state loaded via load() / setContent().
+    const QList<int> &ids = m_selectedIds;
     if (ids.isEmpty()) {
         return;
     }

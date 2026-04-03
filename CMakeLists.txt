@@ -22,7 +22,7 @@ add_dependencies(WebsiteEmpire
 add_dependencies(Test_Aspire_Page_Attributes
     WebsiteEmpireLib
 )
-add_dependencies(Test_Website_Blocks
+add_dependencies(Test_Website_PageBlocText
     WebsiteEmpireLib
 )
 add_dependencies(StaticWebsiteServe

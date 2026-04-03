@@ -21,12 +21,13 @@ bool throwsException(Fn &&fn)
     }
 }
 
-// Runs block.addCode() with the given text and returns the html output.
+// Loads text into block then runs addCode(); returns the html output.
 QString htmlFrom(PageBlocText &block, const QString &text)
 {
+    block.load({{QLatin1String(PageBlocText::KEY_TEXT), text}});
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    block.addCode(text, html, css, js, cssDoneIds, jsDoneIds);
+    block.addCode(QStringView{}, html, css, js, cssDoneIds, jsDoneIds);
     return html;
 }
 
@@ -75,6 +76,13 @@ private slots:
     // --- SPINNABLE ---
     void test_pageblocktext_spinnable_tag_absent_from_output();
     void test_pageblocktext_spinnable_with_nested_video_shortcode();
+
+    // --- load / save ---
+    void test_pagebloctext_save_stores_text_under_key();
+    void test_pagebloctext_load_restores_text();
+    void test_pagebloctext_load_save_roundtrip();
+    void test_pagebloctext_load_ignores_unknown_keys();
+    void test_pagebloctext_load_empty_hash_gives_empty_output();
 
     // --- Syntax / validation errors ---
     void test_pageblocktext_missing_mandatory_arg_throws();
@@ -172,10 +180,11 @@ void Test_Website_PageBlocText::test_pageblocktext_single_para_js_untouched()
 void Test_Website_PageBlocText::test_pageblocktext_single_para_appends_to_existing_html()
 {
     PageBlocText block;
+    block.load({{QLatin1String(PageBlocText::KEY_TEXT), QStringLiteral("new")}});
     QString html = QStringLiteral("existing");
     QString css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    block.addCode(QStringLiteral("new"), html, css, js, cssDoneIds, jsDoneIds);
+    block.addCode(QStringView{}, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.startsWith(QStringLiteral("existing")));   // 12
     QVERIFY(html.contains(QStringLiteral("<p>new</p>")));   // 13
 }
@@ -328,6 +337,67 @@ void Test_Website_PageBlocText::test_pageblocktext_spinnable_with_nested_video_s
 }
 
 // =============================================================================
+// load / save
+// =============================================================================
+
+void Test_Website_PageBlocText::test_pagebloctext_save_stores_text_under_key()
+{
+    PageBlocText block;
+    block.load({{QLatin1String(PageBlocText::KEY_TEXT), QStringLiteral("hello")}});
+    QHash<QString, QString> out;
+    block.save(out);
+    QVERIFY(out.contains(QLatin1String(PageBlocText::KEY_TEXT)));               // 46
+    QCOMPARE(out.value(QLatin1String(PageBlocText::KEY_TEXT)), QStringLiteral("hello")); // 47
+}
+
+void Test_Website_PageBlocText::test_pagebloctext_load_restores_text()
+{
+    PageBlocText block;
+    block.load({{QLatin1String(PageBlocText::KEY_TEXT), QStringLiteral("world")}});
+    const auto &html = htmlFrom(block, QStringLiteral("world"));
+    QVERIFY(html.contains(QStringLiteral("world")));   // 48
+}
+
+void Test_Website_PageBlocText::test_pagebloctext_load_save_roundtrip()
+{
+    const QString original = QStringLiteral("round\n\ntrip");
+    PageBlocText block;
+    block.load({{QLatin1String(PageBlocText::KEY_TEXT), original}});
+    QHash<QString, QString> saved;
+    block.save(saved);
+
+    PageBlocText block2;
+    block2.load(saved);
+    QHash<QString, QString> saved2;
+    block2.save(saved2);
+
+    QCOMPARE(saved2.value(QLatin1String(PageBlocText::KEY_TEXT)), original);   // 49
+}
+
+void Test_Website_PageBlocText::test_pagebloctext_load_ignores_unknown_keys()
+{
+    PageBlocText block;
+    // Must not throw even with unrecognised keys (forward compatibility).
+    block.load({
+        {QLatin1String(PageBlocText::KEY_TEXT), QStringLiteral("text")},
+        {QStringLiteral("unknown_future_key"), QStringLiteral("value")},
+    });
+    QHash<QString, QString> out;
+    block.save(out);
+    QVERIFY(!out.contains(QStringLiteral("unknown_future_key")));   // 50
+}
+
+void Test_Website_PageBlocText::test_pagebloctext_load_empty_hash_gives_empty_output()
+{
+    PageBlocText block;
+    block.load({});
+    QString html, css, js;
+    QSet<QString> cssDoneIds, jsDoneIds;
+    block.addCode(QStringView{}, html, css, js, cssDoneIds, jsDoneIds);
+    QVERIFY(html.isEmpty());   // 51
+}
+
+// =============================================================================
 // Syntax / validation errors
 // =============================================================================
 
@@ -360,4 +430,4 @@ void Test_Website_PageBlocText::test_pageblocktext_unknown_arg_throws()
 }
 
 QTEST_MAIN(Test_Website_PageBlocText)
-#include "test_blocks.moc"
+#include "test_website_page_bloc_text.moc"

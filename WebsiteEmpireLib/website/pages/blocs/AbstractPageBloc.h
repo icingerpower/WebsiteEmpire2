@@ -3,7 +3,9 @@
 
 #include "website/WebCodeAdder.h"
 
+#include <QHash>
 #include <QList>
+#include <QString>
 
 class AbstractPageBlockWidget;
 class AbstractAttribute;
@@ -19,6 +21,21 @@ class AbstractPageBloc : public WebCodeAdder
 {
 public:
     virtual ~AbstractPageBloc() = default;
+
+    /**
+     * Load this bloc's content from a flat key→value map.
+     * Keys not recognised by this bloc are silently ignored (forward
+     * compatibility: old data may contain keys for attributes that were
+     * later removed from the bloc's definition).
+     */
+    virtual void load(const QHash<QString, QString> &values) = 0;
+
+    /**
+     * Save this bloc's content into a flat key→value map.
+     * Keys must be stable identifiers — never change them once data exists
+     * in the database.
+     */
+    virtual void save(QHash<QString, QString> &values) const = 0;
 
     /**
      * Create and return a widget that lets the user edit this bloc's content.
