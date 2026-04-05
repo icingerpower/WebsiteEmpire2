@@ -25,6 +25,21 @@ add_dependencies(Test_Aspire_Page_Attributes
 add_dependencies(Test_Website_PageBlocText
     WebsiteEmpireLib
 )
+add_dependencies(Test_Website_PageTypeRegistry
+    WebsiteEmpireLib
+)
+add_dependencies(Test_Website_PageDb
+    WebsiteEmpireLib
+)
+add_dependencies(Test_Website_PageRepository
+    WebsiteEmpireLib
+)
+add_dependencies(Test_Website_PageGenerator
+    WebsiteEmpireLib
+)
+add_dependencies(Test_StaticServe_VariantSelector
+    StaticWebsiteServeLib
+)
 add_dependencies(StaticWebsiteServe
     StaticWebsiteServeLib
 )

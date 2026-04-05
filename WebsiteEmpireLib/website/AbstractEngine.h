@@ -70,6 +70,10 @@ public:
         explicit Recorder(AbstractEngine *engine);
     };
 
+    // Returns the lang code for the given website index, or an empty string if
+    // the index is out of range (e.g. before init() populates the rows).
+    QString getLangCode(int websiteIndex) const;
+
     // Binds this engine to workingDir and hostTable, then loads engine_domains.csv.
     // Must be called before using the model.
     void init(const QDir &workingDir, const HostTable &hostTable);

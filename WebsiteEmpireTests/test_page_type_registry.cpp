@@ -1,0 +1,139 @@
+#include <QtTest>
+#include <QTemporaryDir>
+
+#include "website/pages/AbstractPageType.h"
+#include "website/pages/PageTypeArticle.h"
+#include "website/pages/attributes/CategoryTable.h"
+
+class Test_PageTypeRegistry : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    // --- allTypeIds ---
+    void test_registry_all_type_ids_contains_article();
+    void test_registry_all_type_ids_not_empty();
+
+    // --- createForTypeId ---
+    void test_registry_create_article_returns_non_null();
+    void test_registry_create_unknown_returns_null();
+    void test_registry_create_article_type_id_matches();
+    void test_registry_create_article_display_name_matches();
+    void test_registry_create_returns_independent_instances();
+
+    // --- PageTypeArticle constants ---
+    void test_registry_article_type_id_constant();
+    void test_registry_article_display_name_constant();
+
+    // --- getTypeId / getDisplayName via instance ---
+    void test_registry_article_instance_get_type_id();
+    void test_registry_article_instance_get_display_name();
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+namespace {
+struct Fixture {
+    QTemporaryDir dir;
+    CategoryTable categoryTable;
+    Fixture() : categoryTable(QDir(dir.path())) {}
+};
+} // namespace
+
+// ---------------------------------------------------------------------------
+// allTypeIds
+// ---------------------------------------------------------------------------
+
+void Test_PageTypeRegistry::test_registry_all_type_ids_not_empty()
+{
+    QVERIFY(!AbstractPageType::allTypeIds().isEmpty());
+}
+
+void Test_PageTypeRegistry::test_registry_all_type_ids_contains_article()
+{
+    QVERIFY(AbstractPageType::allTypeIds().contains(
+        QLatin1String(PageTypeArticle::TYPE_ID)));
+}
+
+// ---------------------------------------------------------------------------
+// createForTypeId
+// ---------------------------------------------------------------------------
+
+void Test_PageTypeRegistry::test_registry_create_article_returns_non_null()
+{
+    Fixture f;
+    const auto &type = AbstractPageType::createForTypeId(
+        QLatin1String(PageTypeArticle::TYPE_ID), f.categoryTable);
+    QVERIFY(type != nullptr);
+}
+
+void Test_PageTypeRegistry::test_registry_create_unknown_returns_null()
+{
+    Fixture f;
+    const auto &type = AbstractPageType::createForTypeId(
+        QStringLiteral("no_such_type"), f.categoryTable);
+    QVERIFY(type == nullptr);
+}
+
+void Test_PageTypeRegistry::test_registry_create_article_type_id_matches()
+{
+    Fixture f;
+    const auto &type = AbstractPageType::createForTypeId(
+        QLatin1String(PageTypeArticle::TYPE_ID), f.categoryTable);
+    QCOMPARE(type->getTypeId(), QLatin1String(PageTypeArticle::TYPE_ID));
+}
+
+void Test_PageTypeRegistry::test_registry_create_article_display_name_matches()
+{
+    Fixture f;
+    const auto &type = AbstractPageType::createForTypeId(
+        QLatin1String(PageTypeArticle::TYPE_ID), f.categoryTable);
+    QCOMPARE(type->getDisplayName(), QLatin1String(PageTypeArticle::DISPLAY_NAME));
+}
+
+void Test_PageTypeRegistry::test_registry_create_returns_independent_instances()
+{
+    Fixture f;
+    const auto &t1 = AbstractPageType::createForTypeId(
+        QLatin1String(PageTypeArticle::TYPE_ID), f.categoryTable);
+    const auto &t2 = AbstractPageType::createForTypeId(
+        QLatin1String(PageTypeArticle::TYPE_ID), f.categoryTable);
+    QVERIFY(t1.get() != t2.get());
+}
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+void Test_PageTypeRegistry::test_registry_article_type_id_constant()
+{
+    QCOMPARE(QLatin1String(PageTypeArticle::TYPE_ID), QStringLiteral("article"));
+}
+
+void Test_PageTypeRegistry::test_registry_article_display_name_constant()
+{
+    QCOMPARE(QLatin1String(PageTypeArticle::DISPLAY_NAME), QStringLiteral("Article"));
+}
+
+// ---------------------------------------------------------------------------
+// Instance virtual methods
+// ---------------------------------------------------------------------------
+
+void Test_PageTypeRegistry::test_registry_article_instance_get_type_id()
+{
+    Fixture f;
+    const PageTypeArticle article(f.categoryTable);
+    QCOMPARE(article.getTypeId(), QStringLiteral("article"));
+}
+
+void Test_PageTypeRegistry::test_registry_article_instance_get_display_name()
+{
+    Fixture f;
+    const PageTypeArticle article(f.categoryTable);
+    QCOMPARE(article.getDisplayName(), QStringLiteral("Article"));
+}
+
+QTEST_MAIN(Test_PageTypeRegistry)
+#include "test_page_type_registry.moc"

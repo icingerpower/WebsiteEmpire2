@@ -2,6 +2,7 @@
 
 #include "website/pages/blocs/widgets/AbstractPageBlockWidget.h"
 #include "website/pages/blocs/PageBlocText.h"
+#include "website/EngineArticles.h"
 #include "ExceptionWithTitleText.h"
 
 // =============================================================================
@@ -21,13 +22,16 @@ bool throwsException(Fn &&fn)
     }
 }
 
+// Engine instance used in addCode calls (no init() — getLangCode returns "" for all indices).
+EngineArticles engine;
+
 // Loads text into block then runs addCode(); returns the html output.
 QString htmlFrom(PageBlocText &block, const QString &text)
 {
     block.load({{QLatin1String(PageBlocText::KEY_TEXT), text}});
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    block.addCode(QStringView{}, html, css, js, cssDoneIds, jsDoneIds);
+    block.addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     return html;
 }
 
@@ -128,7 +132,7 @@ void Test_Website_PageBlocText::test_pageblocktext_empty_content_leaves_css_js_u
     QString css = QStringLiteral("pre-existing-css");
     QString js  = QStringLiteral("pre-existing-js");
     QSet<QString> cssDoneIds, jsDoneIds;
-    block.addCode(QStringLiteral(""), html, css, js, cssDoneIds, jsDoneIds);
+    block.addCode(QStringLiteral(""), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(css == QStringLiteral("pre-existing-css"));   // 4
     QVERIFY(js  == QStringLiteral("pre-existing-js"));    // 5
 }
@@ -164,7 +168,7 @@ void Test_Website_PageBlocText::test_pageblocktext_single_para_css_untouched()
     PageBlocText block;
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    block.addCode(QStringLiteral("Some text"), html, css, js, cssDoneIds, jsDoneIds);
+    block.addCode(QStringLiteral("Some text"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(css.isEmpty());   // 10
 }
 
@@ -173,7 +177,7 @@ void Test_Website_PageBlocText::test_pageblocktext_single_para_js_untouched()
     PageBlocText block;
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    block.addCode(QStringLiteral("Some text"), html, css, js, cssDoneIds, jsDoneIds);
+    block.addCode(QStringLiteral("Some text"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(js.isEmpty());   // 11
 }
 
@@ -184,7 +188,7 @@ void Test_Website_PageBlocText::test_pageblocktext_single_para_appends_to_existi
     QString html = QStringLiteral("existing");
     QString css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    block.addCode(QStringView{}, html, css, js, cssDoneIds, jsDoneIds);
+    block.addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.startsWith(QStringLiteral("existing")));   // 12
     QVERIFY(html.contains(QStringLiteral("<p>new</p>")));   // 13
 }
@@ -393,7 +397,7 @@ void Test_Website_PageBlocText::test_pagebloctext_load_empty_hash_gives_empty_ou
     block.load({});
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    block.addCode(QStringView{}, html, css, js, cssDoneIds, jsDoneIds);
+    block.addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.isEmpty());   // 51
 }
 

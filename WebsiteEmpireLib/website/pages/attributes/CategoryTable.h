@@ -44,6 +44,11 @@ public:
     // Returns nullptr if id is not found.
     const CategoryRow *categoryById(int id) const;
 
+    // Returns base if no existing category has that name, otherwise appends
+    // -2, -3, … until the name is unique.  Pass excludeId to skip the
+    // category being renamed (so renaming to the same name is a no-op).
+    QString uniqueName(const QString &base, int excludeId = -1) const;
+
     // Returns the translation for id in langCode, falling back to the English
     // name if no translation exists for that language.
     QString translationFor(int id, const QString &langCode) const;

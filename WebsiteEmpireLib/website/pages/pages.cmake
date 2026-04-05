@@ -1,11 +1,23 @@
 include(${CMAKE_CURRENT_LIST_DIR}/attributes/attributes.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/blocs/blocs.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/widgets/widgets.cmake)
 
 set(PAGES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/AbstractPageType.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractPageType.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeArticle.h
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeArticle.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageRecord.h
+    ${CMAKE_CURRENT_LIST_DIR}/IPageRepository.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageDb.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageDb.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageRepositoryDb.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageRepositoryDb.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageGenerator.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageGenerator.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageCommands.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageCommands.cpp
     ${ATTRIBUTES_FILES}
     ${BLOCS_FILES}
+    ${PAGES_WIDGETS_FILES}
 )

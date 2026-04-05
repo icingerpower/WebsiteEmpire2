@@ -6,37 +6,39 @@ enable_testing()
 
 include(../common.cmake)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Test Widgets Network)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test Widgets Network)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Test Widgets Sql Network)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test Widgets Sql Network)
 
 setup_qcoro(COMPONENTS Core)
 
-add_executable(Test_Website_PageBlocText test_website_page_bloc_text.cpp)
-add_test(NAME Test_Website_PageBlocText COMMAND Test_Website_PageBlocText)
-target_link_libraries(Test_Website_PageBlocText PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Widgets QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
-target_include_directories(Test_Website_PageBlocText PRIVATE ../WebsiteEmpireLib)
+# Helper macro to reduce boilerplate for each test target.
+macro(add_empire_test TARGET_NAME SOURCE_FILE)
+    add_executable(${TARGET_NAME} ${SOURCE_FILE})
+    add_test(NAME ${TARGET_NAME} COMMAND ${TARGET_NAME})
+    target_link_libraries(${TARGET_NAME} PRIVATE
+        Qt${QT_VERSION_MAJOR}::Test
+        Qt${QT_VERSION_MAJOR}::Widgets
+        Qt${QT_VERSION_MAJOR}::Sql
+        QCoro::Core
+        -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+    target_include_directories(${TARGET_NAME} PRIVATE ../WebsiteEmpireLib)
+endmacro()
 
-add_executable(Test_Website_PageTypeArticle test_page_type_article.cpp)
-add_test(NAME Test_Website_PageTypeArticle COMMAND Test_Website_PageTypeArticle)
-target_link_libraries(Test_Website_PageTypeArticle PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Widgets QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
-target_include_directories(Test_Website_PageTypeArticle PRIVATE ../WebsiteEmpireLib)
+add_empire_test(Test_Website_PageBlocText     test_website_page_bloc_text.cpp)
+add_empire_test(Test_Website_PageTypeArticle  test_page_type_article.cpp)
+add_empire_test(Test_Website_Engine_Languages test_website_engine_languages.cpp)
+add_empire_test(Test_Website_Engine_Articles  test_website_engine_articles.cpp)
+add_empire_test(Test_Website_Settings         test_website_settings.cpp)
+add_empire_test(Test_Website_PageTypeRegistry test_page_type_registry.cpp)
+add_empire_test(Test_Website_PageDb           test_page_db.cpp)
+add_empire_test(Test_Website_PageRepository   test_page_repository.cpp)
+add_empire_test(Test_Website_PageGenerator    test_page_generator.cpp)
 
-add_executable(Test_Website_Engine_Languages test_website_engine_languages.cpp)
-add_test(NAME Test_Website_Engine_Languages COMMAND Test_Website_Engine_Languages)
-target_link_libraries(Test_Website_Engine_Languages PRIVATE Qt${QT_VERSION_MAJOR}::Test QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
-target_include_directories(Test_Website_Engine_Languages PRIVATE ../WebsiteEmpireLib)
-
+# ShortCodes test does not need Sql or Widgets.
 add_executable(Test_Website_ShortCodes test_website_shortcodes.cpp)
 add_test(NAME Test_Website_ShortCodes COMMAND Test_Website_ShortCodes)
-target_link_libraries(Test_Website_ShortCodes PRIVATE Qt${QT_VERSION_MAJOR}::Test QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+target_link_libraries(Test_Website_ShortCodes PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    QCoro::Core
+    -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
 target_include_directories(Test_Website_ShortCodes PRIVATE ../WebsiteEmpireLib)
-
-add_executable(Test_Website_Engine_Articles test_website_engine_articles.cpp)
-add_test(NAME Test_Website_Engine_Articles COMMAND Test_Website_Engine_Articles)
-target_link_libraries(Test_Website_Engine_Articles PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Widgets QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
-target_include_directories(Test_Website_Engine_Articles PRIVATE ../WebsiteEmpireLib)
-
-add_executable(Test_Website_Settings test_website_settings.cpp)
-add_test(NAME Test_Website_Settings COMMAND Test_Website_Settings)
-target_link_libraries(Test_Website_Settings PRIVATE Qt${QT_VERSION_MAJOR}::Test QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
-target_include_directories(Test_Website_Settings PRIVATE ../WebsiteEmpireLib)

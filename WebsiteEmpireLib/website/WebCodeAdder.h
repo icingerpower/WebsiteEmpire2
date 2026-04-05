@@ -5,11 +5,17 @@
 #include <QString>
 #include <QStringView>
 
+class AbstractEngine;
+
 /**
  * Interface for objects that contribute HTML, CSS and JS fragments during page generation.
  *
  * Implementations append their content to the three output strings.
  * origContent is a view into the raw source text (e.g. a shortcode block); no copy is made.
+ *
+ * engine and websiteIndex identify the website being generated.  Implementations
+ * that need domain-specific information (e.g. lang code, domain name) query them
+ * via the engine.  Implementations that do not need them should Q_UNUSED both.
  */
 class WebCodeAdder
 {
@@ -25,6 +31,8 @@ public:
      * insert the block's id into the set when they write for the first time.
      */
     virtual void addCode(QStringView     origContent,
+                         AbstractEngine &engine,
+                         int             websiteIndex,
                          QString        &html,
                          QString        &css,
                          QString        &js,

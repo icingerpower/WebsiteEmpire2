@@ -158,6 +158,8 @@ QString ShortCodeSpinnable::spin(QStringView text, QRandomGenerator &rng)
 // =============================================================================
 
 void ShortCodeSpinnable::addCode(QStringView     origContent,
+                                 AbstractEngine &engine,
+                                 int             websiteIndex,
                                  QString        &html,
                                  QString        &css,
                                  QString        &js,
@@ -175,6 +177,8 @@ void ShortCodeSpinnable::addCode(QStringView     origContent,
     QRandomGenerator rng = isRandom ? QRandomGenerator::securelySeeded()
                                     : QRandomGenerator(seed);
     html += spin(parsed.innerContent, rng);
+    Q_UNUSED(engine)
+    Q_UNUSED(websiteIndex)
     Q_UNUSED(css)
     Q_UNUSED(js)
     Q_UNUSED(cssDoneIds)

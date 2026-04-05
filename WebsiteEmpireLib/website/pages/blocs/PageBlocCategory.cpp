@@ -1,7 +1,13 @@
 #include "PageBlocCategory.h"
 
+#include "website/AbstractEngine.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/blocs/widgets/CategoryEditorWidget.h"
+
+QString PageBlocCategory::getName() const
+{
+    return tr("Categories");
+}
 
 PageBlocCategory::PageBlocCategory(CategoryTable &table, QObject *parent)
     : QObject(parent)
@@ -38,26 +44,29 @@ void PageBlocCategory::save(QHash<QString, QString> &values) const
 
 // ---- WebCodeAdder -----------------------------------------------------------
 
-void PageBlocCategory::addCode(QStringView    /*origContent*/,
-                               QString       &html,
-                               QString       &css,
-                               QString       &js,
-                               QSet<QString> &cssDoneIds,
-                               QSet<QString> &jsDoneIds) const
+void PageBlocCategory::addCode(QStringView     /*origContent*/,
+                               AbstractEngine &engine,
+                               int             websiteIndex,
+                               QString        &html,
+                               QString        &css,
+                               QString        &js,
+                               QSet<QString>  &cssDoneIds,
+                               QSet<QString>  &jsDoneIds) const
 {
+    Q_UNUSED(engine)
+    Q_UNUSED(websiteIndex)
     Q_UNUSED(js)
     Q_UNUSED(jsDoneIds)
 
     // Use the state loaded via load() / setContent().
-    const QList<int> &ids = m_selectedIds;
-    if (ids.isEmpty()) {
+    if (m_selectedIds.isEmpty()) {
         return;
     }
 
     // Resolve names first — skip the whole block if every id is unknown.
     QStringList names;
-    names.reserve(ids.size());
-    for (const int id : std::as_const(ids)) {
+    names.reserve(m_selectedIds.size());
+    for (const int id : std::as_const(m_selectedIds)) {
         const CategoryTable::CategoryRow *row = m_table.categoryById(id);
         if (row) {
             names.append(row->name);

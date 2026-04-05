@@ -11,7 +11,12 @@ PageTypeArticle::PageTypeArticle(CategoryTable &categoryTable)
 
 PageTypeArticle::~PageTypeArticle() = default;
 
+QString PageTypeArticle::getTypeId()      const { return QLatin1String(TYPE_ID); }
+QString PageTypeArticle::getDisplayName() const { return QLatin1String(DISPLAY_NAME); }
+
 const QList<const AbstractPageBloc *> &PageTypeArticle::getPageBlocs() const
 {
     return m_blocs;
 }
+
+DECLARE_PAGE_TYPE(PageTypeArticle)

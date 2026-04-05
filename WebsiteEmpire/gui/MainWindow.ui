@@ -25,6 +25,16 @@
         <string>Domains</string>
        </attribute>
       </widget>
+      <widget class="PanePages" name="tabPages">
+       <attribute name="title">
+        <string>Pages</string>
+       </attribute>
+      </widget>
+      <widget class="PanePageStats" name="tabPageStats">
+       <attribute name="title">
+        <string>Page Stats</string>
+       </attribute>
+      </widget>
       <widget class="PaneSettings" name="tabSettings">
        <attribute name="title">
         <string>Settings</string>
@@ -51,6 +61,18 @@
    <class>PaneDomains</class>
    <extends>QWidget</extends>
    <header>gui/panes/PaneDomains.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>PanePages</class>
+   <extends>QWidget</extends>
+   <header>gui/panes/PanePages.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>PanePageStats</class>
+   <extends>QWidget</extends>
+   <header>gui/panes/PanePageStats.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>

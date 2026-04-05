@@ -24,10 +24,17 @@ public:
     static constexpr int COL_PARAMETER = 0;
     static constexpr int COL_VALUE     = 1;
 
+    // Returns a QStringList of allowed values for rows that have a constrained
+    // vocabulary (e.g. editing_lang_code). Empty list means free-text editing.
+    static constexpr int AllowedValuesRole = Qt::UserRole + 1;
+
     // Stable IDs — never change once data has been saved.
     static const QString ID_WEBSITE_NAME;
     static const QString ID_AUTHOR;
-    static const QString ID_BASE_URL;
+    // The BCP-47 lang code of the language currently being edited in the UI.
+    // One domain per language is defined in AbstractEngine; this setting selects
+    // which language's content the editor operates on.
+    static const QString ID_EDITING_LANG_CODE;
 
     explicit WebsiteSettingsTable(const QDir &workingDir, QObject *parent = nullptr);
 
@@ -35,9 +42,9 @@ public:
     QString valueForId(const QString &id) const;
 
     // Named getters — each returns valueForId() for the corresponding stable ID.
-    QString websiteName() const;
-    QString author()      const;
-    QString baseUrl()     const;
+    QString websiteName()      const;
+    QString author()           const;
+    QString editingLangCode()  const;
 
     // QAbstractItemModel interface
     int           rowCount(const QModelIndex &parent = QModelIndex()) const override;
@@ -49,9 +56,10 @@ public:
 
 private:
     struct SettingRow {
-        QString id;    // stable machine ID — saved in CSV, used for reload matching
-        QString label; // translated parameter name — NOT saved, derived from id at construction
-        QString value; // user-set value — saved in CSV
+        QString     id;            // stable machine ID — saved in CSV, used for reload matching
+        QString     label;         // translated parameter name — NOT saved, derived from id at construction
+        QString     value;         // user-set value — saved in CSV
+        QStringList allowedValues; // non-empty → combo box constraint; empty → free text
     };
 
     void _load();

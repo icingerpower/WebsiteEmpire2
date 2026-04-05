@@ -8,6 +8,7 @@
 #include "website/shortcodes/ShortCodeImageFix.h"
 #include "website/shortcodes/ShortCodeImageTr.h"
 #include "website/shortcodes/ShortCodeTitle.h"
+#include "website/EngineArticles.h"
 #include "ExceptionWithTitleText.h"
 
 // =============================================================================
@@ -28,12 +29,15 @@ bool throwsShortCodeException(Fn &&fn)
     }
 }
 
+// Engine instance used in addCode calls (no init() — getLangCode returns "" for all indices).
+EngineArticles engine;
+
 // Calls sc.addCode with the given shortcode text; returns the html output.
 QString htmlFrom(const AbstractShortCode &sc, const QString &shortcodeText)
 {
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    sc.addCode(shortcodeText, html, css, js, cssDoneIds, jsDoneIds);
+    sc.addCode(shortcodeText, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     return html;
 }
 
@@ -197,7 +201,7 @@ private slots:
 
     // --- ShortCodeImageFix: addCode output ---
     void test_imgfix_add_code_alt_in_html();
-    void test_imgfix_add_code_src_is_todo_webp();
+    void test_imgfix_add_code_src_uses_filename();
     void test_imgfix_add_code_width_in_html();
     void test_imgfix_add_code_height_in_html();
     void test_imgfix_add_code_width_absent_not_in_html();
@@ -232,7 +236,7 @@ private slots:
 
     // --- ShortCodeImageTr: addCode output ---
     void test_imgtr_add_code_alt_in_html();
-    void test_imgtr_add_code_src_is_todo_webp();
+    void test_imgtr_add_code_src_uses_filename();
     void test_imgtr_add_code_with_width_and_height();
     void test_imgtr_add_code_width_absent_not_in_html();
     void test_imgtr_add_code_appends_to_existing_html();
@@ -397,7 +401,7 @@ void Test_Website_ShortCodes::test_video_add_code_appends_to_existing_html()
     QString html = prefix;
     QString css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    sc.addCode(QStringLiteral("[VIDEO url='https://youtu.be'][/VIDEO]"), html, css, js, cssDoneIds, jsDoneIds);
+    sc.addCode(QStringLiteral("[VIDEO url='https://youtu.be'][/VIDEO]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.startsWith(prefix));
     QVERIFY(html.size() > prefix.size());
 }
@@ -408,7 +412,7 @@ void Test_Website_ShortCodes::test_video_add_code_does_not_touch_css()
     QString html, js;
     QString css = QStringLiteral("existing-css");
     QSet<QString> cssDoneIds, jsDoneIds;
-    sc.addCode(QStringLiteral("[VIDEO url='https://youtu.be'][/VIDEO]"), html, css, js, cssDoneIds, jsDoneIds);
+    sc.addCode(QStringLiteral("[VIDEO url='https://youtu.be'][/VIDEO]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(css, QStringLiteral("existing-css"));
     QVERIFY(cssDoneIds.isEmpty());
 }
@@ -419,7 +423,7 @@ void Test_Website_ShortCodes::test_video_add_code_does_not_touch_js()
     QString html, css;
     QString js = QStringLiteral("existing-js");
     QSet<QString> cssDoneIds, jsDoneIds;
-    sc.addCode(QStringLiteral("[VIDEO url='https://youtu.be'][/VIDEO]"), html, css, js, cssDoneIds, jsDoneIds);
+    sc.addCode(QStringLiteral("[VIDEO url='https://youtu.be'][/VIDEO]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(js, QStringLiteral("existing-js"));
     QVERIFY(jsDoneIds.isEmpty());
 }
@@ -444,7 +448,7 @@ void Test_Website_ShortCodes::test_video_add_code_mismatched_tags_throws()
     QVERIFY(throwsShortCodeException([&sc] {
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
-        sc.addCode(QStringLiteral("[VIDEO url=\"x\"][/IMG]"), html, css, js, cssDoneIds, jsDoneIds);
+        sc.addCode(QStringLiteral("[VIDEO url=\"x\"][/IMG]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -454,7 +458,7 @@ void Test_Website_ShortCodes::test_video_add_code_malformed_throws()
     QVERIFY(throwsShortCodeException([&sc] {
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
-        sc.addCode(QStringLiteral("this is not a shortcode"), html, css, js, cssDoneIds, jsDoneIds);
+        sc.addCode(QStringLiteral("this is not a shortcode"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -465,7 +469,7 @@ void Test_Website_ShortCodes::test_video_add_code_duplicate_argument_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         const QString input = QStringLiteral("[VIDEO url=\"https://a.com\" url=\"https://b.com\"][/VIDEO]");
-        sc.addCode(input, html, css, js, cssDoneIds, jsDoneIds);
+        sc.addCode(input, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -479,7 +483,7 @@ void Test_Website_ShortCodes::test_video_add_code_missing_url_throws()
     QVERIFY(throwsShortCodeException([&sc] {
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
-        sc.addCode(QStringLiteral("[VIDEO][/VIDEO]"), html, css, js, cssDoneIds, jsDoneIds);
+        sc.addCode(QStringLiteral("[VIDEO][/VIDEO]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -489,7 +493,7 @@ void Test_Website_ShortCodes::test_video_add_code_empty_url_throws()
     QVERIFY(throwsShortCodeException([&sc] {
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
-        sc.addCode(QStringLiteral("[VIDEO url=\"\"][/VIDEO]"), html, css, js, cssDoneIds, jsDoneIds);
+        sc.addCode(QStringLiteral("[VIDEO url=\"\"][/VIDEO]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -500,7 +504,7 @@ void Test_Website_ShortCodes::test_video_add_code_unknown_argument_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         const QString input = QStringLiteral("[VIDEO url=\"https://youtu.be\" autoplay=1][/VIDEO]");
-        sc.addCode(input, html, css, js, cssDoneIds, jsDoneIds);
+        sc.addCode(input, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -631,7 +635,7 @@ void Test_Website_ShortCodes::test_linkfix_add_code_appends_to_existing_html()
     QString css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
     sc.addCode(QStringLiteral("[LINKFIX url=\"https://example.com\"]link[/LINKFIX]"),
-               html, css, js, cssDoneIds, jsDoneIds);
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.startsWith(prefix));
     QVERIFY(html.size() > prefix.size());
 }
@@ -643,7 +647,7 @@ void Test_Website_ShortCodes::test_linkfix_add_code_does_not_touch_css()
     QString css = QStringLiteral("existing-css");
     QSet<QString> cssDoneIds, jsDoneIds;
     sc.addCode(QStringLiteral("[LINKFIX url=\"https://example.com\"]link[/LINKFIX]"),
-               html, css, js, cssDoneIds, jsDoneIds);
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(css, QStringLiteral("existing-css"));
     QVERIFY(cssDoneIds.isEmpty());
 }
@@ -655,7 +659,7 @@ void Test_Website_ShortCodes::test_linkfix_add_code_does_not_touch_js()
     QString js = QStringLiteral("existing-js");
     QSet<QString> cssDoneIds, jsDoneIds;
     sc.addCode(QStringLiteral("[LINKFIX url=\"https://example.com\"]link[/LINKFIX]"),
-               html, css, js, cssDoneIds, jsDoneIds);
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(js, QStringLiteral("existing-js"));
     QVERIFY(jsDoneIds.isEmpty());
 }
@@ -689,7 +693,7 @@ void Test_Website_ShortCodes::test_linkfix_add_code_mismatched_tags_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[LINKFIX url=\"https://a.com\"]link[/VIDEO]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -699,7 +703,7 @@ void Test_Website_ShortCodes::test_linkfix_add_code_missing_url_throws()
     QVERIFY(throwsShortCodeException([&sc] {
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
-        sc.addCode(QStringLiteral("[LINKFIX]link[/LINKFIX]"), html, css, js, cssDoneIds, jsDoneIds);
+        sc.addCode(QStringLiteral("[LINKFIX]link[/LINKFIX]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -710,7 +714,7 @@ void Test_Website_ShortCodes::test_linkfix_add_code_empty_url_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[LINKFIX url=\"\"]link[/LINKFIX]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -721,7 +725,7 @@ void Test_Website_ShortCodes::test_linkfix_add_code_unknown_argument_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         const QString input = QStringLiteral("[LINKFIX url=\"https://a.com\" target=\"_blank\"]link[/LINKFIX]");
-        sc.addCode(input, html, css, js, cssDoneIds, jsDoneIds);
+        sc.addCode(input, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -842,7 +846,7 @@ void Test_Website_ShortCodes::test_linktr_add_code_does_not_touch_css()
     QString css = QStringLiteral("existing-css");
     QSet<QString> cssDoneIds, jsDoneIds;
     sc.addCode(QStringLiteral("[LINKTR url=\"https://example.fr\"]link[/LINKTR]"),
-               html, css, js, cssDoneIds, jsDoneIds);
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(css, QStringLiteral("existing-css"));
     QVERIFY(cssDoneIds.isEmpty());
 }
@@ -854,7 +858,7 @@ void Test_Website_ShortCodes::test_linktr_add_code_does_not_touch_js()
     QString js = QStringLiteral("existing-js");
     QSet<QString> cssDoneIds, jsDoneIds;
     sc.addCode(QStringLiteral("[LINKTR url=\"https://example.fr\"]link[/LINKTR]"),
-               html, css, js, cssDoneIds, jsDoneIds);
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(js, QStringLiteral("existing-js"));
     QVERIFY(jsDoneIds.isEmpty());
 }
@@ -879,7 +883,7 @@ void Test_Website_ShortCodes::test_linktr_add_code_missing_url_throws()
     QVERIFY(throwsShortCodeException([&sc] {
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
-        sc.addCode(QStringLiteral("[LINKTR]link[/LINKTR]"), html, css, js, cssDoneIds, jsDoneIds);
+        sc.addCode(QStringLiteral("[LINKTR]link[/LINKTR]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -890,7 +894,7 @@ void Test_Website_ShortCodes::test_linktr_add_code_empty_url_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[LINKTR url=\"\"]link[/LINKTR]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -901,7 +905,7 @@ void Test_Website_ShortCodes::test_linktr_add_code_empty_rel_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         const QString input = QStringLiteral("[LINKTR url=\"https://example.fr\" rel=\"\"]link[/LINKTR]");
-        sc.addCode(input, html, css, js, cssDoneIds, jsDoneIds);
+        sc.addCode(input, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1040,13 +1044,13 @@ void Test_Website_ShortCodes::test_imgfix_add_code_alt_in_html()
     QVERIFY(html.contains(QStringLiteral("Hero banner")));
 }
 
-void Test_Website_ShortCodes::test_imgfix_add_code_src_is_todo_webp()
+void Test_Website_ShortCodes::test_imgfix_add_code_src_uses_filename()
 {
     ShortCodeImageFix sc;
     const QString input = QStringLiteral(
         "[IMGFIX id=\"hero\" fileName=\"hero.jpg\" alt=\"Banner\"][/IMGFIX]");
     const QString html = htmlFrom(sc, input);
-    QVERIFY(html.contains(QStringLiteral("src=\"TODO.webp\"")));
+    QVERIFY(html.contains(QStringLiteral("src=\"/hero.jpg\"")));
 }
 
 void Test_Website_ShortCodes::test_imgfix_add_code_width_in_html()
@@ -1093,7 +1097,7 @@ void Test_Website_ShortCodes::test_imgfix_add_code_appends_to_existing_html()
     QString css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
     sc.addCode(QStringLiteral("[IMGFIX id=\"i\" fileName=\"f.jpg\" alt=\"A\"][/IMGFIX]"),
-               html, css, js, cssDoneIds, jsDoneIds);
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.startsWith(prefix));
     QVERIFY(html.size() > prefix.size());
 }
@@ -1105,7 +1109,7 @@ void Test_Website_ShortCodes::test_imgfix_add_code_does_not_touch_css()
     QString css = QStringLiteral("existing-css");
     QSet<QString> cssDoneIds, jsDoneIds;
     sc.addCode(QStringLiteral("[IMGFIX id=\"i\" fileName=\"f.jpg\" alt=\"A\"][/IMGFIX]"),
-               html, css, js, cssDoneIds, jsDoneIds);
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(css, QStringLiteral("existing-css"));
     QVERIFY(cssDoneIds.isEmpty());
 }
@@ -1117,7 +1121,7 @@ void Test_Website_ShortCodes::test_imgfix_add_code_does_not_touch_js()
     QString js = QStringLiteral("existing-js");
     QSet<QString> cssDoneIds, jsDoneIds;
     sc.addCode(QStringLiteral("[IMGFIX id=\"i\" fileName=\"f.jpg\" alt=\"A\"][/IMGFIX]"),
-               html, css, js, cssDoneIds, jsDoneIds);
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(js, QStringLiteral("existing-js"));
     QVERIFY(jsDoneIds.isEmpty());
 }
@@ -1130,7 +1134,7 @@ void Test_Website_ShortCodes::test_imgfix_add_code_via_for_tag()
         "[IMGFIX id=\"hero\" fileName=\"hero.jpg\" alt=\"Via registry\"][/IMGFIX]");
     const QString html = htmlFrom(*sc, input);
     QVERIFY(html.contains(QStringLiteral("Via registry")));
-    QVERIFY(html.contains(QStringLiteral("src=\"TODO.webp\"")));
+    QVERIFY(html.contains(QStringLiteral("src=\"/hero.jpg\"")));
 }
 
 // =============================================================================
@@ -1144,7 +1148,7 @@ void Test_Website_ShortCodes::test_imgfix_add_code_missing_id_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGFIX fileName=\"f.jpg\" alt=\"A\"][/IMGFIX]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1155,7 +1159,7 @@ void Test_Website_ShortCodes::test_imgfix_add_code_missing_filename_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGFIX id=\"i\" alt=\"A\"][/IMGFIX]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1166,7 +1170,7 @@ void Test_Website_ShortCodes::test_imgfix_add_code_missing_alt_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGFIX id=\"i\" fileName=\"f.jpg\"][/IMGFIX]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1177,7 +1181,7 @@ void Test_Website_ShortCodes::test_imgfix_add_code_empty_alt_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGFIX id=\"i\" fileName=\"f.jpg\" alt=\"\"][/IMGFIX]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1188,7 +1192,7 @@ void Test_Website_ShortCodes::test_imgfix_add_code_invalid_width_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGFIX id=\"i\" fileName=\"f.jpg\" alt=\"A\" width=\"abc\"][/IMGFIX]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1199,7 +1203,7 @@ void Test_Website_ShortCodes::test_imgfix_add_code_invalid_height_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGFIX id=\"i\" fileName=\"f.jpg\" alt=\"A\" height=\"6.5\"][/IMGFIX]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1210,7 +1214,7 @@ void Test_Website_ShortCodes::test_imgfix_add_code_unknown_argument_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGFIX id=\"i\" fileName=\"f.jpg\" alt=\"A\" class=\"hero\"][/IMGFIX]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1221,7 +1225,7 @@ void Test_Website_ShortCodes::test_imgfix_add_code_mismatched_tags_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGFIX id=\"i\" fileName=\"f.jpg\" alt=\"A\"][/IMGTR]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1314,13 +1318,13 @@ void Test_Website_ShortCodes::test_imgtr_add_code_alt_in_html()
     QVERIFY(html.contains(QStringLiteral("Banniere principale")));
 }
 
-void Test_Website_ShortCodes::test_imgtr_add_code_src_is_todo_webp()
+void Test_Website_ShortCodes::test_imgtr_add_code_src_uses_filename()
 {
     ShortCodeImageTr sc;
     const QString input = QStringLiteral(
         "[IMGTR id=\"hero-fr\" fileName=\"hero_fr.jpg\" alt=\"Alt\"][/IMGTR]");
     const QString html = htmlFrom(sc, input);
-    QVERIFY(html.contains(QStringLiteral("src=\"TODO.webp\"")));
+    QVERIFY(html.contains(QStringLiteral("src=\"/hero_fr.jpg\"")));
 }
 
 void Test_Website_ShortCodes::test_imgtr_add_code_with_width_and_height()
@@ -1350,7 +1354,7 @@ void Test_Website_ShortCodes::test_imgtr_add_code_appends_to_existing_html()
     QString css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
     sc.addCode(QStringLiteral("[IMGTR id=\"i\" fileName=\"f.jpg\" alt=\"A\"][/IMGTR]"),
-               html, css, js, cssDoneIds, jsDoneIds);
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.startsWith(prefix));
     QVERIFY(html.size() > prefix.size());
 }
@@ -1362,7 +1366,7 @@ void Test_Website_ShortCodes::test_imgtr_add_code_does_not_touch_css()
     QString css = QStringLiteral("existing-css");
     QSet<QString> cssDoneIds, jsDoneIds;
     sc.addCode(QStringLiteral("[IMGTR id=\"i\" fileName=\"f.jpg\" alt=\"A\"][/IMGTR]"),
-               html, css, js, cssDoneIds, jsDoneIds);
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(css, QStringLiteral("existing-css"));
     QVERIFY(cssDoneIds.isEmpty());
 }
@@ -1374,7 +1378,7 @@ void Test_Website_ShortCodes::test_imgtr_add_code_does_not_touch_js()
     QString js = QStringLiteral("existing-js");
     QSet<QString> cssDoneIds, jsDoneIds;
     sc.addCode(QStringLiteral("[IMGTR id=\"i\" fileName=\"f.jpg\" alt=\"A\"][/IMGTR]"),
-               html, css, js, cssDoneIds, jsDoneIds);
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(js, QStringLiteral("existing-js"));
     QVERIFY(jsDoneIds.isEmpty());
 }
@@ -1387,7 +1391,7 @@ void Test_Website_ShortCodes::test_imgtr_add_code_via_for_tag()
         "[IMGTR id=\"hero-fr\" fileName=\"hero_fr.jpg\" alt=\"Via registry\"][/IMGTR]");
     const QString html = htmlFrom(*sc, input);
     QVERIFY(html.contains(QStringLiteral("Via registry")));
-    QVERIFY(html.contains(QStringLiteral("src=\"TODO.webp\"")));
+    QVERIFY(html.contains(QStringLiteral("src=\"/hero_fr.jpg\"")));
 }
 
 // =============================================================================
@@ -1401,7 +1405,7 @@ void Test_Website_ShortCodes::test_imgtr_add_code_missing_id_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGTR fileName=\"f.jpg\" alt=\"A\"][/IMGTR]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1412,7 +1416,7 @@ void Test_Website_ShortCodes::test_imgtr_add_code_missing_filename_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGTR id=\"i\" alt=\"A\"][/IMGTR]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1423,7 +1427,7 @@ void Test_Website_ShortCodes::test_imgtr_add_code_missing_alt_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGTR id=\"i\" fileName=\"f.jpg\"][/IMGTR]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1434,7 +1438,7 @@ void Test_Website_ShortCodes::test_imgtr_add_code_empty_alt_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGTR id=\"i\" fileName=\"f.jpg\" alt=\"\"][/IMGTR]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1445,7 +1449,7 @@ void Test_Website_ShortCodes::test_imgtr_add_code_invalid_width_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGTR id=\"i\" fileName=\"f.jpg\" alt=\"A\" width=\"50%\"][/IMGTR]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1456,7 +1460,7 @@ void Test_Website_ShortCodes::test_imgtr_add_code_invalid_height_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGTR id=\"i\" fileName=\"f.jpg\" alt=\"A\" height=\"auto\"][/IMGTR]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1467,7 +1471,7 @@ void Test_Website_ShortCodes::test_imgtr_add_code_unknown_argument_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGTR id=\"i\" fileName=\"f.jpg\" alt=\"A\" loading=\"lazy\"][/IMGTR]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1478,7 +1482,7 @@ void Test_Website_ShortCodes::test_imgtr_add_code_mismatched_tags_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[IMGTR id=\"i\" fileName=\"f.jpg\" alt=\"A\"][/IMGFIX]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1648,7 +1652,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_appends_to_existing_html()
     QString css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
     sc.addCode(QStringLiteral("[SPINNABLE id=\"1\"]{hello|world}[/SPINNABLE]"),
-               html, css, js, cssDoneIds, jsDoneIds);
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.startsWith(prefix));
     QVERIFY(html.size() > prefix.size());
 }
@@ -1660,7 +1664,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_does_not_touch_css()
     QString css = QStringLiteral("existing-css");
     QSet<QString> cssDoneIds, jsDoneIds;
     sc.addCode(QStringLiteral("[SPINNABLE id=\"1\"]{a|b}[/SPINNABLE]"),
-               html, css, js, cssDoneIds, jsDoneIds);
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(css, QStringLiteral("existing-css"));
     QVERIFY(cssDoneIds.isEmpty());
 }
@@ -1672,7 +1676,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_does_not_touch_js()
     QString js = QStringLiteral("existing-js");
     QSet<QString> cssDoneIds, jsDoneIds;
     sc.addCode(QStringLiteral("[SPINNABLE id=\"1\"]{a|b}[/SPINNABLE]"),
-               html, css, js, cssDoneIds, jsDoneIds);
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(js, QStringLiteral("existing-js"));
     QVERIFY(jsDoneIds.isEmpty());
 }
@@ -1720,7 +1724,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_missing_id_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[SPINNABLE]{a|b}[/SPINNABLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1731,7 +1735,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_id_not_digits_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[SPINNABLE id=\"abc\"]{a|b}[/SPINNABLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1742,7 +1746,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_id_negative_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[SPINNABLE id=\"-5\"]{a|b}[/SPINNABLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1753,7 +1757,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_id_float_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[SPINNABLE id=\"1.5\"]{a|b}[/SPINNABLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1764,7 +1768,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_invalid_random_value_throw
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[SPINNABLE id=\"1\" random=\"yes\"]{a|b}[/SPINNABLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1775,7 +1779,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_unknown_argument_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[SPINNABLE id=\"1\" seed=\"42\"]{a|b}[/SPINNABLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1791,7 +1795,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_no_spin_group_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[SPINNABLE id=\"1\"]just plain text[/SPINNABLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1803,7 +1807,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_unmatched_open_brace_throw
         QSet<QString> cssDoneIds, jsDoneIds;
         // {a|b is missing the closing }
         sc.addCode(QStringLiteral("[SPINNABLE id=\"1\"]{a|b unclosed[/SPINNABLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1815,7 +1819,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_unmatched_close_brace_thro
         QSet<QString> cssDoneIds, jsDoneIds;
         // stray } with no matching {
         sc.addCode(QStringLiteral("[SPINNABLE id=\"1\"]{a|b} extra}[/SPINNABLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1827,7 +1831,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_group_no_pipe_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[SPINNABLE id=\"1\"]{nopipe}[/SPINNABLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1839,7 +1843,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_nested_unmatched_brace_thr
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[SPINNABLE id=\"1\"]{a|{b|c}[/SPINNABLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1850,7 +1854,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_malformed_shortcode_throws
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("this is not a shortcode at all"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1861,7 +1865,7 @@ void Test_Website_ShortCodes::test_spinnable_add_code_mismatched_tags_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[SPINNABLE id=\"1\"]{a|b}[/VIDEO]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -1973,7 +1977,7 @@ void Test_Website_ShortCodes::test_title_add_code_appends_to_existing_html()
     QString html = prefix;
     QString css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    sc.addCode(QStringLiteral("[TITLE level=\"1\"]Hi[/TITLE]"), html, css, js, cssDoneIds, jsDoneIds);
+    sc.addCode(QStringLiteral("[TITLE level=\"1\"]Hi[/TITLE]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.startsWith(prefix));
     QVERIFY(html.size() > prefix.size());
 }
@@ -1984,7 +1988,7 @@ void Test_Website_ShortCodes::test_title_add_code_does_not_touch_css()
     QString html, js;
     QString css = QStringLiteral("existing-css");
     QSet<QString> cssDoneIds, jsDoneIds;
-    sc.addCode(QStringLiteral("[TITLE level=\"1\"]Hi[/TITLE]"), html, css, js, cssDoneIds, jsDoneIds);
+    sc.addCode(QStringLiteral("[TITLE level=\"1\"]Hi[/TITLE]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(css, QStringLiteral("existing-css"));
     QVERIFY(cssDoneIds.isEmpty());
 }
@@ -1995,7 +1999,7 @@ void Test_Website_ShortCodes::test_title_add_code_does_not_touch_js()
     QString html, css;
     QString js = QStringLiteral("existing-js");
     QSet<QString> cssDoneIds, jsDoneIds;
-    sc.addCode(QStringLiteral("[TITLE level=\"1\"]Hi[/TITLE]"), html, css, js, cssDoneIds, jsDoneIds);
+    sc.addCode(QStringLiteral("[TITLE level=\"1\"]Hi[/TITLE]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(js, QStringLiteral("existing-js"));
     QVERIFY(jsDoneIds.isEmpty());
 }
@@ -2019,7 +2023,7 @@ void Test_Website_ShortCodes::test_title_add_code_missing_level_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[TITLE]Hello[/TITLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -2030,7 +2034,7 @@ void Test_Website_ShortCodes::test_title_add_code_invalid_level_zero_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[TITLE level=\"0\"]Hello[/TITLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -2041,7 +2045,7 @@ void Test_Website_ShortCodes::test_title_add_code_invalid_level_seven_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[TITLE level=\"7\"]Hello[/TITLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -2052,7 +2056,7 @@ void Test_Website_ShortCodes::test_title_add_code_invalid_level_alpha_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[TITLE level=\"h2\"]Hello[/TITLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -2063,7 +2067,7 @@ void Test_Website_ShortCodes::test_title_add_code_unknown_argument_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[TITLE level=\"1\" class=\"big\"]Hello[/TITLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -2074,7 +2078,7 @@ void Test_Website_ShortCodes::test_title_add_code_mismatched_tags_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[TITLE level=\"1\"]Hello[/VIDEO]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 
@@ -2085,7 +2089,7 @@ void Test_Website_ShortCodes::test_title_add_code_duplicate_argument_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[TITLE level=\"1\" level=\"2\"]Hello[/TITLE]"),
-                   html, css, js, cssDoneIds, jsDoneIds);
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }
 

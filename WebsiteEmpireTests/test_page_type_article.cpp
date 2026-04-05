@@ -7,12 +7,16 @@
 #include "website/pages/blocs/PageBlocCategory.h"
 #include "website/pages/blocs/PageBlocText.h"
 #include "website/pages/blocs/AbstractPageBloc.h"
+#include "website/EngineArticles.h"
 
 // =============================================================================
 // Helpers
 // =============================================================================
 
 namespace {
+
+// Engine instance used in addCode calls (no init() — getLangCode returns "" for all indices).
+EngineArticles engine;
 
 // Owns the working directory and CategoryTable so PageTypeArticle stays valid.
 struct ArticleFixture {
@@ -42,7 +46,7 @@ QString htmlFrom(ArticleFixture &f, const QString &text)
     f.article.load(makeHash(QString(), text));
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    f.article.addCode(QStringView{}, html, css, js, cssDoneIds, jsDoneIds);
+    f.article.addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     return html;
 }
 
@@ -259,7 +263,7 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_output_css_js_params_unt
     QString css = QStringLiteral("pre-css");
     QString js  = QStringLiteral("pre-js");
     QSet<QString> cssDoneIds, jsDoneIds;
-    f.article.addCode(QStringView{}, html, css, js, cssDoneIds, jsDoneIds);
+    f.article.addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(css, QStringLiteral("pre-css"));   // 19
     QCOMPARE(js,  QStringLiteral("pre-js"));    // 20
 }
@@ -283,7 +287,7 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_css_inlined_in_style_tag
     f.article.load(makeHash(QString::number(catId), QString()));
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    f.article.addCode(QStringView{}, html, css, js, cssDoneIds, jsDoneIds);
+    f.article.addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
 
     QVERIFY(html.contains(QStringLiteral("<style>")));        // 22
     QVERIFY(html.contains(QStringLiteral(".categories")));    // 23
@@ -296,7 +300,7 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_style_tag_in_head_before
     f.article.load(makeHash(QString::number(catId), QString()));
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    f.article.addCode(QStringView{}, html, css, js, cssDoneIds, jsDoneIds);
+    f.article.addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
 
     QVERIFY(html.indexOf(QStringLiteral("<style>")) < html.indexOf(QStringLiteral("<body>")));   // 24
 }

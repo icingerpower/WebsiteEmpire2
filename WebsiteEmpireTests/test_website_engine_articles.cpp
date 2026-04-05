@@ -10,7 +10,9 @@
 #include "website/HostTable.h"
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/attributes/CategoryTable.h"
+#include "website/pages/blocs/AbstractPageBloc.h"
 #include "website/pages/blocs/PageBlocCategory.h"
+#include "website/pages/blocs/PageBlocText.h"
 
 // =============================================================================
 // Helpers
@@ -295,9 +297,11 @@ void Test_EngineArticles::test_enginearticles_second_bloc_renders_text_as_paragr
     engine.init(QDir(dir.path()), hostTable);
 
     const AbstractPageBloc *secondBloc = engine.getPageTypes().first()->getPageBlocs().at(1);
+    const_cast<AbstractPageBloc *>(secondBloc)->load(
+        {{QLatin1String(PageBlocText::KEY_TEXT), QStringLiteral("Hello")}});
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    secondBloc->addCode(QStringLiteral("Hello"), html, css, js, cssDoneIds, jsDoneIds);
+    secondBloc->addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.contains(QStringLiteral("<p>Hello</p>")));
 }
 
@@ -315,9 +319,11 @@ void Test_EngineArticles::test_enginearticles_category_bloc_renders_category_nam
 
     const int id = engine.categoryTable().addCategory(QStringLiteral("Technology"));
     const AbstractPageBloc *bloc = firstCategoryBloc(engine);
+    const_cast<AbstractPageBloc *>(bloc)->load(
+        {{QLatin1String(PageBlocCategory::KEY_CATEGORIES), QString::number(id)}});
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    bloc->addCode(QString::number(id), html, css, js, cssDoneIds, jsDoneIds);
+    bloc->addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.contains(QStringLiteral("Technology")));
 }
 
@@ -331,9 +337,11 @@ void Test_EngineArticles::test_enginearticles_category_bloc_renders_ul_tag()
 
     const int id = engine.categoryTable().addCategory(QStringLiteral("Science"));
     const AbstractPageBloc *bloc = firstCategoryBloc(engine);
+    const_cast<AbstractPageBloc *>(bloc)->load(
+        {{QLatin1String(PageBlocCategory::KEY_CATEGORIES), QString::number(id)}});
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    bloc->addCode(QString::number(id), html, css, js, cssDoneIds, jsDoneIds);
+    bloc->addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.contains(QStringLiteral("<ul")));
     QVERIFY(html.contains(QStringLiteral("</ul>")));
 }
@@ -347,9 +355,12 @@ void Test_EngineArticles::test_enginearticles_category_bloc_empty_content_produc
     engine.init(QDir(dir.path()), hostTable);
 
     const AbstractPageBloc *bloc = firstCategoryBloc(engine);
+    // load() with empty categories → m_selectedIds is empty
+    const_cast<AbstractPageBloc *>(bloc)->load(
+        {{QLatin1String(PageBlocCategory::KEY_CATEGORIES), QString()}});
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    bloc->addCode(QStringLiteral(""), html, css, js, cssDoneIds, jsDoneIds);
+    bloc->addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.isEmpty());
 }
 
@@ -362,9 +373,12 @@ void Test_EngineArticles::test_enginearticles_category_bloc_unknown_id_produces_
     engine.init(QDir(dir.path()), hostTable);
 
     const AbstractPageBloc *bloc = firstCategoryBloc(engine);
+    // load() with an id that doesn't exist in CategoryTable → names list empty → no output
+    const_cast<AbstractPageBloc *>(bloc)->load(
+        {{QLatin1String(PageBlocCategory::KEY_CATEGORIES), QStringLiteral("9999")}});
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    bloc->addCode(QStringLiteral("9999"), html, css, js, cssDoneIds, jsDoneIds);
+    bloc->addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.isEmpty());
 }
 
@@ -378,9 +392,11 @@ void Test_EngineArticles::test_enginearticles_category_bloc_css_emitted_on_first
 
     const int id = engine.categoryTable().addCategory(QStringLiteral("Art"));
     const AbstractPageBloc *bloc = firstCategoryBloc(engine);
+    const_cast<AbstractPageBloc *>(bloc)->load(
+        {{QLatin1String(PageBlocCategory::KEY_CATEGORIES), QString::number(id)}});
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    bloc->addCode(QString::number(id), html, css, js, cssDoneIds, jsDoneIds);
+    bloc->addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(!css.isEmpty());
 }
 
@@ -394,12 +410,15 @@ void Test_EngineArticles::test_enginearticles_category_bloc_css_not_duplicated()
 
     const int id = engine.categoryTable().addCategory(QStringLiteral("Art"));
     const AbstractPageBloc *bloc = firstCategoryBloc(engine);
+    const_cast<AbstractPageBloc *>(bloc)->load(
+        {{QLatin1String(PageBlocCategory::KEY_CATEGORIES), QString::number(id)}});
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    bloc->addCode(QString::number(id), html, css, js, cssDoneIds, jsDoneIds);
+    bloc->addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     const QString cssAfterFirst = css;
+    QVERIFY(!cssAfterFirst.isEmpty()); // sanity: CSS was actually emitted
     // Second call on the same page (same cssDoneIds) must not re-append CSS.
-    bloc->addCode(QString::number(id), html, css, js, cssDoneIds, jsDoneIds);
+    bloc->addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QCOMPARE(css, cssAfterFirst);
 }
 
@@ -414,9 +433,12 @@ void Test_EngineArticles::test_enginearticles_category_bloc_multiple_categories_
     const int idA = engine.categoryTable().addCategory(QStringLiteral("Alpha"));
     const int idB = engine.categoryTable().addCategory(QStringLiteral("Beta"));
     const AbstractPageBloc *bloc = firstCategoryBloc(engine);
+    const_cast<AbstractPageBloc *>(bloc)->load(
+        {{QLatin1String(PageBlocCategory::KEY_CATEGORIES),
+          QStringLiteral("%1,%2").arg(QString::number(idA), QString::number(idB))}});
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    bloc->addCode(QStringLiteral("%1,%2").arg(idA).arg(idB), html, css, js, cssDoneIds, jsDoneIds);
+    bloc->addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.contains(QStringLiteral("Alpha")));
     QVERIFY(html.contains(QStringLiteral("Beta")));
 }
@@ -432,9 +454,12 @@ void Test_EngineArticles::test_enginearticles_category_bloc_category_order_prese
     const int idA = engine.categoryTable().addCategory(QStringLiteral("First"));
     const int idB = engine.categoryTable().addCategory(QStringLiteral("Second"));
     const AbstractPageBloc *bloc = firstCategoryBloc(engine);
+    const_cast<AbstractPageBloc *>(bloc)->load(
+        {{QLatin1String(PageBlocCategory::KEY_CATEGORIES),
+          QStringLiteral("%1,%2").arg(QString::number(idA), QString::number(idB))}});
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    bloc->addCode(QStringLiteral("%1,%2").arg(idA).arg(idB), html, css, js, cssDoneIds, jsDoneIds);
+    bloc->addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(html.indexOf(QStringLiteral("First")) < html.indexOf(QStringLiteral("Second")));
 }
 

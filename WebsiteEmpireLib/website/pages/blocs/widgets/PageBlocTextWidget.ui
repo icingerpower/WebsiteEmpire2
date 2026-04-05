@@ -6,14 +6,31 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>400</width>
-    <height>300</height>
+    <width>1453</width>
+    <height>847</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>PageBlocTextWidget</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="shortcodeBar">
+     <item>
+      <spacer name="shortcodeBarSpacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
    <item>
     <widget class="QTextEdit" name="textEdit"/>
    </item>

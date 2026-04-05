@@ -70,8 +70,18 @@ QCoro::Task<ClaudeJobResult> runClaudeJob(const QString &jobJson)
         QStringLiteral("Use the Write tool to save ONLY the filled replyFormat "
                        "JSON object to the file 'reply.json' in the current directory. "
                        "The file must contain valid JSON only — no other text.");
-    const QString prompt =
-        QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+    const QByteArray promptBytes = QJsonDocument(obj).toJson(QJsonDocument::Compact);
+
+    // Write prompt to a file and feed it via stdin to avoid Linux's 128 KB
+    // per-argument limit (MAX_ARG_STRLEN), which causes FailedToStart when the
+    // payload grows large (many existing conditions / available-values lists).
+    const QString promptPath = tempDir.path() + QStringLiteral("/prompt.json");
+    QFile promptFile(promptPath);
+    if (!promptFile.open(QIODevice::WriteOnly)) {
+        co_return res;
+    }
+    promptFile.write(promptBytes);
+    promptFile.close();
 
     QElapsedTimer timer;
     timer.start();
@@ -81,11 +91,10 @@ QCoro::Task<ClaudeJobResult> runClaudeJob(const QString &jobJson)
     process.setProgram(QStringLiteral("claude"));
     process.setArguments({
         QStringLiteral("-p"),
-        prompt,
+        QStringLiteral("-"),                      // read prompt from stdin
         QStringLiteral("--dangerously-skip-permissions"),
     });
-    // Close stdin so Claude cannot wait for interactive input.
-    process.setStandardInputFile(QProcess::nullDevice());
+    process.setStandardInputFile(promptPath);
 
     co_await qCoro(process).start();
     co_await qCoro(process).waitForFinished(-1);

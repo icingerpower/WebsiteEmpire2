@@ -35,6 +35,8 @@ public:
      * css, js, cssDoneIds and jsDoneIds are left unchanged (TITLE emits no CSS or JS).
      */
     void addCode(QStringView     origContent,
+                 AbstractEngine &engine,
+                 int             websiteIndex,
                  QString        &html,
                  QString        &css,
                  QString        &js,

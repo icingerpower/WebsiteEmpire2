@@ -48,3 +48,17 @@ target_include_directories(Test_StaticServe_StatsWriter
 )
 
 add_test(NAME Test_StaticServe_StatsWriter COMMAND Test_StaticServe_StatsWriter)
+
+add_executable(Test_StaticServe_VariantSelector
+    test_variant_selector.cpp
+)
+
+target_link_libraries(Test_StaticServe_VariantSelector
+    PRIVATE Drogon::Drogon StaticWebsiteServeLib
+)
+
+target_include_directories(Test_StaticServe_VariantSelector
+    PRIVATE ../StaticWebsiteServeLib
+)
+
+add_test(NAME Test_StaticServe_VariantSelector COMMAND Test_StaticServe_VariantSelector)

@@ -46,6 +46,8 @@ public:
      * Reads KEY_CATEGORIES (comma-separated integer ids) from values.
      * Delegates to setContent(). Unknown keys are silently ignored.
      */
+    QString getName() const override;
+
     void load(const QHash<QString, QString> &values) override;
 
     /**
@@ -57,12 +59,14 @@ public:
     // WebCodeAdder interface.
     // Renders selected categories as <ul class="categories"><li>…</li></ul>.
     // The CSS block is emitted once per page via cssDoneIds.
-    void addCode(QStringView    origContent,
-                 QString       &html,
-                 QString       &css,
-                 QString       &js,
-                 QSet<QString> &cssDoneIds,
-                 QSet<QString> &jsDoneIds) const override;
+    void addCode(QStringView     origContent,
+                 AbstractEngine &engine,
+                 int             websiteIndex,
+                 QString        &html,
+                 QString        &css,
+                 QString        &js,
+                 QSet<QString>  &cssDoneIds,
+                 QSet<QString>  &jsDoneIds) const override;
 
     // Returns a CategoryEditorWidget in selection mode; ownership is
     // transferred to the caller.

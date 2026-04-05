@@ -17,9 +17,9 @@
 int main()
 {
     // TODO: load paths from a config file or CLI arguments.
-    ContentDb contentDb("content.db");
-    ImageDb   imageDb("images.db");
-    StatsDb   statsDb("stats.db");
+    ContentDb contentDb(ContentDb::FILENAME);
+    ImageDb   imageDb(ImageDb::FILENAME);
+    StatsDb   statsDb(StatsDb::FILENAME);
 
     PageRepositorySQLite    pageRepo(contentDb);
     MenuRepositorySQLite    menuRepo(contentDb);

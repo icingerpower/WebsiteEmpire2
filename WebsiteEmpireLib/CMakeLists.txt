@@ -6,6 +6,7 @@ include(../common.cmake)
 
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Gui Widgets Sql Network)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets Sql Network)
+find_package(ZLIB REQUIRED)
 
 setup_qcoro(COMPONENTS Network Core)
 
@@ -34,6 +35,7 @@ target_link_libraries(WebsiteEmpireLib
     Qt${QT_VERSION_MAJOR}::Network
     QCoro::Network
     QCoro::Core
+    ZLIB::ZLIB
 )
 
 target_include_directories(WebsiteEmpireLib PUBLIC ../../common ${CMAKE_CURRENT_SOURCE_DIR})

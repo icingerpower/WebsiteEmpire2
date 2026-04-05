@@ -50,15 +50,17 @@ public:
 
     /**
      * Parses origContent and appends:
-     *   <img src="TODO.webp" alt="alt" [width="w"] [height="h"] />
+     *   <img src="/fileName" alt="alt" [width="w"] [height="h"] />
      *
+     * The src is built from the fileName argument, which is the bare URL
+     * filename (e.g. "hero.webp") stored in image_names.filename.
+     * Drogon's ImageController resolves it to the correct blob at serve time.
      * width and height attributes are omitted when the corresponding arguments
      * are absent.  css, js, cssDoneIds and jsDoneIds are left unchanged.
-     *
-     * TODO: replace "TODO.webp" with the resolved image path retrieved from
-     *       the image lookup class using the id argument once it is available.
      */
     void addCode(QStringView     origContent,
+                 AbstractEngine &engine,
+                 int             websiteIndex,
                  QString        &html,
                  QString        &css,
                  QString        &js,

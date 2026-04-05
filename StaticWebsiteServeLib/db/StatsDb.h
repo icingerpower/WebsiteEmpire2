@@ -26,6 +26,8 @@
 class StatsDb
 {
 public:
+    static constexpr const char *FILENAME = "stats.db";
+
     explicit StatsDb(const std::string &path);
 
     SQLite::Database &database();

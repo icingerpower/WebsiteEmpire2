@@ -41,6 +41,13 @@ public:
     // Returns the model index for the given category id, or an invalid index.
     QModelIndex indexForId(int id) const;
 
+    // --- Virtual root ----------------------------------------------------------
+    // When enabled a synthetic "(root)" item appears at the top of the tree.
+    // Its UserRole data is 0, so selecting it and clicking Add creates a
+    // top-level category.  It is not editable and not checkable.
+    // The virtual root's internalId is 0 (real category ids start at 1).
+    void setVirtualRootEnabled(bool enabled);
+
     // --- QAbstractItemModel ----------------------------------------------------
 
     QModelIndex index(int row, int column,
@@ -62,6 +69,10 @@ private slots:
 private:
     void _rebuild();
 
+    // Returns the model index to pass as the parent when addressing root-level
+    // categories: the virtual root index when enabled, QModelIndex() otherwise.
+    QModelIndex _rootParentIndex() const;
+
     CategoryTable &m_table;
 
     // parentId → ordered list of child ids (preserves CSV order)
@@ -71,6 +82,7 @@ private:
 
     QSet<int> m_checkedIds;
     bool      m_selectionEnabled = true;
+    bool      m_virtualRoot      = false;
 };
 
 #endif // CATEGORYTREEMODEL_H

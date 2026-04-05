@@ -58,6 +58,8 @@ private slots:
     void test_settings_reload_extra_id_ignored();
     void test_settings_reload_missing_id_defaults_to_empty();
     void test_settings_no_csv_all_values_empty();
+    void test_settings_allowed_values_role_lang_code_row();
+    void test_settings_allowed_values_role_other_rows_empty();
 };
 
 // ---- Column and row counts --------------------------------------------------
@@ -75,7 +77,7 @@ void Test_Website_Settings::test_settings_row_count()
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     WebsiteSettingsTable table(QDir(dir.path()));
-    // 3 pre-defined settings: website_name, author, base_url
+    // 3 pre-defined settings: website_name, author, editing_lang_code
     QCOMPARE(table.rowCount(), 3);
 }
 
@@ -154,8 +156,14 @@ void Test_Website_Settings::test_settings_data_displayrole_value_initially_empty
     QVERIFY(dir.isValid());
     WebsiteSettingsTable table(QDir(dir.path()));
     for (int row = 0; row < table.rowCount(); ++row) {
+        const QString id  = table.data(table.index(row, WebsiteSettingsTable::COL_PARAMETER), Qt::UserRole).toString();
         const QString val = table.data(table.index(row, WebsiteSettingsTable::COL_VALUE)).toString();
-        QVERIFY2(val.isEmpty(), qPrintable(QStringLiteral("Row %1 should be empty, got: %2").arg(row).arg(val)));
+        if (id == WebsiteSettingsTable::ID_EDITING_LANG_CODE) {
+            // Defaults to "en" so the editor always has a valid language selected.
+            QCOMPARE(val, QStringLiteral("en"));
+        } else {
+            QVERIFY2(val.isEmpty(), qPrintable(QStringLiteral("Row %1 (id=%2) should be empty, got: %3").arg(row).arg(id, val)));
+        }
     }
 }
 
@@ -181,7 +189,7 @@ void Test_Website_Settings::test_settings_data_userrole_returns_id()
     }
     QVERIFY(ids.contains(WebsiteSettingsTable::ID_WEBSITE_NAME));
     QVERIFY(ids.contains(WebsiteSettingsTable::ID_AUTHOR));
-    QVERIFY(ids.contains(WebsiteSettingsTable::ID_BASE_URL));
+    QVERIFY(ids.contains(WebsiteSettingsTable::ID_EDITING_LANG_CODE));
 }
 
 void Test_Website_Settings::test_settings_data_invalid_index_returns_empty()
@@ -299,9 +307,9 @@ void Test_Website_Settings::test_settings_named_getters_initial()
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     WebsiteSettingsTable table(QDir(dir.path()));
-    QCOMPARE(table.websiteName(), QString());
-    QCOMPARE(table.author(),      QString());
-    QCOMPARE(table.baseUrl(),     QString());
+    QCOMPARE(table.websiteName(),     QString());
+    QCOMPARE(table.author(),          QString());
+    QCOMPARE(table.editingLangCode(), QStringLiteral("en"));
 }
 
 void Test_Website_Settings::test_settings_named_getters_after_setdata()
@@ -318,13 +326,13 @@ void Test_Website_Settings::test_settings_named_getters_after_setdata()
             table.setData(valueIdx, QStringLiteral("My Site"));
         } else if (id == WebsiteSettingsTable::ID_AUTHOR) {
             table.setData(valueIdx, QStringLiteral("Alice"));
-        } else if (id == WebsiteSettingsTable::ID_BASE_URL) {
-            table.setData(valueIdx, QStringLiteral("https://example.com"));
+        } else if (id == WebsiteSettingsTable::ID_EDITING_LANG_CODE) {
+            table.setData(valueIdx, QStringLiteral("fr"));
         }
     }
-    QCOMPARE(table.websiteName(), QStringLiteral("My Site"));
-    QCOMPARE(table.author(),      QStringLiteral("Alice"));
-    QCOMPARE(table.baseUrl(),     QStringLiteral("https://example.com"));
+    QCOMPARE(table.websiteName(),     QStringLiteral("My Site"));
+    QCOMPARE(table.author(),          QStringLiteral("Alice"));
+    QCOMPARE(table.editingLangCode(), QStringLiteral("fr"));
 }
 
 // ---- Persistence ------------------------------------------------------------
@@ -346,10 +354,9 @@ void Test_Website_Settings::test_settings_save_and_reload()
     }
 
     WebsiteSettingsTable reloaded(qdir);
-    QCOMPARE(reloaded.websiteName(), QStringLiteral("ReloadSite"));
-    // Other rows default to empty.
-    QCOMPARE(reloaded.author(),  QString());
-    QCOMPARE(reloaded.baseUrl(), QString());
+    QCOMPARE(reloaded.websiteName(),     QStringLiteral("ReloadSite"));
+    QCOMPARE(reloaded.author(),          QString());
+    QCOMPARE(reloaded.editingLangCode(), QStringLiteral("en")); // default when absent from CSV
 }
 
 void Test_Website_Settings::test_settings_reload_order_changed()
@@ -360,16 +367,16 @@ void Test_Website_Settings::test_settings_reload_order_changed()
 
     // Write CSV with rows in reverse order.
     QVERIFY(writeSettingsCsv(qdir, {
-        { WebsiteSettingsTable::ID_BASE_URL,     QStringLiteral("https://example.com") },
-        { WebsiteSettingsTable::ID_AUTHOR,       QStringLiteral("Bob") },
-        { WebsiteSettingsTable::ID_WEBSITE_NAME, QStringLiteral("OrderTest") },
+        { WebsiteSettingsTable::ID_EDITING_LANG_CODE, QStringLiteral("de") },
+        { WebsiteSettingsTable::ID_AUTHOR,            QStringLiteral("Bob") },
+        { WebsiteSettingsTable::ID_WEBSITE_NAME,      QStringLiteral("OrderTest") },
     }));
 
     WebsiteSettingsTable table(qdir);
     // All values must be found regardless of CSV order.
-    QCOMPARE(table.websiteName(), QStringLiteral("OrderTest"));
-    QCOMPARE(table.author(),      QStringLiteral("Bob"));
-    QCOMPARE(table.baseUrl(),     QStringLiteral("https://example.com"));
+    QCOMPARE(table.websiteName(),     QStringLiteral("OrderTest"));
+    QCOMPARE(table.author(),          QStringLiteral("Bob"));
+    QCOMPARE(table.editingLangCode(), QStringLiteral("de"));
 }
 
 void Test_Website_Settings::test_settings_reload_extra_id_ignored()
@@ -384,7 +391,7 @@ void Test_Website_Settings::test_settings_reload_extra_id_ignored()
     }));
 
     WebsiteSettingsTable table(qdir);
-    QCOMPARE(table.rowCount(), 3);  // only the 3 pre-defined rows
+    QCOMPARE(table.rowCount(), 3); // only the 3 pre-defined rows
     QCOMPARE(table.websiteName(), QStringLiteral("KnownSite"));
 }
 
@@ -394,15 +401,15 @@ void Test_Website_Settings::test_settings_reload_missing_id_defaults_to_empty()
     QVERIFY(dir.isValid());
     const QDir qdir(dir.path());
 
-    // Only website_name saved; author and base_url are absent.
+    // Only website_name saved; author and editing_lang_code are absent.
     QVERIFY(writeSettingsCsv(qdir, {
         { WebsiteSettingsTable::ID_WEBSITE_NAME, QStringLiteral("PartialSave") },
     }));
 
     WebsiteSettingsTable table(qdir);
-    QCOMPARE(table.websiteName(), QStringLiteral("PartialSave"));
-    QCOMPARE(table.author(),      QString());
-    QCOMPARE(table.baseUrl(),     QString());
+    QCOMPARE(table.websiteName(),     QStringLiteral("PartialSave"));
+    QCOMPARE(table.author(),          QString());
+    QCOMPARE(table.editingLangCode(), QStringLiteral("en")); // default when absent from CSV
 }
 
 void Test_Website_Settings::test_settings_no_csv_all_values_empty()
@@ -410,10 +417,50 @@ void Test_Website_Settings::test_settings_no_csv_all_values_empty()
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     WebsiteSettingsTable table(QDir(dir.path()));
-    // No CSV file — all values must default to empty.
+    // No CSV file — text fields default to empty; editing_lang_code defaults to "en".
+    QCOMPARE(table.websiteName(),     QString());
+    QCOMPARE(table.author(),          QString());
+    QCOMPARE(table.editingLangCode(), QStringLiteral("en"));
+}
+
+// ---- AllowedValuesRole ------------------------------------------------------
+
+void Test_Website_Settings::test_settings_allowed_values_role_lang_code_row()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    WebsiteSettingsTable table(QDir(dir.path()));
+
     for (int row = 0; row < table.rowCount(); ++row) {
-        const QString val = table.data(table.index(row, WebsiteSettingsTable::COL_VALUE)).toString();
-        QVERIFY(val.isEmpty());
+        const QString id = table.data(table.index(row, WebsiteSettingsTable::COL_PARAMETER), Qt::UserRole).toString();
+        if (id == WebsiteSettingsTable::ID_EDITING_LANG_CODE) {
+            const QStringList allowed = table.data(
+                table.index(row, WebsiteSettingsTable::COL_VALUE),
+                WebsiteSettingsTable::AllowedValuesRole).toStringList();
+            QVERIFY(!allowed.isEmpty());
+            QVERIFY(allowed.contains(QStringLiteral("en")));
+            return;
+        }
+    }
+    QFAIL("editing_lang_code row not found");
+}
+
+void Test_Website_Settings::test_settings_allowed_values_role_other_rows_empty()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    WebsiteSettingsTable table(QDir(dir.path()));
+
+    for (int row = 0; row < table.rowCount(); ++row) {
+        const QString id = table.data(table.index(row, WebsiteSettingsTable::COL_PARAMETER), Qt::UserRole).toString();
+        if (id == WebsiteSettingsTable::ID_EDITING_LANG_CODE) {
+            continue;
+        }
+        const QStringList allowed = table.data(
+            table.index(row, WebsiteSettingsTable::COL_VALUE),
+            WebsiteSettingsTable::AllowedValuesRole).toStringList();
+        QVERIFY2(allowed.isEmpty(),
+                 qPrintable(QStringLiteral("Row id=%1 should have no allowed values").arg(id)));
     }
 }
 

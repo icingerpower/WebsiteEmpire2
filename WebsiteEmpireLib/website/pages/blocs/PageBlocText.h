@@ -29,6 +29,8 @@ public:
      * Reads KEY_TEXT from values into m_text.
      * Unknown keys are silently ignored.
      */
+    QString getName() const override;
+
     void load(const QHash<QString, QString> &values) override;
 
     /**
@@ -38,6 +40,8 @@ public:
 
     /** Renders m_text to html; origContent is ignored. */
     void addCode(QStringView     origContent,
+                 AbstractEngine &engine,
+                 int             websiteIndex,
                  QString        &html,
                  QString        &css,
                  QString        &js,
@@ -57,6 +61,8 @@ private:
      * Plain-text segments between shortcodes are appended verbatim.
      */
     static void processText(const QString  &text,
+                            AbstractEngine &engine,
+                            int             websiteIndex,
                             QString        &html,
                             QString        &css,
                             QString        &js,

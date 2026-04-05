@@ -1,8 +1,73 @@
 #include "AbstractPageType.h"
+#include "website/AbstractEngine.h"
 #include "website/pages/blocs/AbstractPageBloc.h"
 
 #include <QHash>
 #include <QString>
+
+// =============================================================================
+// Registry internals
+// =============================================================================
+
+namespace {
+
+struct PageTypeEntry {
+    QString                        displayName;
+    AbstractPageType::Factory      factory;
+};
+
+QHash<QString, PageTypeEntry> &registry()
+{
+    static QHash<QString, PageTypeEntry> s_registry;
+    return s_registry;
+}
+
+// Insertion-order list of type ids (QHash does not preserve order).
+QList<QString> &registryOrder()
+{
+    static QList<QString> s_order;
+    return s_order;
+}
+
+} // namespace
+
+// =============================================================================
+// Recorder
+// =============================================================================
+
+AbstractPageType::Recorder::Recorder(const QString &typeId,
+                                      const QString &displayName,
+                                      Factory        factory)
+{
+    Q_ASSERT_X(!registry().contains(typeId),
+               "AbstractPageType::Recorder",
+               qPrintable(QStringLiteral("Duplicate page type id: ") + typeId));
+    registry().insert(typeId, {displayName, std::move(factory)});
+    registryOrder().append(typeId);
+}
+
+// =============================================================================
+// Static factory / query
+// =============================================================================
+
+std::unique_ptr<AbstractPageType> AbstractPageType::createForTypeId(const QString &typeId,
+                                                                      CategoryTable &table)
+{
+    const auto it = registry().find(typeId);
+    if (it == registry().end()) {
+        return nullptr;
+    }
+    return it->factory(table);
+}
+
+QList<QString> AbstractPageType::allTypeIds()
+{
+    return registryOrder();
+}
+
+// =============================================================================
+// load / save
+// =============================================================================
 
 void AbstractPageType::load(const QHash<QString, QString> &values)
 {
@@ -34,7 +99,13 @@ void AbstractPageType::save(QHash<QString, QString> &values) const
     }
 }
 
+// =============================================================================
+// addCode
+// =============================================================================
+
 void AbstractPageType::addCode(QStringView     origContent,
+                                AbstractEngine &engine,
+                                int             websiteIndex,
                                 QString        &html,
                                 QString        &css,
                                 QString        &js,
@@ -45,10 +116,17 @@ void AbstractPageType::addCode(QStringView     origContent,
     // and JS before </body>.
     QString bodyHtml, innerCss, innerJs;
     for (const AbstractPageBloc *bloc : getPageBlocs()) {
-        bloc->addCode(origContent, bodyHtml, innerCss, innerJs, cssDoneIds, jsDoneIds);
+        bloc->addCode(origContent, engine, websiteIndex, bodyHtml, innerCss, innerJs, cssDoneIds, jsDoneIds);
     }
 
-    html += QStringLiteral("<!DOCTYPE html><html><head><meta charset=\"utf-8\">");
+    const QString langCode = engine.getLangCode(websiteIndex);
+    html += QStringLiteral("<!DOCTYPE html><html");
+    if (!langCode.isEmpty()) {
+        html += QStringLiteral(" lang=\"");
+        html += langCode;
+        html += QStringLiteral("\"");
+    }
+    html += QStringLiteral("><head><meta charset=\"utf-8\">");
     if (!innerCss.isEmpty()) {
         html += QStringLiteral("<style>");
         html += innerCss;
@@ -68,6 +146,10 @@ void AbstractPageType::addCode(QStringView     origContent,
     Q_UNUSED(css)
     Q_UNUSED(js)
 }
+
+// =============================================================================
+// getAttributes
+// =============================================================================
 
 const QList<const AbstractAttribute *> &AbstractPageType::getAttributes() const
 {

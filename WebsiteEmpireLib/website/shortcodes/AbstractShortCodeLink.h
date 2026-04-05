@@ -26,6 +26,14 @@ public:
     static constexpr const char *ID_REL      = "rel";
     static constexpr const char *DEFAULT_REL = "dofollow";
 
+    /**
+     * Canonical ordered list of all accepted rel values.
+     * DEFAULT_REL ("dofollow") is always the first entry.
+     * This is the single definition used by both the dialog combo box
+     * and the shortcode's argument validation / HTML generation.
+     */
+    static const QStringList &relValues();
+
     /** Returns {urlArgumentDef(), relDef}. */
     QList<ArgumentDef> availableArguments() const override;
 
@@ -44,6 +52,8 @@ public:
      * css, js, cssDoneIds and jsDoneIds are left unchanged.
      */
     void addCode(QStringView     origContent,
+                 AbstractEngine &engine,
+                 int             websiteIndex,
                  QString        &html,
                  QString        &css,
                  QString        &js,

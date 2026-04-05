@@ -37,6 +37,16 @@ const QMap<QString, const AbstractEngine *> &AbstractEngine::getEngines()
     return s_engines;
 }
 
+// ---- Public API — getLangCode -----------------------------------------------
+
+QString AbstractEngine::getLangCode(int websiteIndex) const
+{
+    if (websiteIndex < 0 || websiteIndex >= m_rows.size()) {
+        return {};
+    }
+    return m_rows.at(websiteIndex).langCode;
+}
+
 // ---- Init -------------------------------------------------------------------
 
 void AbstractEngine::init(const QDir &workingDir, const HostTable &hostTable)

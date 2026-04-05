@@ -3,6 +3,7 @@
 
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/attributes/CategoryTreeModel.h"
+#include "website/pages/blocs/PageBlocCategory.h"
 
 CategoryEditorWidget::CategoryEditorWidget(CategoryTable &table,
                                            bool           allowSelection,
@@ -16,6 +17,9 @@ CategoryEditorWidget::CategoryEditorWidget(CategoryTable &table,
     ui->setupUi(this);
 
     m_model->setSelectionEnabled(allowSelection);
+    // Virtual root only in selection mode: lets the user click "(root)" to add
+    // top-level categories even when a leaf is currently selected.
+    m_model->setVirtualRootEnabled(allowSelection);
     ui->treeView->setModel(m_model);
     ui->treeView->setHeaderHidden(true);
     ui->treeView->expandAll();
@@ -24,6 +28,10 @@ CategoryEditorWidget::CategoryEditorWidget(CategoryTable &table,
     connect(ui->btnRemove, &QPushButton::clicked, this, &CategoryEditorWidget::_onRemoveClicked);
     connect(&m_table, &CategoryTable::categoryAdded,
             this, &CategoryEditorWidget::_onCategoryAdded);
+    // Re-expand after every model reset (add / remove triggers beginResetModel /
+    // endResetModel, which collapses the tree and hides items under the virtual root).
+    connect(m_model, &QAbstractItemModel::modelReset,
+            ui->treeView, &QTreeView::expandAll);
 }
 
 CategoryEditorWidget::~CategoryEditorWidget()
@@ -33,13 +41,14 @@ CategoryEditorWidget::~CategoryEditorWidget()
 
 // ---- AbstractPageBlockWidget ------------------------------------------------
 
-void CategoryEditorWidget::load(const QString &origContent)
+void CategoryEditorWidget::load(const QHash<QString, QString> &values)
 {
     if (!m_allowSelection) {
         return;
     }
+    const QString &content = values.value(QLatin1String(PageBlocCategory::KEY_CATEGORIES));
     QSet<int> ids;
-    const QStringList parts = origContent.split(',', Qt::SkipEmptyParts);
+    const QStringList parts = content.split(',', Qt::SkipEmptyParts);
     for (const QString &part : std::as_const(parts)) {
         const int id = part.trimmed().toInt();
         if (id > 0) {
@@ -49,7 +58,7 @@ void CategoryEditorWidget::load(const QString &origContent)
     m_model->setCheckedIds(ids);
 }
 
-void CategoryEditorWidget::save(QString &contentToUpdate)
+void CategoryEditorWidget::save(QHash<QString, QString> &values) const
 {
     if (!m_allowSelection) {
         return;
@@ -61,7 +70,7 @@ void CategoryEditorWidget::save(QString &contentToUpdate)
         parts.append(QString::number(id));
     }
     parts.sort(); // stable output regardless of QSet iteration order
-    contentToUpdate = parts.join(',');
+    values.insert(QLatin1String(PageBlocCategory::KEY_CATEGORIES), parts.join(','));
 }
 
 // ---- Private slots ----------------------------------------------------------
@@ -70,8 +79,7 @@ void CategoryEditorWidget::_onAddClicked()
 {
     const QModelIndex current = ui->treeView->currentIndex();
     const int parentId = current.isValid() ? current.data(Qt::UserRole).toInt() : 0;
-    m_table.addCategory(tr("New category"), parentId);
-    // _onCategoryAdded() handles expanding the parent and entering edit mode.
+    m_table.addCategory(m_table.uniqueName(tr("New category")), parentId);
 }
 
 void CategoryEditorWidget::_onRemoveClicked()
@@ -81,6 +89,9 @@ void CategoryEditorWidget::_onRemoveClicked()
         return;
     }
     const int id = current.data(Qt::UserRole).toInt();
+    if (id <= 0) {
+        return; // virtual root — not a real category, nothing to remove
+    }
     m_table.removeCategory(id);
 }
 

@@ -17,10 +17,18 @@ ctest
 ./WebsiteAspireTests/Test_Aspired_Db
 ./WebsiteAspireTests/Test_Aspire_Page_Attributes
 ./WebsiteEmpireTests/Test_Website_PageBlocText
+./WebsiteEmpireTests/Test_Website_PageTypeArticle
+./WebsiteEmpireTests/Test_Website_PageTypeRegistry
+./WebsiteEmpireTests/Test_Website_PageDb
+./WebsiteEmpireTests/Test_Website_PageRepository
+./WebsiteEmpireTests/Test_Website_PageGenerator
 ./StaticWebsiteServeTests/Test_StaticServe_Db
+./StaticWebsiteServeTests/Test_StaticServe_Repositories
+./StaticWebsiteServeTests/Test_StaticServe_StatsWriter
+./StaticWebsiteServeTests/Test_StaticServe_VariantSelector
 ```
 
-Dependencies: Qt6, QCoro6, Drogon, and a shared `../../common/` directory (sibling to this repo).
+Dependencies: Qt6, QCoro6, Drogon, zlib, and a shared `../../common/` directory (sibling to this repo).
 SQLiteCpp is fetched automatically by CMake FetchContent — no manual install needed.
 Drogon must be built from source; see the install instructions in `StaticWebsiteServe/CMakeLists.txt`.
 

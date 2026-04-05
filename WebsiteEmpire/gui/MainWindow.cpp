@@ -3,6 +3,7 @@
 
 #include "dialogs/DialogPickEngine.h"
 #include "panes/PaneDomains.h"
+#include "panes/PanePages.h"
 #include "panes/PaneSettings.h"
 #include "website/AbstractEngine.h"
 #include "website/WebsiteSettingsTable.h"
@@ -42,4 +43,6 @@ void MainWindow::_init()
         m_engine.reset(engine);
         ui->tabDomains->setEngine(m_engine.data());
     }
+
+    ui->tabPages->setup(workingDir, m_engine.data(), m_settingsTable.data());
 }

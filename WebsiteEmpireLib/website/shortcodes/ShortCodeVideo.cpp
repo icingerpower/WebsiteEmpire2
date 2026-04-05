@@ -31,6 +31,8 @@ bool ShortCodeVideo::isArgumentValueValid(const QString &argId, const QString &v
 }
 
 void ShortCodeVideo::addCode(QStringView     origContent,
+                             AbstractEngine &engine,
+                             int             websiteIndex,
                              QString        &html,
                              QString        &css,
                              QString        &js,
@@ -43,6 +45,8 @@ void ShortCodeVideo::addCode(QStringView     origContent,
     html += QStringLiteral("<video src=\"");
     html += url;
     html += QStringLiteral("\" controls></video>");
+    Q_UNUSED(engine)
+    Q_UNUSED(websiteIndex)
     Q_UNUSED(css)
     Q_UNUSED(js)
     Q_UNUSED(cssDoneIds)

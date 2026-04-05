@@ -24,6 +24,7 @@ add_library(StaticWebsiteServeLib STATIC
     repository/MenuRepositorySQLite.cpp
     repository/RedirectRepositorySQLite.cpp
     repository/ImageRepositorySQLite.cpp
+    VariantSelector.cpp
 )
 
 target_include_directories(StaticWebsiteServeLib

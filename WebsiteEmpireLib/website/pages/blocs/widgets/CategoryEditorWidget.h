@@ -14,8 +14,8 @@ namespace Ui { class CategoryEditorWidget; }
  * The QTreeView is always backed by a CategoryTreeModel.  Two usage modes:
  *
  *   allowSelection = true  (default, used by PageBlocCategory):
- *     Items are user-checkable. load() restores checked ids from a
- *     comma-separated content string; save() serialises them back.
+ *     Items are user-checkable. load() restores checked ids from
+ *     KEY_CATEGORIES in the hash; save() serialises them back.
  *     The Add / Remove buttons let the user grow the vocabulary on the fly.
  *
  *   allowSelection = false (used by standalone "Manage Categories" screens):
@@ -34,12 +34,8 @@ public:
                                   QWidget       *parent         = nullptr);
     ~CategoryEditorWidget() override;
 
-    // AbstractPageBlockWidget interface.
-    // load() parses a comma-separated list of integer category ids and checks
-    // the corresponding items.  save() serialises the checked ids back to the
-    // same format.  Both are no-ops when allowSelection is false.
-    void load(const QString &origContent) override;
-    void save(QString &contentToUpdate)   override;
+    void load(const QHash<QString, QString> &values) override;
+    void save(QHash<QString, QString> &values) const override;
 
 private slots:
     void _onAddClicked();

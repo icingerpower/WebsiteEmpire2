@@ -43,6 +43,8 @@
 class ContentDb
 {
 public:
+    static constexpr const char *FILENAME = "content.db";
+
     explicit ContentDb(const std::string &path);
 
     SQLite::Database &database();

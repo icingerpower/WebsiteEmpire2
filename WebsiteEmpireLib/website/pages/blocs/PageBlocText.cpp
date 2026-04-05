@@ -1,8 +1,19 @@
 #include "PageBlocText.h"
+#include "website/AbstractEngine.h"
 #include "website/pages/blocs/widgets/PageBlocTextWidget.h"
 #include "website/shortcodes/AbstractShortCode.h"
 
+#include <QCoreApplication>
 #include <QRegularExpression>
+
+// =============================================================================
+// getName
+// =============================================================================
+
+QString PageBlocText::getName() const
+{
+    return QCoreApplication::translate("PageBlocText", "Text");
+}
 
 // =============================================================================
 // load / save
@@ -24,6 +35,8 @@ void PageBlocText::save(QHash<QString, QString> &values) const
 // =============================================================================
 
 void PageBlocText::addCode(QStringView     /*origContent*/,
+                            AbstractEngine &engine,
+                            int             websiteIndex,
                             QString        &html,
                             QString        &css,
                             QString        &js,
@@ -41,7 +54,7 @@ void PageBlocText::addCode(QStringView     /*origContent*/,
             continue;
         }
         html += QStringLiteral("<p>");
-        processText(trimmedPara, html, css, js, cssDoneIds, jsDoneIds);
+        processText(trimmedPara, engine, websiteIndex, html, css, js, cssDoneIds, jsDoneIds);
         html += QStringLiteral("</p>");
     }
 }
@@ -60,6 +73,8 @@ AbstractPageBlockWidget *PageBlocText::createEditWidget()
 // =============================================================================
 
 void PageBlocText::processText(const QString  &text,
+                                AbstractEngine &engine,
+                                int             websiteIndex,
                                 QString        &html,
                                 QString        &css,
                                 QString        &js,
@@ -93,8 +108,8 @@ void PageBlocText::processText(const QString  &text,
             // recursively expand any shortcodes the handler emitted (e.g. a
             // SPINNABLE that spun out a VIDEO shortcode).
             QString scHtml;
-            sc->addCode(fullText, scHtml, css, js, cssDoneIds, jsDoneIds);
-            processText(scHtml, html, css, js, cssDoneIds, jsDoneIds);
+            sc->addCode(fullText, engine, websiteIndex, scHtml, css, js, cssDoneIds, jsDoneIds);
+            processText(scHtml, engine, websiteIndex, html, css, js, cssDoneIds, jsDoneIds);
         } else {
             // Unknown tag: pass through verbatim.
             html += fullText;

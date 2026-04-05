@@ -5,6 +5,12 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneDomains.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneDomains.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneDomains.ui
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.h
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.ui
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageStats.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageStats.h
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageStats.ui
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneSettings.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneSettings.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneSettings.ui
@@ -14,4 +20,7 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogEditHosts.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogEditHosts.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogEditHosts.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPreviewPage.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPreviewPage.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPreviewPage.ui
 )

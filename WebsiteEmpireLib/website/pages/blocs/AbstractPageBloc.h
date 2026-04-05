@@ -23,6 +23,13 @@ public:
     virtual ~AbstractPageBloc() = default;
 
     /**
+     * Returns the human-readable name of this bloc type, shown as a section
+     * heading above the bloc's editor widget.  Must be translated via tr() or
+     * QCoreApplication::translate() in the implementation.
+     */
+    virtual QString getName() const = 0;
+
+    /**
      * Load this bloc's content from a flat key→value map.
      * Keys not recognised by this bloc are silently ignored (forward
      * compatibility: old data may contain keys for attributes that were

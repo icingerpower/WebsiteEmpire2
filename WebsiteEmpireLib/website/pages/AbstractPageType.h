@@ -8,8 +8,13 @@
 #include <QSet>
 #include <QString>
 
+#include <functional>
+#include <memory>
+
+class AbstractEngine;
 class AbstractPageBloc;
 class AbstractAttribute;
+class CategoryTable;
 
 /**
  * Base class for a page type.
@@ -17,17 +22,36 @@ class AbstractAttribute;
  * A page type is a WebCodeAdder (it contributes HTML/CSS/JS to a generated
  * page) that is composed of one or more page blocs.
  *
- * getPageBlocs() must return a const reference to a member list so that
- * neither addCode() nor getAttributes() incur a list copy on every call.
+ * Self-registration pattern
+ * -------------------------
+ * Each concrete subclass must define:
+ *   static constexpr const char *TYPE_ID;       // stable DB key, never change
+ *   static constexpr const char *DISPLAY_NAME;  // human-readable label
+ * and place DECLARE_PAGE_TYPE(ClassName) at file scope in its .cpp.
  *
- * getAttributes() lazily aggregates the attributes of all blocs on the first
- * call and caches the result in m_cachedAttributes; subsequent calls are
- * zero-allocation.
+ * The factory receives a CategoryTable reference so that page types whose
+ * blocs require category data can use it; page types with no category bloc
+ * may ignore the argument.
+ *
+ * Registry access
+ * ---------------
+ *   AbstractPageType::createForTypeId("article", categoryTable)
+ *       → heap-allocated PageTypeArticle, or nullptr if unknown
+ *   AbstractPageType::allTypeIds()
+ *       → list of all registered type ids
  */
 class AbstractPageType : public WebCodeAdder
 {
 public:
+    using Factory = std::function<std::unique_ptr<AbstractPageType>(CategoryTable &)>;
+
     virtual ~AbstractPageType() = default;
+
+    /** Stable identifier stored in the database (e.g. "article"). Never change. */
+    virtual QString getTypeId() const = 0;
+
+    /** Human-readable label shown in the UI (e.g. "Article"). */
+    virtual QString getDisplayName() const = 0;
 
     /**
      * Returns the ordered list of blocs that compose this page type.
@@ -40,37 +64,77 @@ public:
      * Loads all blocs from a flat key→value map produced by save().
      * Each bloc's keys are namespaced by their position index: "<i>_<key>".
      * Keys with unknown prefixes or unrecognised by a bloc are silently ignored.
-     *
-     * Non-const: mutates the blocs' internal state.
      */
     void load(const QHash<QString, QString> &values);
 
     /**
      * Saves all blocs into a flat key→value map suitable for database storage.
-     * Each bloc's keys are prefixed with "<i>_" where i is its position index
-     * in getPageBlocs(), ensuring no collision between blocs of the same type.
+     * Each bloc's keys are prefixed with "<i>_" where i is its position index.
      */
     void save(QHash<QString, QString> &values) const;
 
     /**
-     * Delegates addCode() to every bloc in order.
-     * Each bloc appends to html/css/js as appropriate.
+     * Accumulates bloc output in temporary buffers then wraps the result in a
+     * full HTML page: <!DOCTYPE html><html><head>…CSS…</head><body>…JS…</body></html>.
+     * The css and js out-parameters are intentionally left untouched.
      */
-    void addCode(QStringView origContent,
-                 QString &html, QString &css, QString &js,
-                 QSet<QString> &cssDoneIds, QSet<QString> &jsDoneIds) const override;
+    void addCode(QStringView     origContent,
+                 AbstractEngine &engine,
+                 int             websiteIndex,
+                 QString        &html,
+                 QString        &css,
+                 QString        &js,
+                 QSet<QString>  &cssDoneIds,
+                 QSet<QString>  &jsDoneIds) const override;
 
     /**
      * Returns the union of attributes from all blocs.
      * Built lazily on the first call; subsequent calls return a cached ref.
-     * Pointers are raw references into each bloc's static storage — no
-     * heap allocation beyond the list itself.
      */
     const QList<const AbstractAttribute *> &getAttributes() const;
+
+    // -------------------------------------------------------------------------
+    // Registry
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns a fresh heap-allocated instance for typeId, or nullptr if unknown.
+     * The caller owns the returned object.
+     */
+    static std::unique_ptr<AbstractPageType> createForTypeId(const QString &typeId,
+                                                              CategoryTable &table);
+
+    /** Returns all registered type ids in insertion order. */
+    static QList<QString> allTypeIds();
+
+    /**
+     * Place at file scope in each concrete subclass's .cpp via DECLARE_PAGE_TYPE.
+     * Q_ASSERT fires on duplicate typeId.
+     */
+    class Recorder
+    {
+    public:
+        explicit Recorder(const QString &typeId,
+                          const QString &displayName,
+                          Factory        factory);
+    };
 
 private:
     mutable QList<const AbstractAttribute *> m_cachedAttributes;
     mutable bool m_attributesCached = false;
 };
+
+/**
+ * Place at file scope in the .cpp of each concrete page type.
+ * Requires the class to define static constexpr TYPE_ID and DISPLAY_NAME.
+ */
+#define DECLARE_PAGE_TYPE(ClassName)                                                   \
+    AbstractPageType::Recorder recorder##ClassName {                                   \
+        QLatin1String(ClassName::TYPE_ID),                                             \
+        QLatin1String(ClassName::DISPLAY_NAME),                                        \
+        [](CategoryTable &t) -> std::unique_ptr<AbstractPageType> {                    \
+            return std::make_unique<ClassName>(t);                                     \
+        }                                                                              \
+    };
 
 #endif // ABSTRACTPAGETYPE_H

@@ -1,33 +1,41 @@
 #include "WebsiteSettingsTable.h"
 
+#include "CountryLangManager.h"
+
 #include <QFile>
 #include <QMap>
 #include <QTextStream>
 
+#include <algorithm>
+
 static constexpr int COLUMN_COUNT = 2;
 static const QString CSV_HEADER   = QStringLiteral("Id;Value");
 
-const QString WebsiteSettingsTable::ID_WEBSITE_NAME = QStringLiteral("website_name");
-const QString WebsiteSettingsTable::ID_AUTHOR       = QStringLiteral("author");
-const QString WebsiteSettingsTable::ID_BASE_URL     = QStringLiteral("base_url");
+const QString WebsiteSettingsTable::ID_WEBSITE_NAME      = QStringLiteral("website_name");
+const QString WebsiteSettingsTable::ID_AUTHOR            = QStringLiteral("author");
+const QString WebsiteSettingsTable::ID_EDITING_LANG_CODE = QStringLiteral("editing_lang_code");
 
 WebsiteSettingsTable::WebsiteSettingsTable(const QDir &workingDir, QObject *parent)
     : QAbstractTableModel(parent)
     , m_filePath(workingDir.absoluteFilePath(QStringLiteral("settings_global.csv")))
 {
+    QStringList langCodes = CountryLangManager::instance()->defaultLangCodes();
+    langCodes.prepend(QStringLiteral("en"));
+    std::sort(langCodes.begin(), langCodes.end());
+
     m_rows = {
-        { ID_WEBSITE_NAME, tr("Website name"), {} },
-        { ID_AUTHOR,       tr("Author"),        {} },
-        { ID_BASE_URL,     tr("Base URL"),       {} },
+        { ID_WEBSITE_NAME,      tr("Website name"),    {},           {} },
+        { ID_AUTHOR,            tr("Author"),           {},           {} },
+        { ID_EDITING_LANG_CODE, tr("Editing language"), QStringLiteral("en"), langCodes },
     };
     _load();
 }
 
 // ---- Named getters ----------------------------------------------------------
 
-QString WebsiteSettingsTable::websiteName() const { return valueForId(ID_WEBSITE_NAME); }
-QString WebsiteSettingsTable::author()      const { return valueForId(ID_AUTHOR); }
-QString WebsiteSettingsTable::baseUrl()     const { return valueForId(ID_BASE_URL); }
+QString WebsiteSettingsTable::websiteName()     const { return valueForId(ID_WEBSITE_NAME); }
+QString WebsiteSettingsTable::author()          const { return valueForId(ID_AUTHOR); }
+QString WebsiteSettingsTable::editingLangCode() const { return valueForId(ID_EDITING_LANG_CODE); }
 
 QString WebsiteSettingsTable::valueForId(const QString &id) const
 {
@@ -67,6 +75,10 @@ QVariant WebsiteSettingsTable::data(const QModelIndex &index, int role) const
 
     if (role == Qt::UserRole) {
         return row.id;
+    }
+
+    if (role == AllowedValuesRole) {
+        return row.allowedValues;
     }
 
     if (role == Qt::DisplayRole || role == Qt::EditRole) {

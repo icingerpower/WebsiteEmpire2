@@ -28,6 +28,31 @@ const CategoryTable::CategoryRow *CategoryTable::categoryById(int id) const
     return nullptr;
 }
 
+QString CategoryTable::uniqueName(const QString &base, int excludeId) const
+{
+    auto isUsed = [this, excludeId](const QString &name) {
+        for (const auto &row : std::as_const(m_rows)) {
+            if (row.id == excludeId) {
+                continue;
+            }
+            if (row.name == name) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    if (!isUsed(base)) {
+        return base;
+    }
+    for (int suffix = 2; ; ++suffix) {
+        const QString candidate = base + '-' + QString::number(suffix);
+        if (!isUsed(candidate)) {
+            return candidate;
+        }
+    }
+}
+
 QString CategoryTable::translationFor(int id, const QString &langCode) const
 {
     const CategoryRow *row = categoryById(id);

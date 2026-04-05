@@ -26,6 +26,8 @@
 class ImageDb
 {
 public:
+    static constexpr const char *FILENAME = "images.db";
+
     explicit ImageDb(const std::string &path);
 
     SQLite::Database &database();

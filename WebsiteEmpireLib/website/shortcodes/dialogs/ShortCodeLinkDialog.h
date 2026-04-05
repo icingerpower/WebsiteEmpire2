@@ -15,7 +15,8 @@ class ShortCodeLinkDialog;
  *   - "Insert Fixed Link"        (LINKFIX)
  *   - "Insert Translatable Link" (LINKTR)
  *
- * rel() pre-fills to "dofollow" (set in the .ui file) matching the shortcode default.
+ * The rel combo is populated from AbstractShortCodeLink::relValues(); the first
+ * entry (DEFAULT_REL = "dofollow") is pre-selected.
  */
 class ShortCodeLinkDialog : public QDialog
 {

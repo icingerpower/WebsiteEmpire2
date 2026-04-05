@@ -35,6 +35,8 @@ bool ShortCodeTitle::isArgumentValueValid(const QString &argId, const QString &v
 }
 
 void ShortCodeTitle::addCode(QStringView     origContent,
+                             AbstractEngine &engine,
+                             int             websiteIndex,
                              QString        &html,
                              QString        &css,
                              QString        &js,
@@ -51,6 +53,8 @@ void ShortCodeTitle::addCode(QStringView     origContent,
     html += QStringLiteral("</h");
     html += level;
     html += QStringLiteral(">");
+    Q_UNUSED(engine)
+    Q_UNUSED(websiteIndex)
     Q_UNUSED(css)
     Q_UNUSED(js)
     Q_UNUSED(cssDoneIds)

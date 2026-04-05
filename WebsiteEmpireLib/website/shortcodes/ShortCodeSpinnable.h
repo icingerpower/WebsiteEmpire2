@@ -55,6 +55,8 @@ public:
      * css, js, cssDoneIds and jsDoneIds are left unchanged.
      */
     void addCode(QStringView     origContent,
+                 AbstractEngine &engine,
+                 int             websiteIndex,
                  QString        &html,
                  QString        &css,
                  QString        &js,

@@ -1,0 +1,14 @@
+set(PAGES_WIDGETS_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/PagesListWidget.h
+    ${CMAKE_CURRENT_LIST_DIR}/PagesListWidget.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PagesListWidget.ui
+    ${CMAKE_CURRENT_LIST_DIR}/PagesStatsWidget.h
+    ${CMAKE_CURRENT_LIST_DIR}/PagesStatsWidget.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PagesStatsWidget.ui
+    ${CMAKE_CURRENT_LIST_DIR}/PageEditorDialog.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageEditorDialog.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageEditorDialog.ui
+    ${CMAKE_CURRENT_LIST_DIR}/PageEditorWidget.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageEditorWidget.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageEditorWidget.ui
+)

@@ -1,8 +1,8 @@
 #include "PageController.h"
 
-#include <random>
-
 #include <drogon/HttpResponse.h>
+
+#include "VariantSelector.h"
 
 IPageRepository    *PageController::s_pageRepo     = nullptr;
 IMenuRepository    *PageController::s_menuRepo     = nullptr;
@@ -39,23 +39,7 @@ void PageController::loadMenuCache(IMenuRepository *repo)
 std::string PageController::_selectVariant(const std::vector<std::string> &activeLabels,
                                             const drogon::HttpRequestPtr   &req)
 {
-    if (activeLabels.size() <= 1) {
-        return "control";
-    }
-
-    const std::string &cookie = req->getCookie("ab_variant");
-    if (!cookie.empty()) {
-        for (const auto &label : activeLabels) {
-            if (label == cookie) {
-                return label;
-            }
-        }
-    }
-
-    // No valid cookie — assign randomly.
-    thread_local std::mt19937 rng(std::random_device{}());
-    std::uniform_int_distribution<std::size_t> dist(0, activeLabels.size() - 1);
-    return activeLabels[dist(rng)];
+    return VariantSelector::select(activeLabels, req->getCookie("ab_variant"));
 }
 
 // ---------------------------------------------------------------------------
