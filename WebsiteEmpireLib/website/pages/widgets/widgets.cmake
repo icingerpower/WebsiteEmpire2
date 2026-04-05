@@ -1,4 +1,7 @@
 set(PAGES_WIDGETS_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/DialogGenerateLegalPages.h
+    ${CMAKE_CURRENT_LIST_DIR}/DialogGenerateLegalPages.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/DialogGenerateLegalPages.ui
     ${CMAKE_CURRENT_LIST_DIR}/PagesListWidget.h
     ${CMAKE_CURRENT_LIST_DIR}/PagesListWidget.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PagesListWidget.ui
@@ -8,6 +11,9 @@ set(PAGES_WIDGETS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageEditorDialog.h
     ${CMAKE_CURRENT_LIST_DIR}/PageEditorDialog.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageEditorDialog.ui
+    ${CMAKE_CURRENT_LIST_DIR}/DialogPermalinkHistory.h
+    ${CMAKE_CURRENT_LIST_DIR}/DialogPermalinkHistory.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/DialogPermalinkHistory.ui
     ${CMAKE_CURRENT_LIST_DIR}/PageEditorWidget.h
     ${CMAKE_CURRENT_LIST_DIR}/PageEditorWidget.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageEditorWidget.ui

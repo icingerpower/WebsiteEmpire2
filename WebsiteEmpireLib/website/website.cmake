@@ -3,8 +3,6 @@ include(${CMAKE_CURRENT_LIST_DIR}/pages/pages.cmake)
 
 set(WEBSITE_FILES
     ${CMAKE_CURRENT_LIST_DIR}/WebCodeAdder.h
-    ${CMAKE_CURRENT_LIST_DIR}/AbstractBlock.h
-    ${CMAKE_CURRENT_LIST_DIR}/AbstractBlock.cpp
     ${CMAKE_CURRENT_LIST_DIR}/AbstractEngine.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractEngine.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ImageWriter.h

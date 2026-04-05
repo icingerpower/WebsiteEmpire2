@@ -3,13 +3,25 @@
 
 #include "../dialogs/DialogPreviewPage.h"
 #include "website/AbstractEngine.h"
+#include "website/pages/AbstractPageType.h"
+#include "website/pages/AbstractLegalPageDef.h"
+#include "website/pages/PageTypeLegal.h"
+#include "website/pages/PageRecord.h"
 #include "website/WebsiteSettingsTable.h"
 #include "website/pages/PageDb.h"
 #include "website/pages/PageRepositoryDb.h"
+#include "website/pages/PageTranslator.h"
 #include "website/pages/attributes/CategoryTable.h"
+#include "website/pages/widgets/DialogGenerateLegalPages.h"
 #include "website/pages/widgets/PageEditorDialog.h"
+#include "ExceptionWithTitleText.h"
+
+#include "../../launcher/AbstractLauncher.h"
+#include "../../launcher/LauncherTranslate.h"
 
 #include <QMessageBox>
+#include <QSet>
+#include <QSortFilterProxyModel>
 #include <QSqlDatabase>
 #include <QSqlQueryModel>
 
@@ -22,8 +34,12 @@ PanePages::PanePages(QWidget *parent)
     , ui(new Ui::PanePages)
 {
     ui->setupUi(this);
-    m_model = new QSqlQueryModel(this);
-    ui->tableViewPages->setModel(m_model);
+    m_model      = new QSqlQueryModel(this);
+    m_proxyModel = new QSortFilterProxyModel(this);
+    m_proxyModel->setSourceModel(m_model);
+    ui->tableViewPages->setModel(m_proxyModel);
+    ui->tableViewPages->setSortingEnabled(true);
+    ui->tableViewPages->sortByColumn(0, Qt::AscendingOrder);
     _connectSlots();
 }
 
@@ -94,6 +110,7 @@ void PanePages::removePage()
     }
     m_pageRepo->remove(id);
     _refreshModel();
+    _updateLegalButton();
 }
 
 void PanePages::previewPage()
@@ -112,6 +129,159 @@ void PanePages::previewPage()
     }
     DialogPreviewPage dlg(*m_pageRepo, *m_categoryTable, *m_engine, id, this);
     dlg.exec();
+}
+
+void PanePages::generateLegalPages()
+{
+    if (!m_pageRepo || !m_settingsTable) {
+        return;
+    }
+
+    try {
+        _validateLegalSettings();
+    } catch (const ExceptionWithTitleText &ex) {
+        QMessageBox::warning(this, ex.errorTitle(), ex.errorText());
+        return;
+    }
+
+    const QSet<QString> existingIds = _existingLegalDefIds();
+    DialogGenerateLegalPages dlg(existingIds, this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const QList<QString> selected = dlg.selectedDefIds();
+    if (selected.isEmpty()) {
+        return;
+    }
+
+    const QString &editingLang = m_settingsTable->editingLangCode();
+
+    // Build the LegalInfo once — shared across all pages in this generation run.
+    const AbstractLegalPageDef::LegalInfo legalInfo {
+        m_settingsTable->legalCompanyName(),
+        m_settingsTable->legalCompanyAddress(),
+        m_settingsTable->legalRegistrationNo(),
+        m_settingsTable->legalContactEmail(),
+        m_settingsTable->legalVatNo(),
+        m_settingsTable->legalDpoName(),
+        m_settingsTable->legalDpoEmail(),
+        m_settingsTable->websiteName(),
+    };
+
+    for (const QString &defId : std::as_const(selected)) {
+        const AbstractLegalPageDef *def = nullptr;
+        for (const AbstractLegalPageDef *d : AbstractLegalPageDef::allDefs()) {
+            if (d->getId() == defId) {
+                def = d;
+                break;
+            }
+        }
+        if (!def) {
+            continue;
+        }
+
+        if (existingIds.contains(defId)) {
+            // Existing page explicitly selected: restore default permalink and
+            // regenerate content from current settings.
+            const int pid = _legalPageId(defId);
+            if (pid > 0) {
+                m_pageRepo->updatePermalink(pid, def->getDefaultPermalink());
+                QHash<QString, QString> data;
+                data.insert(QLatin1String(AbstractLegalPageDef::PAGE_DATA_KEY_DEF_ID), defId);
+                data.insert(QStringLiteral("1_text"), def->generateTextContent(legalInfo));
+                m_pageRepo->saveData(pid, data);
+            }
+        } else {
+            // New page: create, stamp with the def ID, and populate with generated content.
+            const int newId = m_pageRepo->create(
+                QLatin1String(PageTypeLegal::TYPE_ID),
+                def->getDefaultPermalink(),
+                editingLang);
+            QHash<QString, QString> data;
+            data.insert(QLatin1String(AbstractLegalPageDef::PAGE_DATA_KEY_DEF_ID), defId);
+            // "1_text" = bloc index 1 (PageBlocText), key PageBlocText::KEY_TEXT = "text".
+            data.insert(QStringLiteral("1_text"), def->generateTextContent(legalInfo));
+            m_pageRepo->saveData(newId, data);
+        }
+    }
+
+    _refreshModel();
+    _updateLegalButton();
+}
+
+void PanePages::translate()
+{
+    if (!m_pageRepo || !m_categoryTable) {
+        QMessageBox::warning(this, tr("Not ready"),
+                             tr("Pages database is not open. Switch to this tab first."));
+        return;
+    }
+    if (!m_engine) {
+        QMessageBox::warning(this, tr("No engine"),
+                             tr("No website engine is configured. "
+                                "Please select an engine before translating."));
+        return;
+    }
+
+    const QString editingLang = m_settingsTable
+                                    ? m_settingsTable->editingLangCode()
+                                    : QString();
+    if (editingLang.isEmpty()) {
+        QMessageBox::warning(this, tr("No editing language"),
+                             tr("The editing language is not configured in Settings."));
+        return;
+    }
+
+    qDebug() << "[Translate] Starting. Editing lang:" << editingLang;
+
+    auto *translator = new PageTranslator(*m_pageRepo, *m_categoryTable,
+                                          m_workingDir, this);
+
+    connect(translator, &PageTranslator::logMessage, this, [](const QString &msg) {
+        qDebug() << "[Translate]" << qPrintable(msg);
+    });
+
+    connect(translator, &PageTranslator::pageTranslated, this, [this](int pageId) {
+        qDebug() << "[Translate] Page translated, id=" << pageId;
+        _refreshModel();
+    });
+
+    connect(translator, &PageTranslator::finished, this,
+            [this, translator](int translated, int errors) {
+                qDebug() << "[Translate] Done. Translated:" << translated
+                         << " Errors:" << errors;
+                _refreshModel();
+                if (errors > 0) {
+                    QMessageBox::warning(
+                        this,
+                        tr("Translation completed with errors"),
+                        tr("Translated: %1 page(s)\nErrors: %2\n\n"
+                           "Check translation_logs/ in the working directory for details.")
+                            .arg(translated)
+                            .arg(errors));
+                } else {
+                    QMessageBox::information(
+                        this,
+                        tr("Translation complete"),
+                        tr("Successfully translated %1 page(s).").arg(translated));
+                }
+                translator->deleteLater();
+            });
+
+    translator->start(m_engine, editingLang);
+}
+
+void PanePages::viewCommandTranslate()
+{
+    const QString cmd = QStringLiteral("WebsiteEmpire --%1 \"%2\" --%3")
+        .arg(AbstractLauncher::OPTION_WORKING_DIR,
+             m_workingDir.absolutePath(),
+             LauncherTranslate::OPTION_NAME);
+    QMessageBox::information(this,
+        tr("Command Line — Translate"),
+        tr("Run the following command to translate all pending pages without launching the UI:\n\n%1")
+            .arg(cmd));
 }
 
 void PanePages::setVisible(bool visible)
@@ -137,6 +307,14 @@ void PanePages::_connectSlots()
     connect(ui->buttonEditPage,   &QPushButton::clicked, this, &PanePages::editPage);
     connect(ui->buttonRemovePage, &QPushButton::clicked, this, &PanePages::removePage);
     connect(ui->buttonPreview,    &QPushButton::clicked, this, &PanePages::previewPage);
+    connect(ui->buttonGenerateLegalPages,    &QPushButton::clicked, this, &PanePages::generateLegalPages);
+    connect(ui->buttonTranslate,    &QPushButton::clicked, this, &PanePages::translate);
+    connect(ui->buttonViewCommandTranslate,    &QPushButton::clicked, this, &PanePages::viewCommandTranslate);
+    connect(ui->buttonFilter,      &QPushButton::clicked, this, &PanePages::_applyTypeFilter);
+    connect(ui->buttonResetFilter, &QPushButton::clicked, this, [this]() {
+        ui->comboBoxPageType->setCurrentIndex(0);
+        _applyTypeFilter();
+    });
 }
 
 void PanePages::_initDb()
@@ -150,7 +328,18 @@ void PanePages::_initDb()
     m_pageDb        = std::make_unique<PageDb>(m_workingDir);
     m_pageRepo      = std::make_unique<PageRepositoryDb>(*m_pageDb);
 
+    // Populate type filter combo (first entry = show all).
+    ui->comboBoxPageType->clear();
+    ui->comboBoxPageType->addItem(tr("All page types"), QString());
+    for (const QString &typeId : AbstractPageType::allTypeIds()) {
+        const auto pageType = AbstractPageType::createForTypeId(typeId, *m_categoryTable);
+        if (pageType) {
+            ui->comboBoxPageType->addItem(pageType->getDisplayName(), typeId);
+        }
+    }
+
     _refreshModel();
+    _updateLegalButton();
 }
 
 void PanePages::_refreshModel()
@@ -179,6 +368,117 @@ int PanePages::_selectedPageId() const
     if (!idx.isValid()) {
         return -1;
     }
-    const QModelIndex idIdx = m_model->index(idx.row(), 0);
+    const QModelIndex srcIdx = m_proxyModel->mapToSource(idx);
+    const QModelIndex idIdx  = m_model->index(srcIdx.row(), 0);
     return m_model->data(idIdx).toInt();
+}
+
+void PanePages::_applyTypeFilter()
+{
+    const QString typeId = ui->comboBoxPageType->currentData().toString();
+    const int rowCount   = m_proxyModel->rowCount();
+    for (int row = 0; row < rowCount; ++row) {
+        bool hide = false;
+        if (!typeId.isEmpty()) {
+            const QModelIndex typeIdx = m_proxyModel->index(row, 1);
+            hide = (m_proxyModel->data(typeIdx).toString() != typeId);
+        }
+        ui->tableViewPages->setRowHidden(row, hide);
+    }
+}
+
+QSet<QString> PanePages::_existingLegalDefIds() const
+{
+    QSet<QString> result;
+    if (!m_pageRepo || !m_settingsTable) {
+        return result;
+    }
+
+    const QString &editingLang = m_settingsTable->editingLangCode();
+    const QList<PageRecord> &pages = m_pageRepo->findSourcePages(editingLang);
+
+    for (const PageRecord &p : std::as_const(pages)) {
+        if (p.typeId != QLatin1String(PageTypeLegal::TYPE_ID)) {
+            continue;
+        }
+        const QHash<QString, QString> &data = m_pageRepo->loadData(p.id);
+        const QString &defId = data.value(
+            QLatin1String(AbstractLegalPageDef::PAGE_DATA_KEY_DEF_ID));
+        if (!defId.isEmpty()) {
+            result.insert(defId);
+        }
+    }
+
+    return result;
+}
+
+int PanePages::_legalPageId(const QString &defId) const
+{
+    if (!m_pageRepo || !m_settingsTable) {
+        return -1;
+    }
+
+    const QString &editingLang = m_settingsTable->editingLangCode();
+    const QList<PageRecord> &pages = m_pageRepo->findSourcePages(editingLang);
+
+    for (const PageRecord &p : std::as_const(pages)) {
+        if (p.typeId != QLatin1String(PageTypeLegal::TYPE_ID)) {
+            continue;
+        }
+        const QHash<QString, QString> &data = m_pageRepo->loadData(p.id);
+        if (data.value(QLatin1String(AbstractLegalPageDef::PAGE_DATA_KEY_DEF_ID)) == defId) {
+            return p.id;
+        }
+    }
+
+    return -1;
+}
+
+void PanePages::_validateLegalSettings() const
+{
+    struct Field {
+        const QString &id;
+        const char    *label;
+    };
+    const QList<Field> mandatory = {
+        { WebsiteSettingsTable::ID_LEGAL_COMPANY_NAME,    "Company name" },
+        { WebsiteSettingsTable::ID_LEGAL_COMPANY_ADDRESS, "Company address" },
+        { WebsiteSettingsTable::ID_LEGAL_REGISTRATION_NO, "Registration number" },
+        { WebsiteSettingsTable::ID_LEGAL_CONTACT_EMAIL,   "Legal contact email" },
+    };
+
+    QStringList missing;
+    for (const auto &f : std::as_const(mandatory)) {
+        if (m_settingsTable->valueForId(f.id).trimmed().isEmpty()) {
+            missing.append(tr(f.label));
+        }
+    }
+
+    if (!missing.isEmpty()) {
+        ExceptionWithTitleText ex(
+            tr("Missing legal information"),
+            tr("The following fields must be filled in Settings before generating legal pages:\n\n%1")
+                .arg(missing.join(QStringLiteral("\n"))));
+        ex.raise();
+    }
+}
+
+void PanePages::_updateLegalButton()
+{
+    if (!m_pageRepo || !m_settingsTable) {
+        return;
+    }
+
+    const QSet<QString> &existingIds = _existingLegalDefIds();
+    bool allGenerated = true;
+    for (const AbstractLegalPageDef *def : AbstractLegalPageDef::allDefs()) {
+        if (!existingIds.contains(def->getId())) {
+            allGenerated = false;
+            break;
+        }
+    }
+
+    // Grey text signals "all done"; default (empty) style signals pages are missing.
+    ui->buttonGenerateLegalPages->setStyleSheet(
+        allGenerated ? QStringLiteral("color: grey;") : QString());
 }

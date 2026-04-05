@@ -36,6 +36,19 @@ public:
     // which language's content the editor operates on.
     static const QString ID_EDITING_LANG_CODE;
 
+    // Legal information — required for legal page generation.
+    // ID_LEGAL_COMPANY_NAME, ID_LEGAL_COMPANY_ADDRESS, ID_LEGAL_REGISTRATION_NO,
+    // and ID_LEGAL_CONTACT_EMAIL are mandatory: generateLegalPages() raises
+    // ExceptionWithTitleText if any of them is empty.
+    // The remaining fields are optional (VAT number, GDPR DPO details).
+    static const QString ID_LEGAL_COMPANY_NAME;    ///< Official legal entity name
+    static const QString ID_LEGAL_COMPANY_ADDRESS; ///< Full address (street, postal code, city, country)
+    static const QString ID_LEGAL_REGISTRATION_NO; ///< Company registration / incorporation number
+    static const QString ID_LEGAL_CONTACT_EMAIL;   ///< Legal contact e-mail visible on legal pages
+    static const QString ID_LEGAL_VAT_NO;          ///< VAT or tax identification number (optional)
+    static const QString ID_LEGAL_DPO_NAME;        ///< GDPR Data Protection Officer name (optional)
+    static const QString ID_LEGAL_DPO_EMAIL;       ///< GDPR DPO contact e-mail (optional)
+
     explicit WebsiteSettingsTable(const QDir &workingDir, QObject *parent = nullptr);
 
     // Returns the current value for the given stable ID, or empty string if not found.
@@ -45,6 +58,15 @@ public:
     QString websiteName()      const;
     QString author()           const;
     QString editingLangCode()  const;
+
+    // Legal information getters.
+    QString legalCompanyName()    const;
+    QString legalCompanyAddress() const;
+    QString legalRegistrationNo() const;
+    QString legalContactEmail()   const;
+    QString legalVatNo()          const;
+    QString legalDpoName()        const;
+    QString legalDpoEmail()       const;
 
     // QAbstractItemModel interface
     int           rowCount(const QModelIndex &parent = QModelIndex()) const override;

@@ -21,17 +21,24 @@ QString PageRepositoryDb::currentUtc()
 static PageRecord rowToRecord(const QSqlQuery &q)
 {
     PageRecord r;
-    r.id        = q.value(0).toInt();
-    r.typeId    = q.value(1).toString();
-    r.permalink = q.value(2).toString();
-    r.lang      = q.value(3).toString();
-    r.createdAt = q.value(4).toString();
-    r.updatedAt = q.value(5).toString();
+    r.id           = q.value(0).toInt();
+    r.typeId       = q.value(1).toString();
+    r.permalink    = q.value(2).toString();
+    r.lang         = q.value(3).toString();
+    r.createdAt    = q.value(4).toString();
+    r.updatedAt    = q.value(5).toString();
+    r.translatedAt = q.value(6).isNull() ? QString() : q.value(6).toString();
+    r.sourcePageId = q.value(7).isNull() ? 0        : q.value(7).toInt();
     return r;
 }
 
+static const QLatin1StringView SELECT_PAGES{
+    "SELECT id, type_id, permalink, lang, created_at, updated_at,"
+    "       translated_at, source_page_id"
+    " FROM pages"};
+
 // =============================================================================
-// create
+// create / createTranslation
 // =============================================================================
 
 int PageRepositoryDb::create(const QString &typeId,
@@ -43,26 +50,46 @@ int PageRepositoryDb::create(const QString &typeId,
     QSqlQuery q(db);
     q.prepare(QStringLiteral(
         "INSERT INTO pages (type_id, permalink, lang, created_at, updated_at)"
-        " VALUES (:type_id, :permalink, :lang, :created_at, :updated_at)"));
-    q.bindValue(QStringLiteral(":type_id"),    typeId);
-    q.bindValue(QStringLiteral(":permalink"),  permalink);
-    q.bindValue(QStringLiteral(":lang"),       lang);
-    q.bindValue(QStringLiteral(":created_at"), now);
-    q.bindValue(QStringLiteral(":updated_at"), now);
+        " VALUES (:type_id, :permalink, :lang, :now, :now2)"));
+    q.bindValue(QStringLiteral(":type_id"),   typeId);
+    q.bindValue(QStringLiteral(":permalink"), permalink);
+    q.bindValue(QStringLiteral(":lang"),      lang);
+    q.bindValue(QStringLiteral(":now"),       now);
+    q.bindValue(QStringLiteral(":now2"),      now);
+    q.exec();
+    return q.lastInsertId().toInt();
+}
+
+int PageRepositoryDb::createTranslation(int           sourcePageId,
+                                         const QString &typeId,
+                                         const QString &permalink,
+                                         const QString &lang)
+{
+    const QString &now = currentUtc();
+    QSqlDatabase db = m_db.database();
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral(
+        "INSERT INTO pages"
+        "  (type_id, permalink, lang, created_at, updated_at, source_page_id)"
+        " VALUES (:type_id, :permalink, :lang, :now, :now2, :src)"));
+    q.bindValue(QStringLiteral(":type_id"),   typeId);
+    q.bindValue(QStringLiteral(":permalink"), permalink);
+    q.bindValue(QStringLiteral(":lang"),      lang);
+    q.bindValue(QStringLiteral(":now"),       now);
+    q.bindValue(QStringLiteral(":now2"),      now);
+    q.bindValue(QStringLiteral(":src"),       sourcePageId);
     q.exec();
     return q.lastInsertId().toInt();
 }
 
 // =============================================================================
-// findById / findAll
+// findById / findAll / findSourcePages / findTranslations
 // =============================================================================
 
 std::optional<PageRecord> PageRepositoryDb::findById(int id) const
 {
     QSqlQuery q(m_db.database());
-    q.prepare(QStringLiteral(
-        "SELECT id, type_id, permalink, lang, created_at, updated_at"
-        " FROM pages WHERE id = :id"));
+    q.prepare(QString::fromLatin1(SELECT_PAGES) + QStringLiteral(" WHERE id = :id"));
     q.bindValue(QStringLiteral(":id"), id);
     q.exec();
     if (q.next()) {
@@ -75,9 +102,36 @@ QList<PageRecord> PageRepositoryDb::findAll() const
 {
     QList<PageRecord> result;
     QSqlQuery q(m_db.database());
-    q.exec(QStringLiteral(
-        "SELECT id, type_id, permalink, lang, created_at, updated_at"
-        " FROM pages ORDER BY id ASC"));
+    q.exec(QString::fromLatin1(SELECT_PAGES) + QStringLiteral(" ORDER BY id ASC"));
+    while (q.next()) {
+        result.append(rowToRecord(q));
+    }
+    return result;
+}
+
+QList<PageRecord> PageRepositoryDb::findSourcePages(const QString &lang) const
+{
+    QList<PageRecord> result;
+    QSqlQuery q(m_db.database());
+    q.prepare(QString::fromLatin1(SELECT_PAGES)
+              + QStringLiteral(" WHERE source_page_id IS NULL AND lang = :lang"
+                               " ORDER BY id ASC"));
+    q.bindValue(QStringLiteral(":lang"), lang);
+    q.exec();
+    while (q.next()) {
+        result.append(rowToRecord(q));
+    }
+    return result;
+}
+
+QList<PageRecord> PageRepositoryDb::findTranslations(int sourcePageId) const
+{
+    QList<PageRecord> result;
+    QSqlQuery q(m_db.database());
+    q.prepare(QString::fromLatin1(SELECT_PAGES)
+              + QStringLiteral(" WHERE source_page_id = :src ORDER BY id ASC"));
+    q.bindValue(QStringLiteral(":src"), sourcePageId);
+    q.exec();
     while (q.next()) {
         result.append(rowToRecord(q));
     }
@@ -145,7 +199,7 @@ void PageRepositoryDb::remove(int id)
 }
 
 // =============================================================================
-// updatePermalink / permalinkHistory
+// updatePermalink / permalinkHistory / setHistoryRedirectType
 // =============================================================================
 
 void PageRepositoryDb::updatePermalink(int id, const QString &newPermalink)
@@ -180,17 +234,62 @@ void PageRepositoryDb::updatePermalink(int id, const QString &newPermalink)
     db.commit();
 }
 
-QList<QString> PageRepositoryDb::permalinkHistory(int id) const
+QList<PermalinkHistoryEntry> PageRepositoryDb::permalinkHistory(int id) const
 {
-    QList<QString> result;
+    QList<PermalinkHistoryEntry> result;
     QSqlQuery q(m_db.database());
     q.prepare(QStringLiteral(
-        "SELECT old_permalink FROM permalink_history"
+        "SELECT id, page_id, old_permalink, changed_at,"
+        "       COALESCE(redirect_type, 'permanent') AS redirect_type"
+        " FROM permalink_history"
         " WHERE page_id = :id ORDER BY changed_at ASC"));
     q.bindValue(QStringLiteral(":id"), id);
     q.exec();
     while (q.next()) {
-        result.append(q.value(0).toString());
+        PermalinkHistoryEntry e;
+        e.id           = q.value(0).toInt();
+        e.pageId       = q.value(1).toInt();
+        e.permalink    = q.value(2).toString();
+        e.changedAt    = q.value(3).toString();
+        e.redirectType = q.value(4).toString();
+        result.append(e);
     }
     return result;
+}
+
+void PageRepositoryDb::setHistoryRedirectType(int historyEntryId, const QString &type)
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "UPDATE permalink_history SET redirect_type = :type WHERE id = :id"));
+    q.bindValue(QStringLiteral(":type"), type);
+    q.bindValue(QStringLiteral(":id"),   historyEntryId);
+    q.exec();
+}
+
+// =============================================================================
+// translatedAt / setTranslatedAt
+// =============================================================================
+
+QString PageRepositoryDb::translatedAt(int id) const
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "SELECT translated_at FROM pages WHERE id = :id"));
+    q.bindValue(QStringLiteral(":id"), id);
+    q.exec();
+    if (q.next()) {
+        return q.value(0).isNull() ? QString() : q.value(0).toString();
+    }
+    return {};
+}
+
+void PageRepositoryDb::setTranslatedAt(int id, const QString &utcIso)
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "UPDATE pages SET translated_at = :ts WHERE id = :id"));
+    q.bindValue(QStringLiteral(":ts"), utcIso);
+    q.bindValue(QStringLiteral(":id"), id);
+    q.exec();
 }

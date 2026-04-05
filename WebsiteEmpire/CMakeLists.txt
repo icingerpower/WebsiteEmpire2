@@ -12,6 +12,7 @@ setup_qcoro(COMPONENTS Core)
 include(../../common/workingdirectory/workingdirectory.cmake)
 
 include(gui/gui.cmake)
+include(launcher/launcher.cmake)
 
 set(PROJECT_SOURCES
     main.cpp
@@ -19,6 +20,7 @@ set(PROJECT_SOURCES
     "../../common/types/types.cpp"
     ${WORKING_DIR_FILES}
     ${GUI_FILES}
+    ${LAUNCHER_FILES}
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)

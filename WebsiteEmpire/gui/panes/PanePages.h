@@ -2,6 +2,8 @@
 #define PANEPAGES_H
 
 #include <QDir>
+#include <QSet>
+#include <QString>
 #include <QWidget>
 #include <memory>
 
@@ -11,6 +13,7 @@ class AbstractEngine;
 class CategoryTable;
 class PageDb;
 class PageRepositoryDb;
+class QSortFilterProxyModel;
 class QSqlQueryModel;
 class WebsiteSettingsTable;
 
@@ -45,6 +48,9 @@ public slots:
     void editPage();
     void removePage();
     void previewPage();
+    void generateLegalPages();
+    void translate();
+    void viewCommandTranslate();
 
     void setVisible(bool visible) override;
 
@@ -68,13 +74,46 @@ private:
      */
     int _selectedPageId() const;
 
+    /**
+     * Hides/shows rows in tableViewPages based on the current comboBoxPageType
+     * selection.  An empty typeId (index 0, "All page types") shows every row.
+     */
+    void _applyTypeFilter();
+
+    /**
+     * Returns the AbstractLegalPageDef IDs for legal source pages that already
+     * exist in the repository for the current editing language.
+     * Loads page_data for every legal source page to read the __legal_def_id stamp.
+     */
+    QSet<QString> _existingLegalDefIds() const;
+
+    /**
+     * Returns the page ID of the legal source page stamped with defId,
+     * or -1 if not found.
+     */
+    int _legalPageId(const QString &defId) const;
+
+    /**
+     * Throws ExceptionWithTitleText if any mandatory legal setting
+     * (company name, address, registration number, contact email) is empty.
+     */
+    void _validateLegalSettings() const;
+
+    /**
+     * Updates buttonGenerateLegalPages style to grey when all registered
+     * AbstractLegalPageDef instances have a corresponding source page,
+     * and back to the default style when any is missing.
+     */
+    void _updateLegalButton();
+
     Ui::PanePages        *ui;
     QDir                  m_workingDir;
     AbstractEngine       *m_engine        = nullptr;
     WebsiteSettingsTable *m_settingsTable = nullptr;
     bool                  m_isSetup       = false;
 
-    QSqlQueryModel *m_model = nullptr;
+    QSqlQueryModel          *m_model      = nullptr;
+    QSortFilterProxyModel   *m_proxyModel = nullptr;
 
     std::unique_ptr<CategoryTable>    m_categoryTable;
     std::unique_ptr<PageDb>           m_pageDb;

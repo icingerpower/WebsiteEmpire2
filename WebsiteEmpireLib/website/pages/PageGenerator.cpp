@@ -4,6 +4,7 @@
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/IPageRepository.h"
 #include "website/pages/PageRecord.h"
+#include "website/pages/PermalinkHistoryEntry.h"
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -172,15 +173,25 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         upsertVariant.bindValue(QStringLiteral(":etag"),    etag);
         upsertVariant.exec();
 
-        // Insert redirect rows for old permalinks (301 → current permalink).
-        const QList<QString> &history = m_pageRepo.permalinkHistory(record.id);
-        for (const QString &oldPath : std::as_const(history)) {
+        // Insert redirect rows for old permalinks — status depends on redirectType.
+        const QList<PermalinkHistoryEntry> &history = m_pageRepo.permalinkHistory(record.id);
+        for (const PermalinkHistoryEntry &entry : std::as_const(history)) {
             QSqlQuery redirect(db);
-            redirect.prepare(QStringLiteral(
-                "INSERT OR IGNORE INTO redirects (old_path, new_path, status_code)"
-                " VALUES (:old_path, :new_path, 301)"));
-            redirect.bindValue(QStringLiteral(":old_path"), oldPath);
-            redirect.bindValue(QStringLiteral(":new_path"), record.permalink);
+            if (entry.redirectType == QStringLiteral("deleted")) {
+                // 410 Gone — no forwarding destination
+                redirect.prepare(QStringLiteral(
+                    "INSERT OR IGNORE INTO redirects (old_path, new_path, status_code)"
+                    " VALUES (:old_path, NULL, 410)"));
+                redirect.bindValue(QStringLiteral(":old_path"), entry.permalink);
+            } else {
+                const int code = (entry.redirectType == QStringLiteral("parked")) ? 302 : 301;
+                redirect.prepare(QStringLiteral(
+                    "INSERT OR IGNORE INTO redirects (old_path, new_path, status_code)"
+                    " VALUES (:old_path, :new_path, :code)"));
+                redirect.bindValue(QStringLiteral(":old_path"), entry.permalink);
+                redirect.bindValue(QStringLiteral(":new_path"), record.permalink);
+                redirect.bindValue(QStringLiteral(":code"),     code);
+            }
             redirect.exec();
         }
 

@@ -45,7 +45,72 @@
       </widget>
      </item>
      <item>
+      <widget class="QPushButton" name="buttonGenerateLegalPages">
+       <property name="toolTip">
+        <string>Generate the legal pages</string>
+       </property>
+       <property name="text">
+        <string>Gen. Legal pages</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="buttonTranslate">
+       <property name="text">
+        <string>Translate</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="buttonViewCommandTranslate">
+       <property name="text">
+        <string>View translate commands</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayoutFilter">
+     <item>
+      <widget class="QLabel" name="labelPageType">
+       <property name="text">
+        <string>Type:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="comboBoxPageType"/>
+     </item>
+     <item>
+      <widget class="QPushButton" name="buttonFilter">
+       <property name="text">
+        <string>Filter</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="buttonResetFilter">
+       <property name="text">
+        <string>Reset</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacerFilter">
        <property name="orientation">
         <enum>Qt::Orientation::Horizontal</enum>
        </property>

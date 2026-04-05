@@ -5,11 +5,15 @@
 #include <QDir>
 #include <QList>
 #include <QMap>
+#include <QScopedPointer>
 #include <QString>
 #include <QStringList>
 
 class AbstractPageType;
+class CategoryTable;
 class HostTable;
+class PageTypeArticle;
+class PageTypeLegal;
 
 // Base class for website-building engines.
 //
@@ -35,6 +39,9 @@ public:
     static constexpr int COL_HOST_FOLDER = 5;
 
     explicit AbstractEngine(QObject *parent = nullptr);
+    // Destructor is defined in the .cpp so that QScopedPointer members below can
+    // work with forward-declared (incomplete) types.
+    ~AbstractEngine() override;
 
     // Stable id + translatable display name for one engine variation.
     // id   — persisted to disk; must never change once data exists.
@@ -55,10 +62,13 @@ public:
     virtual AbstractEngine    *create(QObject *parent = nullptr) const = 0;
 
     // Returns the page types that compose a page in this engine.
-    // The list is empty before init() is called; after init() it contains at
-    // least one entry.  Implementations must store the list as a member and
-    // return a const reference so that callers pay no allocation cost.
-    virtual const QList<const AbstractPageType *> &getPageTypes() const = 0;
+    // The default implementation returns Article + Legal, backed by a shared
+    // CategoryTable created in _onInit().  The list is empty before init() is
+    // called; after init() it contains at least one entry.
+    // Overrides must store the list as a member and return a const reference
+    // so that callers pay no allocation cost.  If you override _onInit() you
+    // must also override getPageTypes() (base _onInit() will not be called).
+    virtual const QList<const AbstractPageType *> &getPageTypes() const;
 
     // Returns all registered engine prototypes keyed by getId().
     static const QMap<QString, const AbstractEngine *> &ALL_ENGINES();
@@ -122,6 +132,14 @@ private:
     QDir             m_workingDir;
     const HostTable *m_hostTable = nullptr;
     QList<DomainRow> m_rows;
+
+    // Backing storage for the default getPageTypes() implementation.
+    // Populated by the base _onInit(); unused when a subclass overrides both
+    // _onInit() and getPageTypes().
+    QScopedPointer<CategoryTable>   m_defaultCategoryTable;
+    QScopedPointer<PageTypeArticle> m_defaultArticleType;
+    QScopedPointer<PageTypeLegal>   m_defaultLegalType;
+    QList<const AbstractPageType *> m_defaultPageTypes;
 
     static const QMap<QString, const AbstractEngine *> &getEngines();
     static QMap<QString, const AbstractEngine *> s_engines;

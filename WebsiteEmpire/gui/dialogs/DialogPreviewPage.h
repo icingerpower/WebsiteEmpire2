@@ -2,6 +2,7 @@
 #define DIALOGPREVIEWPAGE_H
 
 #include <QDialog>
+#include <QList>
 
 class AbstractEngine;
 class CategoryTable;
@@ -10,16 +11,22 @@ class IPageRepository;
 namespace Ui { class DialogPreviewPage; }
 
 /**
- * Read-only preview dialog for a single page.
+ * Read-only preview dialog for a page and all its language versions.
  *
- * On construction the page type is reconstructed from the registry, bloc data is
- * loaded via IPageRepository, and addCode() is called to produce HTML which is
- * displayed in a QTextBrowser.  No database is written.
+ * Left panel (QListWidget, 150 px default):
+ *   Shows language codes for the source page and every AI-translated variant.
+ *   Selecting a language re-renders the preview in the QTextBrowser.
  *
- * websiteIndex is always 0 (first engine variation) for preview purposes.
+ * Right panel (QTextBrowser):
+ *   Displays the generated HTML produced by AbstractPageType::addCode().
+ *   websiteIndex is always 0 (first engine variation) for preview purposes.
  *
- * The dialog holds non-owning references to IPageRepository, CategoryTable, and
- * AbstractEngine; all three must outlive this dialog.
+ * Language discovery:
+ *   The "root" page is determined from the passed pageId:
+ *   - If sourcePageId == 0: this is the root; find its translations.
+ *   - If sourcePageId > 0: use sourcePageId as the root; find root + siblings.
+ *
+ * The dialog holds non-owning references; all three must outlive the dialog.
  */
 class DialogPreviewPage : public QDialog
 {
@@ -33,8 +40,18 @@ public:
                                QWidget         *parent = nullptr);
     ~DialogPreviewPage() override;
 
+private slots:
+    void _onLanguageSelected(int row);
+
 private:
+    void _renderPage(int pageId);
+
     Ui::DialogPreviewPage *ui;
+    IPageRepository       &m_repo;
+    CategoryTable         &m_categoryTable;
+    AbstractEngine        &m_engine;
+
+    QList<int> m_pageIds; // parallel to listLanguages rows
 };
 
 #endif // DIALOGPREVIEWPAGE_H

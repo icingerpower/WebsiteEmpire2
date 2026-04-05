@@ -15,6 +15,14 @@ const QString WebsiteSettingsTable::ID_WEBSITE_NAME      = QStringLiteral("websi
 const QString WebsiteSettingsTable::ID_AUTHOR            = QStringLiteral("author");
 const QString WebsiteSettingsTable::ID_EDITING_LANG_CODE = QStringLiteral("editing_lang_code");
 
+const QString WebsiteSettingsTable::ID_LEGAL_COMPANY_NAME    = QStringLiteral("legal_company_name");
+const QString WebsiteSettingsTable::ID_LEGAL_COMPANY_ADDRESS = QStringLiteral("legal_company_address");
+const QString WebsiteSettingsTable::ID_LEGAL_REGISTRATION_NO = QStringLiteral("legal_registration_no");
+const QString WebsiteSettingsTable::ID_LEGAL_CONTACT_EMAIL   = QStringLiteral("legal_contact_email");
+const QString WebsiteSettingsTable::ID_LEGAL_VAT_NO          = QStringLiteral("legal_vat_no");
+const QString WebsiteSettingsTable::ID_LEGAL_DPO_NAME        = QStringLiteral("legal_dpo_name");
+const QString WebsiteSettingsTable::ID_LEGAL_DPO_EMAIL       = QStringLiteral("legal_dpo_email");
+
 WebsiteSettingsTable::WebsiteSettingsTable(const QDir &workingDir, QObject *parent)
     : QAbstractTableModel(parent)
     , m_filePath(workingDir.absoluteFilePath(QStringLiteral("settings_global.csv")))
@@ -27,6 +35,14 @@ WebsiteSettingsTable::WebsiteSettingsTable(const QDir &workingDir, QObject *pare
         { ID_WEBSITE_NAME,      tr("Website name"),    {},           {} },
         { ID_AUTHOR,            tr("Author"),           {},           {} },
         { ID_EDITING_LANG_CODE, tr("Editing language"), QStringLiteral("en"), langCodes },
+        // Legal information — mandatory fields first, then optional.
+        { ID_LEGAL_COMPANY_NAME,    tr("Legal — Company name"),                {}, {} },
+        { ID_LEGAL_COMPANY_ADDRESS, tr("Legal — Company address"),             {}, {} },
+        { ID_LEGAL_REGISTRATION_NO, tr("Legal — Registration number"),         {}, {} },
+        { ID_LEGAL_CONTACT_EMAIL,   tr("Legal — Contact email"),               {}, {} },
+        { ID_LEGAL_VAT_NO,          tr("Legal — VAT number (optional)"),       {}, {} },
+        { ID_LEGAL_DPO_NAME,        tr("Legal — DPO name (optional, GDPR)"),   {}, {} },
+        { ID_LEGAL_DPO_EMAIL,       tr("Legal — DPO email (optional, GDPR)"),  {}, {} },
     };
     _load();
 }
@@ -36,6 +52,14 @@ WebsiteSettingsTable::WebsiteSettingsTable(const QDir &workingDir, QObject *pare
 QString WebsiteSettingsTable::websiteName()     const { return valueForId(ID_WEBSITE_NAME); }
 QString WebsiteSettingsTable::author()          const { return valueForId(ID_AUTHOR); }
 QString WebsiteSettingsTable::editingLangCode() const { return valueForId(ID_EDITING_LANG_CODE); }
+
+QString WebsiteSettingsTable::legalCompanyName()    const { return valueForId(ID_LEGAL_COMPANY_NAME); }
+QString WebsiteSettingsTable::legalCompanyAddress() const { return valueForId(ID_LEGAL_COMPANY_ADDRESS); }
+QString WebsiteSettingsTable::legalRegistrationNo() const { return valueForId(ID_LEGAL_REGISTRATION_NO); }
+QString WebsiteSettingsTable::legalContactEmail()   const { return valueForId(ID_LEGAL_CONTACT_EMAIL); }
+QString WebsiteSettingsTable::legalVatNo()          const { return valueForId(ID_LEGAL_VAT_NO); }
+QString WebsiteSettingsTable::legalDpoName()        const { return valueForId(ID_LEGAL_DPO_NAME); }
+QString WebsiteSettingsTable::legalDpoEmail()       const { return valueForId(ID_LEGAL_DPO_EMAIL); }
 
 QString WebsiteSettingsTable::valueForId(const QString &id) const
 {

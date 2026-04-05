@@ -5,9 +5,16 @@ include(${CMAKE_CURRENT_LIST_DIR}/widgets/widgets.cmake)
 set(PAGES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/AbstractPageType.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractPageType.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractLegalPageDef.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractLegalPageDef.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/LegalPageDefs.h
+    ${CMAKE_CURRENT_LIST_DIR}/LegalPageDefs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeArticle.h
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeArticle.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageTypeLegal.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageTypeLegal.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageRecord.h
+    ${CMAKE_CURRENT_LIST_DIR}/PermalinkHistoryEntry.h
     ${CMAKE_CURRENT_LIST_DIR}/IPageRepository.h
     ${CMAKE_CURRENT_LIST_DIR}/PageDb.h
     ${CMAKE_CURRENT_LIST_DIR}/PageDb.cpp
@@ -15,6 +22,8 @@ set(PAGES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageRepositoryDb.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageGenerator.h
     ${CMAKE_CURRENT_LIST_DIR}/PageGenerator.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageTranslator.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageTranslator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageCommands.h
     ${CMAKE_CURRENT_LIST_DIR}/PageCommands.cpp
     ${ATTRIBUTES_FILES}

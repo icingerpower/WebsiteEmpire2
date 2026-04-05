@@ -1,6 +1,9 @@
 #include "AbstractEngine.h"
 #include "HostTable.h"
 #include "CountryLangManager.h"
+#include "website/pages/PageTypeArticle.h"
+#include "website/pages/PageTypeLegal.h"
+#include "website/pages/attributes/CategoryTable.h"
 
 #include <QFile>
 #include <QLocale>
@@ -11,12 +14,14 @@ static constexpr int COLUMN_COUNT = 6;
 static const QString CSV_FILE   = QStringLiteral("engine_domains.csv");
 static const QString CSV_HEADER = QStringLiteral("Enabled;LangCode;Language;Theme;Domain;HostId;HostFolder");
 
-// ---- Constructor ------------------------------------------------------------
+// ---- Constructor / Destructor -----------------------------------------------
 
 AbstractEngine::AbstractEngine(QObject *parent)
     : QAbstractTableModel(parent)
 {
 }
+
+AbstractEngine::~AbstractEngine() = default;
 
 // ---- Registry ---------------------------------------------------------------
 
@@ -57,7 +62,24 @@ void AbstractEngine::init(const QDir &workingDir, const HostTable &hostTable)
     _onInit(workingDir);
 }
 
-void AbstractEngine::_onInit(const QDir &) {} // default: no-op
+void AbstractEngine::_onInit(const QDir &workingDir)
+{
+    // Default: build the standard Article + Legal composition.
+    // Release in reverse dependency order: types hold a ref to the table.
+    m_defaultLegalType.reset();
+    m_defaultArticleType.reset();
+    m_defaultCategoryTable.reset(new CategoryTable(workingDir));
+    m_defaultArticleType.reset(new PageTypeArticle(*m_defaultCategoryTable));
+    m_defaultLegalType.reset(new PageTypeLegal(*m_defaultCategoryTable));
+    m_defaultPageTypes.clear();
+    m_defaultPageTypes.append(m_defaultArticleType.data());
+    m_defaultPageTypes.append(m_defaultLegalType.data());
+}
+
+const QList<const AbstractPageType *> &AbstractEngine::getPageTypes() const
+{
+    return m_defaultPageTypes;
+}
 
 // ---- Public API -------------------------------------------------------------
 

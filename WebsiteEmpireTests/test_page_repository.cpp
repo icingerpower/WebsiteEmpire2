@@ -255,7 +255,7 @@ void Test_PageRepository::test_pagerepo_update_permalink_records_history()
     f.repo.updatePermalink(id, QStringLiteral("/new.html"));
     const auto &history = f.repo.permalinkHistory(id);
     QCOMPARE(history.size(), 1);
-    QCOMPARE(history.at(0), QStringLiteral("/old.html"));
+    QCOMPARE(history.at(0).permalink, QStringLiteral("/old.html"));
 }
 
 void Test_PageRepository::test_pagerepo_update_permalink_same_value_no_history()
@@ -300,8 +300,8 @@ void Test_PageRepository::test_pagerepo_permalink_history_chronological_order()
     f.repo.updatePermalink(id, QStringLiteral("/v2.html"));
     f.repo.updatePermalink(id, QStringLiteral("/v3.html"));
     const auto &history = f.repo.permalinkHistory(id);
-    QCOMPARE(history.at(0), QStringLiteral("/v1.html"));
-    QCOMPARE(history.at(1), QStringLiteral("/v2.html"));
+    QCOMPARE(history.at(0).permalink, QStringLiteral("/v1.html"));
+    QCOMPARE(history.at(1).permalink, QStringLiteral("/v2.html"));
 }
 
 QTEST_MAIN(Test_PageRepository)
