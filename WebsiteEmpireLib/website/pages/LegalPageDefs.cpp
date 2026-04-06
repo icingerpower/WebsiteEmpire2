@@ -262,3 +262,76 @@ QString LegalPageDefLegalNotice::generateTextContent(const LegalInfo &info) cons
 }
 
 DECLARE_LEGAL_PAGE(LegalPageDefLegalNotice)
+
+// =============================================================================
+// Contact Us
+// =============================================================================
+
+QString LegalPageDefContactUs::getId()               const { return QStringLiteral("contact_us"); }
+QString LegalPageDefContactUs::getDisplayName()      const { return QCoreApplication::translate("LegalPageDefs", "Contact Us"); }
+QString LegalPageDefContactUs::getDefaultPermalink() const { return QStringLiteral("/contact-us.html"); }
+
+QString LegalPageDefContactUs::generateTextContent(const LegalInfo &info) const
+{
+    QStringList parts;
+
+    parts << QStringLiteral("<h1>Contact Us</h1>");
+
+    parts << QStringLiteral("We'd love to hear from you. Whether you have a question, a suggestion, or simply want to get in touch, please don't hesitate to reach out to <strong>%1</strong>.").arg(info.companyName);
+
+    parts << QStringLiteral("<h2>Contact Details</h2>");
+
+    {
+        QString details = QStringLiteral("<strong>%1</strong><br>%2<br>Email: <a href=\"mailto:%3\">%3</a>")
+                              .arg(info.companyName, info.companyAddress, info.contactEmail);
+        parts << details;
+    }
+
+    parts << QStringLiteral("<h2>Response Time</h2>");
+
+    parts << QStringLiteral("We aim to respond to all enquiries within 2 business days. For urgent matters, please indicate this clearly in the subject line of your email.");
+
+    parts << QStringLiteral("<h2>Privacy</h2>");
+
+    parts << QStringLiteral("Any personal data you provide when contacting us will be used solely to respond to your enquiry and will be handled in accordance with our <a href=\"/privacy-policy.html\">Privacy Policy</a>.");
+
+    return parts.join(QStringLiteral("\n\n"));
+}
+
+DECLARE_LEGAL_PAGE(LegalPageDefContactUs)
+
+// =============================================================================
+// About Us
+// =============================================================================
+
+QString LegalPageDefAboutUs::getId()               const { return QStringLiteral("about_us"); }
+QString LegalPageDefAboutUs::getDisplayName()      const { return QCoreApplication::translate("LegalPageDefs", "About Us"); }
+QString LegalPageDefAboutUs::getDefaultPermalink() const { return QStringLiteral("/about-us.html"); }
+
+QString LegalPageDefAboutUs::generateTextContent(const LegalInfo &info) const
+{
+    QStringList parts;
+
+    parts << QStringLiteral("<h1>About Us</h1>");
+
+    parts << QStringLiteral("Welcome to <strong>%1</strong>. This page tells you a little about who we are and what we do.")
+                 .arg(info.websiteName);
+
+    parts << QStringLiteral("<h2>Who We Are</h2>");
+
+    parts << QStringLiteral("<strong>%1</strong> is a company based at %2. [Please add a short description of your company, its history, and its core activity here.]")
+                 .arg(info.companyName, info.companyAddress);
+
+    parts << QStringLiteral("<h2>Our Mission</h2>");
+
+    parts << QStringLiteral("[Please describe your mission, values, and what sets you apart from competitors.]");
+
+    parts << QStringLiteral("<h2>Get in Touch</h2>");
+
+    parts << QStringLiteral("Have questions or want to know more? We're always happy to talk. Reach us at <a href=\"mailto:%1\">%1</a> or visit our <a href=\"/contact-us.html\">Contact Us</a> page.")
+                 .arg(info.contactEmail);
+
+    return parts.join(QStringLiteral("\n\n"));
+}
+
+DECLARE_LEGAL_PAGE(LegalPageDefAboutUs)

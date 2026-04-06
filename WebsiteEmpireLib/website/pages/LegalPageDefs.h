@@ -52,4 +52,22 @@ public:
     QString generateTextContent(const LegalInfo &info) const override;
 };
 
+class LegalPageDefContactUs : public AbstractLegalPageDef
+{
+public:
+    QString getId()               const override;
+    QString getDisplayName()      const override;
+    QString getDefaultPermalink() const override;
+    QString generateTextContent(const LegalInfo &info) const override;
+};
+
+class LegalPageDefAboutUs : public AbstractLegalPageDef
+{
+public:
+    QString getId()               const override;
+    QString getDisplayName()      const override;
+    QString getDefaultPermalink() const override;
+    QString generateTextContent(const LegalInfo &info) const override;
+};
+
 #endif // LEGALPAGEDEFS_H
