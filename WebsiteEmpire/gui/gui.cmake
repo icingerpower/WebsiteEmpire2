@@ -5,6 +5,9 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneDomains.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneDomains.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneDomains.ui
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneMenus.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneMenus.h
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneMenus.ui
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.ui

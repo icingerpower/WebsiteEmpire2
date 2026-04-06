@@ -1,6 +1,7 @@
 #include "AbstractPageType.h"
 #include "website/AbstractEngine.h"
 #include "website/pages/blocs/AbstractPageBloc.h"
+#include "website/theme/AbstractTheme.h"
 
 #include <QHash>
 #include <QString>
@@ -115,8 +116,21 @@ void AbstractPageType::addCode(QStringView     origContent,
     // Accumulate bloc output in temporary buffers so CSS can go into <head>
     // and JS before </body>.
     QString bodyHtml, innerCss, innerJs;
+
+    AbstractTheme *theme = engine.getActiveTheme();
+
+    // Top common blocs: header, top menu (rendered before the page body)
+    if (theme) {
+        theme->addCodeTop(engine, websiteIndex, bodyHtml, innerCss, innerJs, cssDoneIds, jsDoneIds);
+    }
+
     for (const AbstractPageBloc *bloc : getPageBlocs()) {
         bloc->addCode(origContent, engine, websiteIndex, bodyHtml, innerCss, innerJs, cssDoneIds, jsDoneIds);
+    }
+
+    // Bottom common blocs: bottom menu, footer (rendered after the page body)
+    if (theme) {
+        theme->addCodeBottom(engine, websiteIndex, bodyHtml, innerCss, innerJs, cssDoneIds, jsDoneIds);
     }
 
     const QString langCode = engine.getLangCode(websiteIndex);

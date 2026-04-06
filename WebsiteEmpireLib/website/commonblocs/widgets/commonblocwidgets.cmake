@@ -1,0 +1,14 @@
+set(COMMONBLOCS_WIDGETS_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocHeader.h
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocHeader.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocHeader.ui
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocFooter.h
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocFooter.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocFooter.ui
+    ${CMAKE_CURRENT_LIST_DIR}/DialogMenuItemEdit.h
+    ${CMAKE_CURRENT_LIST_DIR}/DialogMenuItemEdit.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/DialogMenuItemEdit.ui
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocMenu.h
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocMenu.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocMenu.ui
+)

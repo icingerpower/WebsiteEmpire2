@@ -1,5 +1,7 @@
 include(${CMAKE_CURRENT_LIST_DIR}/shortcodes/shortcodes.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/pages/pages.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/commonblocs/commonblocs.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/theme/theme.cmake)
 
 set(WEBSITE_FILES
     ${CMAKE_CURRENT_LIST_DIR}/WebCodeAdder.h
@@ -17,4 +19,6 @@ set(WEBSITE_FILES
     ${CMAKE_CURRENT_LIST_DIR}/WebsiteSettingsTable.cpp
     ${SHORTCODES_FILES}
     ${PAGES_FILES}
+    ${COMMONBLOCS_FILES}
+    ${THEME_FILES}
 )

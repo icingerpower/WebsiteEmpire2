@@ -20,6 +20,9 @@ public:
     // Binds the pane to an already-constructed settings table.
     void setSettingsTable(WebsiteSettingsTable *settingsTable);
 
+private slots:
+    void onThemeChanged(int index);
+
 private:
     Ui::PaneSettings *ui;
 };

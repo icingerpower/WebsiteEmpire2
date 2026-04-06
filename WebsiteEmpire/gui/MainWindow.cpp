@@ -7,6 +7,7 @@
 #include "panes/PaneSettings.h"
 #include "website/AbstractEngine.h"
 #include "website/WebsiteSettingsTable.h"
+#include "website/theme/AbstractTheme.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
 
 #include <QSettings>
@@ -37,9 +38,16 @@ void MainWindow::_init()
     const AbstractEngine *proto = AbstractEngine::ALL_ENGINES().value(engineId, nullptr);
     ui->tabDomains->setHostTable(m_hostTable.data());
 
+    const QString themeId = settings->value(AbstractTheme::settingsKey()).toString();
+    const AbstractTheme *themeProto = AbstractTheme::ALL_THEMES().value(themeId, nullptr);
+    if (themeProto) {
+        m_theme.reset(themeProto->create(workingDir, this));
+    }
+
     if (proto) {
         AbstractEngine *engine = proto->create(this);
         engine->init(workingDir, *m_hostTable);
+        engine->setTheme(m_theme.data());
         m_engine.reset(engine);
         ui->tabDomains->setEngine(m_engine.data());
     }

@@ -42,7 +42,7 @@ const QMap<QString, const AbstractEngine *> &AbstractEngine::getEngines()
     return s_engines;
 }
 
-// ---- Public API — getLangCode -----------------------------------------------
+// ---- Public API — getLangCode / theme ---------------------------------------
 
 QString AbstractEngine::getLangCode(int websiteIndex) const
 {
@@ -50,6 +50,16 @@ QString AbstractEngine::getLangCode(int websiteIndex) const
         return {};
     }
     return m_rows.at(websiteIndex).langCode;
+}
+
+void AbstractEngine::setTheme(AbstractTheme *theme)
+{
+    m_theme = theme;
+}
+
+AbstractTheme *AbstractEngine::getActiveTheme() const
+{
+    return m_theme;
 }
 
 // ---- Init -------------------------------------------------------------------

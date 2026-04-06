@@ -10,6 +10,7 @@
 #include <QStringList>
 
 class AbstractPageType;
+class AbstractTheme;
 class CategoryTable;
 class HostTable;
 class PageTypeArticle;
@@ -84,6 +85,20 @@ public:
     // the index is out of range (e.g. before init() populates the rows).
     QString getLangCode(int websiteIndex) const;
 
+    /**
+     * Sets the active visual theme for this engine.
+     * The engine does not take ownership — the caller is responsible for the
+     * lifetime of the theme object (typically owned by MainWindow).
+     * Must be called before generateAll() / AbstractPageType::addCode().
+     */
+    void setTheme(AbstractTheme *theme);
+
+    /**
+     * Returns the active visual theme, or nullptr if none has been set.
+     * Used by AbstractPageType::addCode() to invoke addCodeTop/addCodeBottom.
+     */
+    AbstractTheme *getActiveTheme() const;
+
     // Binds this engine to workingDir and hostTable, then loads engine_domains.csv.
     // Must be called before using the model.
     void init(const QDir &workingDir, const HostTable &hostTable);
@@ -130,7 +145,8 @@ private:
     QString _hostIdForName(const QString &name)   const;
 
     QDir             m_workingDir;
-    const HostTable *m_hostTable = nullptr;
+    const HostTable *m_hostTable  = nullptr;
+    AbstractTheme   *m_theme      = nullptr; ///< Not owned; set by setTheme()
     QList<DomainRow> m_rows;
 
     // Backing storage for the default getPageTypes() implementation.

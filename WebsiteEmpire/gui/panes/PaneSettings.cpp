@@ -2,6 +2,8 @@
 #include "ui_PaneSettings.h"
 
 #include "website/WebsiteSettingsTable.h"
+#include "website/theme/AbstractTheme.h"
+#include "workingdirectory/WorkingDirectoryManager.h"
 
 #include <QAbstractItemModel>
 #include <QComboBox>
@@ -79,6 +81,28 @@ PaneSettings::PaneSettings(QWidget *parent)
 {
     ui->setupUi(this);
     ui->tableViewSettings->setItemDelegate(new SettingsDelegate(this));
+
+    const auto &themes = AbstractTheme::ALL_THEMES();
+
+    // Hide the theme row when there is only one theme — no choice to offer.
+    if (themes.size() <= 1) {
+        ui->widgetThemeRow->setVisible(false);
+    } else {
+        for (const AbstractTheme *theme : std::as_const(themes)) {
+            ui->comboTheme->addItem(theme->getName(), theme->getId());
+        }
+
+        // Restore the saved selection.
+        const auto settings = WorkingDirectoryManager::instance()->settings();
+        const QString savedId = settings->value(AbstractTheme::settingsKey()).toString();
+        const int savedIndex  = ui->comboTheme->findData(savedId);
+        if (savedIndex >= 0) {
+            ui->comboTheme->setCurrentIndex(savedIndex);
+        }
+
+        connect(ui->comboTheme, &QComboBox::currentIndexChanged,
+                this, &PaneSettings::onThemeChanged);
+    }
 }
 
 PaneSettings::~PaneSettings()
@@ -89,4 +113,11 @@ PaneSettings::~PaneSettings()
 void PaneSettings::setSettingsTable(WebsiteSettingsTable *settingsTable)
 {
     ui->tableViewSettings->setModel(settingsTable);
+}
+
+void PaneSettings::onThemeChanged(int index)
+{
+    const QString themeId = ui->comboTheme->itemData(index).toString();
+    const auto settings   = WorkingDirectoryManager::instance()->settings();
+    settings->setValue(AbstractTheme::settingsKey(), themeId);
 }

@@ -25,6 +25,11 @@
         <string>Domains</string>
        </attribute>
       </widget>
+      <widget class="PaneMenus" name="tabMenus">
+       <attribute name="title">
+        <string>Menus</string>
+       </attribute>
+      </widget>
       <widget class="PanePages" name="tabPages">
        <attribute name="title">
         <string>Pages</string>
@@ -61,6 +66,12 @@
    <class>PaneDomains</class>
    <extends>QWidget</extends>
    <header>gui/panes/PaneDomains.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>PaneMenus</class>
+   <extends>QWidget</extends>
+   <header>gui/panes/PaneMenus.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>

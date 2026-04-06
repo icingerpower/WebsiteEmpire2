@@ -1,0 +1,19 @@
+include(${CMAKE_CURRENT_LIST_DIR}/widgets/commonblocwidgets.cmake)
+
+set(COMMONBLOCS_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/MenuItem.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractCommonBloc.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractCommonBlocWidget.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractCommonBlocWidget.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractCommonBlocMenu.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractCommonBlocMenu.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocHeader.h
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocHeader.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocFooter.h
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocFooter.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocMenuTop.h
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocMenuTop.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocMenuBottom.h
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocMenuBottom.cpp
+    ${COMMONBLOCS_WIDGETS_FILES}
+)
