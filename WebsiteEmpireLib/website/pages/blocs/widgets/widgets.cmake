@@ -7,4 +7,10 @@ set(BLOCS_WIDGETS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/CategoryEditorWidget.h
     ${CMAKE_CURRENT_LIST_DIR}/CategoryEditorWidget.cpp
     ${CMAKE_CURRENT_LIST_DIR}/CategoryEditorWidget.ui
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocImageLinksWidget.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocImageLinksWidget.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocImageLinksWidget.ui
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategoryArticlesWidget.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategoryArticlesWidget.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategoryArticlesWidget.ui
 )

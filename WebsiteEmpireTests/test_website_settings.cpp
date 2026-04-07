@@ -77,8 +77,9 @@ void Test_Website_Settings::test_settings_row_count()
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     WebsiteSettingsTable table(QDir(dir.path()));
-    // 3 pre-defined settings: website_name, author, editing_lang_code
-    QCOMPARE(table.rowCount(), 3);
+    // 10 pre-defined settings: website_name, author, editing_lang_code,
+    // plus 7 legal fields (company name/address/registration/email, VAT, DPO name/email).
+    QCOMPARE(table.rowCount(), 10);
 }
 
 // ---- Headers ----------------------------------------------------------------
@@ -391,7 +392,7 @@ void Test_Website_Settings::test_settings_reload_extra_id_ignored()
     }));
 
     WebsiteSettingsTable table(qdir);
-    QCOMPARE(table.rowCount(), 3); // only the 3 pre-defined rows
+    QCOMPARE(table.rowCount(), 10); // only the 10 pre-defined rows; unknown CSV ids are ignored
     QCOMPARE(table.websiteName(), QStringLiteral("KnownSite"));
 }
 

@@ -5,6 +5,7 @@
 #include "website/AbstractEngine.h"
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/AbstractLegalPageDef.h"
+#include "website/pages/PageTypeHome.h"
 #include "website/pages/PageTypeLegal.h"
 #include "website/pages/PageRecord.h"
 #include "website/WebsiteSettingsTable.h"
@@ -110,6 +111,7 @@ void PanePages::removePage()
     }
     m_pageRepo->remove(id);
     _refreshModel();
+    _updateHomeButton();
     _updateLegalButton();
 }
 
@@ -129,6 +131,37 @@ void PanePages::previewPage()
     }
     DialogPreviewPage dlg(*m_pageRepo, *m_categoryTable, *m_engine, id, this);
     dlg.exec();
+}
+
+void PanePages::generateHomePage()
+{
+    if (!m_pageRepo || !m_settingsTable) {
+        return;
+    }
+
+    if (_homePageExists()) {
+        QMessageBox::information(
+            this,
+            tr("Home page already exists"),
+            tr("A home page already exists at /index.html.\n"
+               "Select it in the list and use \"Edit page\" to modify it."));
+        return;
+    }
+
+    const QString &editingLang = m_settingsTable->editingLangCode();
+    m_pageRepo->create(
+        QLatin1String(PageTypeHome::TYPE_ID),
+        QStringLiteral("/index.html"),
+        editingLang);
+
+    _refreshModel();
+    _updateHomeButton();
+
+    QMessageBox::information(
+        this,
+        tr("Home page created"),
+        tr("The home page has been created with permalink /index.html.\n"
+           "Drogon serves it at http://<host>/index.html."));
 }
 
 void PanePages::generateLegalPages()
@@ -307,6 +340,7 @@ void PanePages::_connectSlots()
     connect(ui->buttonEditPage,   &QPushButton::clicked, this, &PanePages::editPage);
     connect(ui->buttonRemovePage, &QPushButton::clicked, this, &PanePages::removePage);
     connect(ui->buttonPreview,    &QPushButton::clicked, this, &PanePages::previewPage);
+    connect(ui->buttonGenerateHomePage,      &QPushButton::clicked, this, &PanePages::generateHomePage);
     connect(ui->buttonGenerateLegalPages,    &QPushButton::clicked, this, &PanePages::generateLegalPages);
     connect(ui->buttonTranslate,    &QPushButton::clicked, this, &PanePages::translate);
     connect(ui->buttonViewCommandTranslate,    &QPushButton::clicked, this, &PanePages::viewCommandTranslate);
@@ -339,6 +373,7 @@ void PanePages::_initDb()
     }
 
     _refreshModel();
+    _updateHomeButton();
     _updateLegalButton();
 }
 
@@ -461,6 +496,30 @@ void PanePages::_validateLegalSettings() const
                 .arg(missing.join(QStringLiteral("\n"))));
         ex.raise();
     }
+}
+
+bool PanePages::_homePageExists() const
+{
+    if (!m_pageRepo || !m_settingsTable) {
+        return false;
+    }
+    const QString &editingLang = m_settingsTable->editingLangCode();
+    const QList<PageRecord> &pages = m_pageRepo->findSourcePages(editingLang);
+    for (const PageRecord &p : std::as_const(pages)) {
+        if (p.typeId == QLatin1String(PageTypeHome::TYPE_ID)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void PanePages::_updateHomeButton()
+{
+    if (!m_pageRepo || !m_settingsTable) {
+        return;
+    }
+    ui->buttonGenerateHomePage->setStyleSheet(
+        _homePageExists() ? QStringLiteral("color: grey;") : QString());
 }
 
 void PanePages::_updateLegalButton()

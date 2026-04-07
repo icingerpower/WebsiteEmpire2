@@ -45,6 +45,16 @@
       </widget>
      </item>
      <item>
+      <widget class="QPushButton" name="buttonGenerateHomePage">
+       <property name="toolTip">
+        <string>Create the home page (permalink: /index.html)</string>
+       </property>
+       <property name="text">
+        <string>Gen. Home page</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QPushButton" name="buttonGenerateLegalPages">
        <property name="toolTip">
         <string>Generate the legal pages</string>

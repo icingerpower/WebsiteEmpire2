@@ -48,6 +48,7 @@ public slots:
     void editPage();
     void removePage();
     void previewPage();
+    void generateHomePage();
     void generateLegalPages();
     void translate();
     void viewCommandTranslate();
@@ -98,6 +99,18 @@ private:
      * (company name, address, registration number, contact email) is empty.
      */
     void _validateLegalSettings() const;
+
+    /**
+     * Returns true if a source page of type PageTypeHome::TYPE_ID already
+     * exists for the current editing language.
+     */
+    bool _homePageExists() const;
+
+    /**
+     * Greys out buttonGenerateHomePage when a home page already exists,
+     * resets to default style when one is missing.
+     */
+    void _updateHomeButton();
 
     /**
      * Updates buttonGenerateLegalPages style to grey when all registered

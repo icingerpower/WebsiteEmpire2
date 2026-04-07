@@ -37,6 +37,7 @@ void MainWindow::_init()
     const QString engineId = settings->value(DialogPickEngine::settingsKey()).toString();
     const AbstractEngine *proto = AbstractEngine::ALL_ENGINES().value(engineId, nullptr);
     ui->tabDomains->setHostTable(m_hostTable.data());
+    ui->tabDomains->setWorkingDir(workingDir);
 
     const QString themeId = settings->value(AbstractTheme::settingsKey()).toString();
     const AbstractTheme *themeProto = AbstractTheme::ALL_THEMES().value(themeId, nullptr);

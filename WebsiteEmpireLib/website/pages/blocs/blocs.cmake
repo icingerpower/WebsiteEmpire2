@@ -7,5 +7,9 @@ set(BLOCS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocText.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategory.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategory.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocImageLinks.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocImageLinks.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategoryArticles.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategoryArticles.cpp
     ${BLOCS_WIDGETS_FILES}
 )
