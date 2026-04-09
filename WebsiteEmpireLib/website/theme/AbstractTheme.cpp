@@ -1,7 +1,10 @@
 #include "AbstractTheme.h"
 
+#include "website/AbstractEngine.h"
 #include "website/commonblocs/AbstractCommonBloc.h"
 
+#include <QColor>
+#include <QPixmap>
 #include <QSet>
 #include <QSettings>
 #include <QString>
@@ -84,11 +87,24 @@ QVariant AbstractTheme::data(const QModelIndex &index, int role) const
         if (role == Qt::DisplayRole) { return param.name; }
         if (role == Qt::ToolTipRole) { return param.tooltip; }
         break;
-    case COL_VALUE:
+    case COL_VALUE: {
         if (role == Qt::DisplayRole || role == Qt::EditRole) {
             return paramValue(param.id);
         }
+        const bool isColor = param.id.contains(QStringLiteral("_color"));
+        if (role == IsColorRole) {
+            return isColor;
+        }
+        if (role == Qt::DecorationRole && isColor) {
+            const QColor color = QColor::fromString(paramValue(param.id).toString());
+            if (color.isValid()) {
+                QPixmap pix(16, 16);
+                pix.fill(color);
+                return pix;
+            }
+        }
         break;
+    }
     default:
         break;
     }
@@ -154,6 +170,10 @@ void AbstractTheme::_ensureLoaded() const
             m_values.insert(param.id, settings.value(param.id));
         }
     }
+    // Load source language code (const_cast because _ensureLoaded is const
+    // and m_sourceLangCode is loaded lazily alongside params).
+    const_cast<AbstractTheme *>(this)->m_sourceLangCode =
+        settings.value(QStringLiteral("source_lang")).toString();
 }
 
 void AbstractTheme::_saveValues() const
@@ -167,6 +187,51 @@ void AbstractTheme::_saveValues() const
 QString AbstractTheme::_settingsPath() const
 {
     return m_workingDir.filePath(getId() + QStringLiteral("_params.ini"));
+}
+
+QString AbstractTheme::_blocsSettingsPath() const
+{
+    return m_workingDir.filePath(getId() + QStringLiteral("_blocs.ini"));
+}
+
+void AbstractTheme::saveBlocsData()
+{
+    QSettings settings(_blocsSettingsPath(), QSettings::IniFormat);
+    const auto persist = [&settings](const QList<AbstractCommonBloc *> &blocs) {
+        for (AbstractCommonBloc *bloc : blocs) {
+            settings.beginGroup(bloc->getId());
+            const QVariantMap map = bloc->toMap();
+            for (auto it = map.cbegin(); it != map.cend(); ++it) {
+                settings.setValue(it.key(), it.value());
+            }
+            bloc->saveTranslations(settings);
+            settings.endGroup();
+        }
+    };
+    persist(getTopBlocs());
+    persist(getBottomBlocs());
+}
+
+void AbstractTheme::_loadBlocsData()
+{
+    QSettings settings(_blocsSettingsPath(), QSettings::IniFormat);
+    const auto hydrate = [&settings](const QList<AbstractCommonBloc *> &blocs) {
+        for (AbstractCommonBloc *bloc : blocs) {
+            settings.beginGroup(bloc->getId());
+            QVariantMap map;
+            const auto &keys = settings.childKeys();
+            for (const auto &key : keys) {
+                map.insert(key, settings.value(key));
+            }
+            if (!map.isEmpty()) {
+                bloc->fromMap(map); // sets sources in BlocTranslations
+            }
+            bloc->loadTranslations(settings); // reads tr_* subgroups
+            settings.endGroup();
+        }
+    };
+    hydrate(getTopBlocs());
+    hydrate(getBottomBlocs());
 }
 
 QString AbstractTheme::primaryColor() const
@@ -193,6 +258,19 @@ QString AbstractTheme::fontSizeBase() const
     return v.isValid() ? v.toString() : QStringLiteral("16px");
 }
 
+void AbstractTheme::setSourceLangCode(const QString &langCode)
+{
+    m_sourceLangCode = langCode;
+    QSettings settings(_settingsPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("source_lang"), langCode);
+}
+
+QString AbstractTheme::sourceLangCode() const
+{
+    _ensureLoaded();
+    return m_sourceLangCode;
+}
+
 void AbstractTheme::addCodeTop(AbstractEngine &engine,
                                 int             websiteIndex,
                                 QString        &html,
@@ -201,7 +279,9 @@ void AbstractTheme::addCodeTop(AbstractEngine &engine,
                                 QSet<QString>  &cssDoneIds,
                                 QSet<QString>  &jsDoneIds)
 {
+    const QString langCode = engine.getLangCode(websiteIndex);
     for (AbstractCommonBloc *bloc : getTopBlocs()) {
+        bloc->assertTranslated(langCode, m_sourceLangCode);
         bloc->addCode(QStringView{}, engine, websiteIndex,
                       html, css, js, cssDoneIds, jsDoneIds);
     }
@@ -215,7 +295,9 @@ void AbstractTheme::addCodeBottom(AbstractEngine &engine,
                                    QSet<QString>  &cssDoneIds,
                                    QSet<QString>  &jsDoneIds)
 {
+    const QString langCode = engine.getLangCode(websiteIndex);
     for (AbstractCommonBloc *bloc : getBottomBlocs()) {
+        bloc->assertTranslated(langCode, m_sourceLangCode);
         bloc->addCode(QStringView{}, engine, websiteIndex,
                       html, css, js, cssDoneIds, jsDoneIds);
     }

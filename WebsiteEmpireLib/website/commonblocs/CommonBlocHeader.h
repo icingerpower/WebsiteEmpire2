@@ -2,6 +2,7 @@
 #define COMMONBLOCHEADER_H
 
 #include "website/commonblocs/AbstractCommonBloc.h"
+#include "website/commonblocs/BlocTranslations.h"
 
 #include <QString>
 
@@ -49,6 +50,9 @@ public:
 
     AbstractCommonBlocWidget *createEditWidget() override;
 
+    QVariantMap toMap()              const override;
+    void        fromMap(const QVariantMap &map) override;
+
     void          setTitle(const QString &title);
     const QString &title() const;
 
@@ -56,9 +60,20 @@ public:
     void          setSubtitle(const QString &subtitle);
     const QString &subtitle() const;
 
+    // ---- Translation overrides ----
+    QHash<QString, QString> sourceTexts()                             const override;
+    void        setTranslation(const QString &fieldId,
+                               const QString &langCode,
+                               const QString &translatedText)              override;
+    QStringList missingTranslations(const QString &langCode,
+                                    const QString &sourceLangCode)    const override;
+    void        saveTranslations(QSettings &settings)                       override;
+    void        loadTranslations(QSettings &settings)                       override;
+
 private:
     QString m_title;
     QString m_subtitle;
+    BlocTranslations m_tr;
 };
 
 #endif // COMMONBLOCHEADER_H

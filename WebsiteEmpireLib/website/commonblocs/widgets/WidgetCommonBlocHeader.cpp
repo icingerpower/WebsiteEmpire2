@@ -8,6 +8,8 @@ WidgetCommonBlocHeader::WidgetCommonBlocHeader(QWidget *parent)
     , ui(new Ui::WidgetCommonBlocHeader)
 {
     ui->setupUi(this);
+    connect(ui->lineEditTitle,    &QLineEdit::textEdited, this, &WidgetCommonBlocHeader::changed);
+    connect(ui->lineEditSubtitle, &QLineEdit::textEdited, this, &WidgetCommonBlocHeader::changed);
 }
 
 WidgetCommonBlocHeader::~WidgetCommonBlocHeader()

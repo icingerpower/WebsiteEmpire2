@@ -97,6 +97,7 @@ void WidgetCommonBlocMenu::onAddItem()
     populateTreeItem(topItem, item.label, item.url, item.newTab, item.rel);
     ui->treeWidget->setCurrentItem(topItem);
     updateButtonStates();
+    emit changed();
 }
 
 void WidgetCommonBlocMenu::onAddSubItem()
@@ -117,6 +118,7 @@ void WidgetCommonBlocMenu::onAddSubItem()
     populateTreeItem(subItem, item.label, item.url, item.newTab, item.rel);
     parentItem->setExpanded(true);
     ui->treeWidget->setCurrentItem(subItem);
+    emit changed();
 }
 
 void WidgetCommonBlocMenu::onEditItem()
@@ -133,6 +135,7 @@ void WidgetCommonBlocMenu::onEditItem()
     }
     const MenuItem item = dlg.item();
     populateTreeItem(selected, item.label, item.url, item.newTab, item.rel);
+    emit changed();
 }
 
 void WidgetCommonBlocMenu::onDeleteItem()
@@ -143,6 +146,7 @@ void WidgetCommonBlocMenu::onDeleteItem()
     }
     delete selected;
     updateButtonStates();
+    emit changed();
 }
 
 void WidgetCommonBlocMenu::onMoveUp()
@@ -168,6 +172,7 @@ void WidgetCommonBlocMenu::onMoveUp()
         ui->treeWidget->insertTopLevelItem(idx - 1, item);
     }
     ui->treeWidget->setCurrentItem(item);
+    emit changed();
 }
 
 void WidgetCommonBlocMenu::onMoveDown()
@@ -193,6 +198,7 @@ void WidgetCommonBlocMenu::onMoveDown()
         ui->treeWidget->insertTopLevelItem(idx + 1, item);
     }
     ui->treeWidget->setCurrentItem(item);
+    emit changed();
 }
 
 void WidgetCommonBlocMenu::onItemDoubleClicked(QTreeWidgetItem * /*item*/, int /*column*/)
@@ -235,6 +241,7 @@ void WidgetCommonBlocMenu::addLegalPageItem(const QString &label, const QString 
     populateTreeItem(topItem, label, url, false, QString());
     ui->treeWidget->setCurrentItem(topItem);
     updateButtonStates();
+    emit changed();
 }
 
 void WidgetCommonBlocMenu::populateTreeItem(QTreeWidgetItem *treeItem,

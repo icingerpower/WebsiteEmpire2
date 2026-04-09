@@ -5,6 +5,7 @@
 
 #include <QCoreApplication>
 #include <QSet>
+#include <QSettings>
 
 QString CommonBlocFooter::getId() const
 {
@@ -31,7 +32,6 @@ void CommonBlocFooter::addCode(QStringView     origContent,
                                 QSet<QString>  &jsDoneIds) const
 {
     Q_UNUSED(origContent) // common blocs are not driven by source text
-    Q_UNUSED(websiteIndex)
     Q_UNUSED(js)
     Q_UNUSED(jsDoneIds)
 
@@ -39,13 +39,24 @@ void CommonBlocFooter::addCode(QStringView     origContent,
         return;
     }
 
+    // Resolve translated text
+    const QString lang = engine.getLangCode(websiteIndex);
+    AbstractTheme *theme = engine.getActiveTheme();
+    const QString sourceLang = theme ? theme->sourceLangCode() : QString();
+    const bool useTranslation = !lang.isEmpty() && lang != sourceLang;
+
+    const QString &displayText = useTranslation
+        ? m_tr.translation(QLatin1String(KEY_TEXT), lang)
+        : m_text;
+    const QString &resolvedText = displayText.isEmpty() ? m_text : displayText;
+
     if (!cssDoneIds.contains(QStringLiteral("site_footer"))) {
         cssDoneIds.insert(QStringLiteral("site_footer"));
 
         QString primary  = QStringLiteral("#1a73e8");
         QString fontFam  = QStringLiteral("sans-serif");
 
-        if (AbstractTheme *theme = engine.getActiveTheme()) {
+        if (theme) {
             primary  = theme->primaryColor();
             fontFam  = theme->fontFamily();
         }
@@ -60,7 +71,7 @@ void CommonBlocFooter::addCode(QStringView     origContent,
 
     html += QStringLiteral("<footer class=\"site-footer\">");
     html += QStringLiteral("<p class=\"site-footer-text\">");
-    html += m_text.toHtmlEscaped();
+    html += resolvedText.toHtmlEscaped();
     html += QStringLiteral("</p>");
     html += QStringLiteral("</footer>");
 }
@@ -70,12 +81,59 @@ AbstractCommonBlocWidget *CommonBlocFooter::createEditWidget()
     return new WidgetCommonBlocFooter();
 }
 
+QVariantMap CommonBlocFooter::toMap() const
+{
+    return {{QLatin1String(KEY_TEXT), m_text}};
+}
+
+void CommonBlocFooter::fromMap(const QVariantMap &map)
+{
+    m_text = map.value(QLatin1String(KEY_TEXT)).toString();
+    m_tr.setSource(QLatin1String(KEY_TEXT), m_text);
+}
+
 void CommonBlocFooter::setText(const QString &text)
 {
     m_text = text;
+    m_tr.setSource(QLatin1String(KEY_TEXT), text);
 }
 
 const QString &CommonBlocFooter::text() const
 {
     return m_text;
+}
+
+QHash<QString, QString> CommonBlocFooter::sourceTexts() const
+{
+    QHash<QString, QString> result;
+    if (!m_text.isEmpty()) {
+        result.insert(QLatin1String(KEY_TEXT), m_text);
+    }
+    return result;
+}
+
+void CommonBlocFooter::setTranslation(const QString &fieldId,
+                                      const QString &langCode,
+                                      const QString &translatedText)
+{
+    m_tr.setTranslation(fieldId, langCode, translatedText);
+}
+
+QStringList CommonBlocFooter::missingTranslations(const QString &langCode,
+                                                  const QString &sourceLangCode) const
+{
+    if (langCode.isEmpty() || langCode == sourceLangCode) {
+        return {};
+    }
+    return m_tr.missingFields(langCode);
+}
+
+void CommonBlocFooter::saveTranslations(QSettings &settings)
+{
+    m_tr.saveToSettings(settings);
+}
+
+void CommonBlocFooter::loadTranslations(QSettings &settings)
+{
+    m_tr.loadFromSettings(settings);
 }

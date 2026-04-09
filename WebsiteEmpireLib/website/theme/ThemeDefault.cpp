@@ -8,7 +8,9 @@ ThemeDefault::ThemeDefault()
 
 ThemeDefault::ThemeDefault(const QDir &workingDir, QObject *parent)
     : AbstractTheme(workingDir, parent)
-{}
+{
+    _loadBlocsData();
+}
 
 AbstractTheme *ThemeDefault::create(const QDir &workingDir, QObject *parent) const
 {

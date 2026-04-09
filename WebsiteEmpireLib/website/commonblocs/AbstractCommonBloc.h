@@ -3,10 +3,13 @@
 
 #include "website/WebCodeAdder.h"
 
+#include <QHash>
 #include <QList>
 #include <QString>
+#include <QVariantMap>
 
 class AbstractCommonBlocWidget;
+class QSettings;
 
 /**
  * Base class for cross-page HTML fragments: header, footer, top menu,
@@ -68,6 +71,67 @@ public:
      * Returns nullptr until a concrete widget is implemented.
      */
     virtual AbstractCommonBlocWidget *createEditWidget() = 0;
+
+    /**
+     * Serialize this bloc's editable content to a flat key→value map.
+     * Used by AbstractTheme::saveBlocsData() to persist to disk.
+     * Keys should use the bloc's own KEY_* constants.
+     */
+    virtual QVariantMap toMap() const = 0;
+
+    /**
+     * Restore this bloc's editable content from a key→value map.
+     * Used by AbstractTheme::_loadBlocsData() to hydrate from disk.
+     * Unknown keys must be silently ignored.
+     */
+    virtual void fromMap(const QVariantMap &map) = 0;
+
+    // ---- Translation interface ----
+
+    /**
+     * Returns all translatable fields as {fieldId -> sourceText}.
+     * Used by CommonBlocTranslator to build AI job payloads.
+     * Default: returns empty map (no translatable fields).
+     */
+    virtual QHash<QString, QString> sourceTexts() const;
+
+    /**
+     * Store a translation for fieldId+langCode, produced from the current source.
+     * Silently ignored by the default implementation.
+     */
+    virtual void setTranslation(const QString &fieldId,
+                                const QString &langCode,
+                                const QString &translatedText);
+
+    /**
+     * Returns field IDs (or labels, for menus) that lack a translation for langCode.
+     * Returns an empty list when langCode == sourceLangCode (base text is used).
+     * Default: returns empty list (no translatable fields).
+     */
+    virtual QStringList missingTranslations(const QString &langCode,
+                                            const QString &sourceLangCode) const;
+
+    /**
+     * Raises ExceptionWithTitleText if missingTranslations() is non-empty.
+     * Non-virtual -- delegates to missingTranslations().
+     */
+    void assertTranslated(const QString &langCode,
+                          const QString &sourceLangCode) const;
+
+    /**
+     * Serialize translation sub-groups.  Called by AbstractTheme::saveBlocsData()
+     * after toMap() writes the main keys.  settings is already at this bloc's group.
+     * Default: no-op.
+     */
+    virtual void saveTranslations(QSettings &settings);
+
+    /**
+     * Restore translation sub-groups.  Called by AbstractTheme::_loadBlocsData()
+     * after fromMap() restores the main keys (so sources are already registered).
+     * settings is already at this bloc's group.
+     * Default: no-op.
+     */
+    virtual void loadTranslations(QSettings &settings);
 };
 
 #endif // ABSTRACTCOMMONBLOC_H

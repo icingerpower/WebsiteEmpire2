@@ -8,14 +8,16 @@
 
 class CategoryTable;
 class PageTypeArticle;
+class PageTypeJsApp;
 
 // General-purpose articles engine.
 //
 // A single "default" variation produces one domain row per target language.
-// Page types: PageTypeArticle (category bloc + text bloc).
+// Page types: PageTypeArticle (category + text) and PageTypeJsApp
+//             (category + intro text + JS app + outro text).
 //
 // After init(), categoryTable() gives access to the shared category vocabulary
-// that backs the article page type's category bloc.
+// that backs both page types' category blocs.
 class EngineArticles : public AbstractEngine
 {
     Q_OBJECT
@@ -40,6 +42,7 @@ protected:
 private:
     QScopedPointer<CategoryTable>   m_categoryTable;
     QScopedPointer<PageTypeArticle> m_articleType;
+    QScopedPointer<PageTypeJsApp>   m_jsAppType;
     QList<const AbstractPageType *> m_pageTypes;
 };
 

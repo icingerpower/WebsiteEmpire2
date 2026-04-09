@@ -1,5 +1,8 @@
 #include "CommonBlocMenuTop.h"
 
+#include "website/AbstractEngine.h"
+#include "website/theme/AbstractTheme.h"
+
 #include <QCoreApplication>
 
 QString CommonBlocMenuTop::getId() const
@@ -27,8 +30,11 @@ void CommonBlocMenuTop::addCode(QStringView     origContent,
                                 QSet<QString>  &jsDoneIds) const
 {
     Q_UNUSED(origContent) // common blocs are not driven by source text
-    Q_UNUSED(engine)
-    Q_UNUSED(websiteIndex)
+
+    // Resolve translation context
+    const QString lang = engine.getLangCode(websiteIndex);
+    AbstractTheme *theme = engine.getActiveTheme();
+    const QString sourceLang = theme ? theme->sourceLangCode() : QString();
 
     // -------------------------------------------------------------------------
     // CSS — emitted once per page
@@ -134,7 +140,7 @@ void CommonBlocMenuTop::addCode(QStringView     origContent,
             html += QStringLiteral("<li class=\"nav-top__item nav-top__item--has-children\">");
             html += QStringLiteral("<button class=\"nav-top__dropdown-toggle\""
                                    " aria-expanded=\"false\" aria-haspopup=\"true\">");
-            html += item.label.toHtmlEscaped();
+            html += resolveLabel(item.label, lang, sourceLang).toHtmlEscaped();
             // U+25BE BLACK DOWN-POINTING SMALL TRIANGLE
             html += QStringLiteral(" <span aria-hidden=\"true\">\u25be</span></button>");
             html += QStringLiteral("<ul class=\"nav-top__submenu\" role=\"menu\">");
@@ -153,7 +159,7 @@ void CommonBlocMenuTop::addCode(QStringView     origContent,
                     html += QStringLiteral(" target=\"_blank\"");
                 }
                 html += QStringLiteral(" role=\"menuitem\">");
-                html += sub.label.toHtmlEscaped();
+                html += resolveLabel(sub.label, lang, sourceLang).toHtmlEscaped();
                 html += QStringLiteral("</a></li>");
             }
             html += QStringLiteral("</ul></li>");
@@ -172,7 +178,7 @@ void CommonBlocMenuTop::addCode(QStringView     origContent,
                 html += QStringLiteral(" target=\"_blank\"");
             }
             html += QStringLiteral(">");
-            html += item.label.toHtmlEscaped();
+            html += resolveLabel(item.label, lang, sourceLang).toHtmlEscaped();
             html += QStringLiteral("</a></li>");
         }
     }

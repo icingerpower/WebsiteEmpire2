@@ -50,6 +50,13 @@ public:
     static constexpr int COL_NAME  = 0; ///< Read-only parameter name column
     static constexpr int COL_VALUE = 1; ///< Editable current-value column
 
+    /**
+     * Custom role returned on COL_VALUE rows whose param id contains "_color".
+     * Returns true (bool) so delegates can open a colour picker instead of a
+     * text editor without re-parsing the value string.
+     */
+    static constexpr int IsColorRole = Qt::UserRole + 1;
+
     // Normal constructor — binds the theme to a working directory.
     explicit AbstractTheme(const QDir &workingDir, QObject *parent = nullptr);
 
@@ -132,6 +139,19 @@ public:
     QString fontFamily()     const; ///< "font_family"     default sans-serif
     QString fontSizeBase()   const; ///< "font_size_base"  default 16px
 
+    // ---- Source language for translations ----
+
+    /**
+     * Set the source language code (e.g. "en").
+     * Persisted to {workingDir}/{getId()}_params.ini under key "source_lang".
+     */
+    void    setSourceLangCode(const QString &langCode);
+
+    /**
+     * Returns the source language code, or an empty string if not set.
+     */
+    QString sourceLangCode() const;
+
     // -------------------------------------------------------------------------
     // Generation helpers
     // -------------------------------------------------------------------------
@@ -166,6 +186,17 @@ public:
                        QSet<QString>  &jsDoneIds);
 
     // -------------------------------------------------------------------------
+    // Common-bloc persistence
+    // -------------------------------------------------------------------------
+
+    /**
+     * Persist all common-bloc data to {workingDir}/{getId()}_blocs.ini.
+     * Call whenever any bloc's content changes (e.g. after auto-save from
+     * the editor).  Uses AbstractCommonBloc::toMap() for each bloc.
+     */
+    void saveBlocsData();
+
+    // -------------------------------------------------------------------------
 
     QVariant paramValue(const QString &id) const;
 
@@ -183,7 +214,8 @@ protected:
     const QDir &workingDir() const;
 
 private:
-    QDir m_workingDir;
+    QDir    m_workingDir;
+    QString m_sourceLangCode;
 
     static QMap<QString, const AbstractTheme *> s_themes;
 
@@ -201,6 +233,16 @@ private:
     void _saveValues() const;
 
     QString _settingsPath() const;
+    QString _blocsSettingsPath() const;
+
+protected:
+    /**
+     * Load common-bloc data from {workingDir}/{getId()}_blocs.ini.
+     * Must be called at the END of the concrete subclass normal constructor
+     * (never from AbstractTheme's constructor — virtual dispatch must be
+     * active so getTopBlocs()/getBottomBlocs() return the real blocs).
+     */
+    void _loadBlocsData();
 };
 
 /**

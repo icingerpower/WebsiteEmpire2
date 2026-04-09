@@ -33,6 +33,13 @@ public:
      * Write the widget's edited state back into the bloc.
      */
     virtual void saveTo(AbstractCommonBloc &bloc) const = 0;
+
+signals:
+    /**
+     * Emitted whenever the user modifies any field in the widget.
+     * WidgetEditCommonBlocs connects to this to auto-save immediately.
+     */
+    void changed();
 };
 
 #endif // ABSTRACTCOMMONBLOCWIDGET_H

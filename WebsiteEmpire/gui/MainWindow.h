@@ -24,6 +24,7 @@ public:
 
 private:
     void _init();
+    void _reloadTheme(const QString &themeId);
 
     Ui::MainWindow                      *ui;
     QScopedPointer<HostTable>            m_hostTable;

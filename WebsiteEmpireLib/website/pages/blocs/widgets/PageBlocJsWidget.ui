@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PageBlocJsWidget</class>
+ <widget class="QWidget" name="PageBlocJsWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>PageBlocJsWidget</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="tabHtml">
+      <attribute name="title">
+       <string>HTML</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="htmlLayout">
+       <item>
+        <widget class="QPlainTextEdit" name="htmlEdit"/>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabCss">
+      <attribute name="title">
+       <string>CSS</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="cssLayout">
+       <item>
+        <widget class="QPlainTextEdit" name="cssEdit"/>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabJs">
+      <attribute name="title">
+       <string>JS</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="jsLayout">
+       <item>
+        <widget class="QPlainTextEdit" name="jsEdit"/>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

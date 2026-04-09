@@ -13,4 +13,7 @@ set(BLOCS_WIDGETS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategoryArticlesWidget.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategoryArticlesWidget.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategoryArticlesWidget.ui
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocJsWidget.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocJsWidget.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocJsWidget.ui
 )

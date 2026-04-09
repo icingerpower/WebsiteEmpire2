@@ -35,6 +35,8 @@ add_empire_test(Test_Website_PageTypeRegistry test_page_type_registry.cpp)
 add_empire_test(Test_Website_PageDb           test_page_db.cpp)
 add_empire_test(Test_Website_PageRepository   test_page_repository.cpp)
 add_empire_test(Test_Website_PageGenerator    test_page_generator.cpp)
+add_empire_test(Test_Engine_PageBlocJs        test_engine_page_bloc_js.cpp)
+add_empire_test(Test_Website_CommonBlocTranslations test_common_bloc_translations.cpp)
 
 # ShortCodes test does not need Sql or Widgets.
 add_executable(Test_Website_ShortCodes test_website_shortcodes.cpp)

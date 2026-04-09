@@ -1,6 +1,7 @@
 #include "EngineArticles.h"
 
 #include "website/pages/PageTypeArticle.h"
+#include "website/pages/PageTypeJsApp.h"
 #include "website/pages/attributes/CategoryTable.h"
 
 DECLARE_ENGINE(EngineArticles)
@@ -45,9 +46,13 @@ CategoryTable &EngineArticles::categoryTable() const
 
 void EngineArticles::_onInit(const QDir &workingDir)
 {
-    m_articleType.reset();   // release CategoryTable & before destroying the table
+    // Release page types before destroying the category table they reference.
+    m_jsAppType.reset();
+    m_articleType.reset();
     m_categoryTable.reset(new CategoryTable(workingDir));
     m_articleType.reset(new PageTypeArticle(*m_categoryTable));
+    m_jsAppType.reset(new PageTypeJsApp(*m_categoryTable));
     m_pageTypes.clear();
     m_pageTypes.append(m_articleType.data());
+    m_pageTypes.append(m_jsAppType.data());
 }

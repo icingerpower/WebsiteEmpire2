@@ -1,5 +1,8 @@
 #include "CommonBlocMenuBottom.h"
 
+#include "website/AbstractEngine.h"
+#include "website/theme/AbstractTheme.h"
+
 #include <QCoreApplication>
 
 QString CommonBlocMenuBottom::getId() const
@@ -28,10 +31,13 @@ void CommonBlocMenuBottom::addCode(QStringView     origContent,
                                    QSet<QString>  &jsDoneIds) const
 {
     Q_UNUSED(origContent) // common blocs are not driven by source text
-    Q_UNUSED(engine)
-    Q_UNUSED(websiteIndex)
     Q_UNUSED(js)
     Q_UNUSED(jsDoneIds)
+
+    // Resolve translation context
+    const QString lang = engine.getLangCode(websiteIndex);
+    AbstractTheme *theme = engine.getActiveTheme();
+    const QString sourceLang = theme ? theme->sourceLangCode() : QString();
 
     // -------------------------------------------------------------------------
     // CSS — emitted once per page
@@ -67,7 +73,7 @@ void CommonBlocMenuBottom::addCode(QStringView     origContent,
             html += QStringLiteral(" target=\"_blank\"");
         }
         html += QStringLiteral(">");
-        html += item.label.toHtmlEscaped();
+        html += resolveLabel(item.label, lang, sourceLang).toHtmlEscaped();
         html += QStringLiteral("</a></li>");
     }
     html += QStringLiteral("</ul></nav>");

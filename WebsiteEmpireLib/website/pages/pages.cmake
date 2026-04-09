@@ -11,6 +11,8 @@ set(PAGES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/LegalPageDefs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeArticle.h
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeArticle.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageTypeJsApp.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageTypeJsApp.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeHome.h
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeHome.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeLegal.h

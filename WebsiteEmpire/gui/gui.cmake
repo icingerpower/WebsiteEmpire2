@@ -17,6 +17,12 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneSettings.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneSettings.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneSettings.ui
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneTheme.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneTheme.h
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneTheme.ui
+    ${CMAKE_CURRENT_LIST_DIR}/panes/widgets/WidgetEditCommonBlocs.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/widgets/WidgetEditCommonBlocs.h
+    ${CMAKE_CURRENT_LIST_DIR}/panes/widgets/WidgetEditCommonBlocs.ui
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.ui

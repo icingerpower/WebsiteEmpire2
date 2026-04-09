@@ -8,6 +8,7 @@ WidgetCommonBlocFooter::WidgetCommonBlocFooter(QWidget *parent)
     , ui(new Ui::WidgetCommonBlocFooter)
 {
     ui->setupUi(this);
+    connect(ui->lineEditText, &QLineEdit::textEdited, this, &WidgetCommonBlocFooter::changed);
 }
 
 WidgetCommonBlocFooter::~WidgetCommonBlocFooter()

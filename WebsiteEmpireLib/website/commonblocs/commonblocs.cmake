@@ -3,10 +3,15 @@ include(${CMAKE_CURRENT_LIST_DIR}/widgets/commonblocwidgets.cmake)
 set(COMMONBLOCS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/MenuItem.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractCommonBloc.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractCommonBloc.cpp
     ${CMAKE_CURRENT_LIST_DIR}/AbstractCommonBlocWidget.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractCommonBlocWidget.cpp
     ${CMAKE_CURRENT_LIST_DIR}/AbstractCommonBlocMenu.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractCommonBlocMenu.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/BlocTranslations.h
+    ${CMAKE_CURRENT_LIST_DIR}/BlocTranslations.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocTranslator.h
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocTranslator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/CommonBlocHeader.h
     ${CMAKE_CURRENT_LIST_DIR}/CommonBlocHeader.cpp
     ${CMAKE_CURRENT_LIST_DIR}/CommonBlocFooter.h
