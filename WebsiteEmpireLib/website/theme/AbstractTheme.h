@@ -134,10 +134,14 @@ public:
     // All call paramValue() and fall back to a hard-coded default so that common
     // blocs can use them without knowing the concrete theme type.
 
-    QString primaryColor()   const; ///< "primary_color"   default #1a73e8
-    QString secondaryColor() const; ///< "secondary_color" default #fbbc04
-    QString fontFamily()     const; ///< "font_family"     default sans-serif
-    QString fontSizeBase()   const; ///< "font_size_base"  default 16px
+    QString primaryColor()     const; ///< "primary_color"      default #1a73e8
+    QString secondaryColor()   const; ///< "secondary_color"    default #fbbc04
+    QString fontFamily()       const; ///< "font_family"        default sans-serif
+    QString fontSizeBase()     const; ///< "font_size_base"     default 16px
+    QString fontUrl()          const; ///< "font_url"           default ""
+    QString maxContentWidth()  const; ///< "max_content_width"  default 860px
+    QString bodyBgColor()      const; ///< "body_bg_color"      default #f4f6fb
+    QString bodyTextColor()    const; ///< "body_text_color"    default #1f2937
 
     // ---- Source language for translations ----
 

@@ -28,6 +28,22 @@
 #include <QSqlDatabase>
 #include <QSqlQueryModel>
 
+// ---------------------------------------------------------------------------
+// EditableProxyModel — makes every cell show a line-edit on double-click so
+// the user can select and copy text.  QSqlQueryModel::setData() returns false,
+// so no data is ever written back.
+// ---------------------------------------------------------------------------
+class EditableProxyModel : public QSortFilterProxyModel
+{
+public:
+    using QSortFilterProxyModel::QSortFilterProxyModel;
+
+    Qt::ItemFlags flags(const QModelIndex &index) const override
+    {
+        return QSortFilterProxyModel::flags(index) | Qt::ItemIsEditable;
+    }
+};
+
 // =============================================================================
 // Constructor / Destructor
 // =============================================================================
@@ -38,7 +54,7 @@ PanePages::PanePages(QWidget *parent)
 {
     ui->setupUi(this);
     m_model      = new QSqlQueryModel(this);
-    m_proxyModel = new QSortFilterProxyModel(this);
+    m_proxyModel = new EditableProxyModel(this);
     m_proxyModel->setSourceModel(m_model);
     ui->tableViewPages->setModel(m_proxyModel);
     ui->tableViewPages->setSortingEnabled(true);

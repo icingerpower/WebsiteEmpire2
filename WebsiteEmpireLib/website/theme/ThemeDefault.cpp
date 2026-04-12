@@ -64,5 +64,29 @@ QList<Param> ThemeDefault::getParams() const
             tr("CSS font-size applied to the body element (e.g. \"16px\" or \"1rem\")."),
             QVariant(QStringLiteral("16px"))
         },
+        {
+            QStringLiteral("font_url"),
+            tr("Google Fonts URL"),
+            tr("Full URL to a Google Fonts stylesheet. Leave blank to use the system font."),
+            QVariant(QStringLiteral("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"))
+        },
+        {
+            QStringLiteral("max_content_width"),
+            tr("Max content width"),
+            tr("Maximum width of the page content area (e.g. \"860px\" or \"72ch\")."),
+            QVariant(QStringLiteral("860px"))
+        },
+        {
+            QStringLiteral("body_bg_color"),
+            tr("Body background colour"),
+            tr("Background colour of the full page behind the content."),
+            QVariant(QStringLiteral("#f4f6fb"))
+        },
+        {
+            QStringLiteral("body_text_color"),
+            tr("Body text colour"),
+            tr("Default text colour for body copy."),
+            QVariant(QStringLiteral("#1f2937"))
+        },
     };
 }

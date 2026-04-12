@@ -124,13 +124,70 @@ void AbstractPageType::addCode(QStringView     origContent,
         theme->addCodeTop(engine, websiteIndex, bodyHtml, innerCss, innerJs, cssDoneIds, jsDoneIds);
     }
 
+    // Page blocs are wrapped in <main class="page-content"> so they get
+    // the centred, max-width container styles without affecting the header/footer.
+    bodyHtml += QStringLiteral("<main class=\"page-content\">");
     for (const AbstractPageBloc *bloc : getPageBlocs()) {
         bloc->addCode(origContent, engine, websiteIndex, bodyHtml, innerCss, innerJs, cssDoneIds, jsDoneIds);
     }
+    bodyHtml += QStringLiteral("</main>");
 
     // Bottom common blocs: bottom menu, footer (rendered after the page body)
     if (theme) {
         theme->addCodeBottom(engine, websiteIndex, bodyHtml, innerCss, innerJs, cssDoneIds, jsDoneIds);
+    }
+
+    // Base body + page-content styles — prepended so bloc-specific rules override them.
+    {
+        QString fontFam   = QStringLiteral("sans-serif");
+        QString fontSize  = QStringLiteral("16px");
+        QString bgColor   = QStringLiteral("#f4f6fb");
+        QString textColor = QStringLiteral("#1f2937");
+        QString maxWidth  = QStringLiteral("860px");
+        QString primary   = QStringLiteral("#1a73e8");
+
+        if (theme) {
+            fontFam   = theme->fontFamily();
+            fontSize  = theme->fontSizeBase();
+            bgColor   = theme->bodyBgColor();
+            textColor = theme->bodyTextColor();
+            maxWidth  = theme->maxContentWidth();
+            primary   = theme->primaryColor();
+        }
+
+        QString baseCss;
+        baseCss += QStringLiteral("*{box-sizing:border-box}");
+        baseCss += QStringLiteral("body{margin:0;padding:0;font-family:");
+        baseCss += fontFam;
+        baseCss += QStringLiteral(";font-size:");
+        baseCss += fontSize;
+        baseCss += QStringLiteral(";background:");
+        baseCss += bgColor;
+        baseCss += QStringLiteral(";color:");
+        baseCss += textColor;
+        baseCss += QStringLiteral(";line-height:1.7}");
+        baseCss += QStringLiteral(".page-content{max-width:");
+        baseCss += maxWidth;
+        baseCss += QStringLiteral(";margin:0 auto;padding:2rem 1.5rem}");
+        baseCss += QStringLiteral(".page-content h1,.page-content h2,.page-content h3"
+                                   "{line-height:1.3;margin-top:1.8rem;margin-bottom:0.5rem}");
+        baseCss += QStringLiteral(".page-content p{margin-top:0;margin-bottom:1rem}");
+        baseCss += QStringLiteral(".page-content a{color:");
+        baseCss += primary;
+        baseCss += QStringLiteral("}");
+        baseCss += QStringLiteral(".page-content img{max-width:100%;height:auto}");
+        innerCss = baseCss + innerCss;
+    }
+
+    // <head> extras: viewport meta + optional web font stylesheet
+    QString headExtra = QStringLiteral("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
+    if (theme) {
+        const QString fontUrl = theme->fontUrl();
+        if (!fontUrl.isEmpty()) {
+            headExtra += QStringLiteral("<link rel=\"stylesheet\" href=\"");
+            headExtra += fontUrl;
+            headExtra += QStringLiteral("\">");
+        }
     }
 
     const QString langCode = engine.getLangCode(websiteIndex);
@@ -141,6 +198,7 @@ void AbstractPageType::addCode(QStringView     origContent,
         html += QStringLiteral("\"");
     }
     html += QStringLiteral("><head><meta charset=\"utf-8\">");
+    html += headExtra;
     if (!innerCss.isEmpty()) {
         html += QStringLiteral("<style>");
         html += innerCss;

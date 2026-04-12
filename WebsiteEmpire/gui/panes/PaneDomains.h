@@ -94,6 +94,12 @@ private:
     bool _deployNeeded() const;
 
     /**
+     * Kills any StaticWebsiteServe process whose working directory is
+     * deployPath, then starts a fresh instance of binaryPath from deployPath.
+     */
+    void _restartLocalDrogon(const QString &deployPath, const QString &binaryPath);
+
+    /**
      * Runs sshpass with the given arguments. Returns true on success.
      * On failure, errorOutput is populated with the error message.
      */

@@ -24,6 +24,7 @@
 #include <QMessageBox>
 #include <QProcess>
 #include <QPushButton>
+#include <QThread>
 #include <QSettings>
 #include <QStyledItemDelegate>
 #include <QUrl>
@@ -386,6 +387,7 @@ void PaneDomains::deployLocally()
         _deployLocallyImpl();
 
         // Locate the StaticWebsiteServe binary (check sibling build dirs first)
+        // before restarting so we can pass the resolved path to _restartLocalDrogon.
         const QString appDir = QCoreApplication::applicationDirPath();
         QString binaryPath = QStringLiteral("StaticWebsiteServe"); // fallback: rely on PATH
         const QStringList candidates = {
@@ -403,16 +405,17 @@ void PaneDomains::deployLocally()
         const QString deployPath = _resolveDeployPath();
         const QString homeUrl    = QStringLiteral("http://localhost:8080/index.html");
 
+        // Restart Drogon so it picks up the new content.db.
+        // (remove+copy in _deployLocallyImpl creates a new inode; the old
+        // process keeps its fd pointing to the deleted file.)
+        _restartLocalDrogon(deployPath, binaryPath);
+
         const QString msg = tr(
             "Generated %1 page(s) and published to:\n"
             "%2\n\n"
-            "To serve locally with Drogon:\n"
-            "  1. Open a terminal\n"
-            "  2. cd %2\n"
-            "  3. %3\n\n"
-            "Then open: %4")
+            "Drogon has been restarted — open: %3")
             .arg(totalPages)
-            .arg(deployPath, binaryPath, homeUrl);
+            .arg(deployPath, homeUrl);
 
         QMessageBox msgBox(this);
         msgBox.setWindowTitle(tr("Generate & Publish"));
@@ -585,6 +588,25 @@ bool PaneDomains::_deployNeeded() const
     const QFileInfo srcInfo(src);
     const QFileInfo destInfo(dest);
     return srcInfo.lastModified() > destInfo.lastModified();
+}
+
+void PaneDomains::_restartLocalDrogon(const QString &deployPath, const QString &binaryPath)
+{
+    // Kill any StaticWebsiteServe process whose cwd is exactly deployPath.
+    const QString killScript =
+        QStringLiteral("for pid in $(pgrep StaticWebsiteServe 2>/dev/null); do "
+                       "  cwd=$(readlink /proc/$pid/cwd 2>/dev/null); "
+                       "  if [ \"$cwd\" = \"") + deployPath +
+        QStringLiteral("\" ]; then kill \"$pid\"; fi; done");
+
+    QProcess killer;
+    killer.start(QStringLiteral("bash"), {QStringLiteral("-c"), killScript});
+    killer.waitForFinished(3000);
+
+    // Brief pause so the port is released before we rebind it.
+    QThread::msleep(300);
+
+    QProcess::startDetached(binaryPath, {}, deployPath);
 }
 
 bool PaneDomains::_runScp(const QStringList &args, QString &errorOutput) const

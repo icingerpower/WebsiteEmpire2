@@ -72,7 +72,9 @@ void CommonBlocHeader::addCode(QStringView     origContent,
         css += primary;
         css += QStringLiteral(";font-family:");
         css += font;
-        css += QStringLiteral(";padding:1.5rem 2rem;margin:0}");
+        css += QStringLiteral(";padding:1.5rem 2rem;margin:0"
+                               ";box-shadow:0 2px 8px rgba(0,0,0,0.10)"
+                               ";position:relative;z-index:10}");
         css += QStringLiteral(".site-title{color:#fff;margin:0;font-size:1.75em;font-weight:bold}");
         css += QStringLiteral(".site-subtitle{color:");
         css += secondary;

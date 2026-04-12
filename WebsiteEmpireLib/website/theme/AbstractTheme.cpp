@@ -258,6 +258,30 @@ QString AbstractTheme::fontSizeBase() const
     return v.isValid() ? v.toString() : QStringLiteral("16px");
 }
 
+QString AbstractTheme::fontUrl() const
+{
+    const QVariant v = paramValue(QStringLiteral("font_url"));
+    return v.isValid() ? v.toString() : QString();
+}
+
+QString AbstractTheme::maxContentWidth() const
+{
+    const QVariant v = paramValue(QStringLiteral("max_content_width"));
+    return v.isValid() ? v.toString() : QStringLiteral("860px");
+}
+
+QString AbstractTheme::bodyBgColor() const
+{
+    const QVariant v = paramValue(QStringLiteral("body_bg_color"));
+    return v.isValid() ? v.toString() : QStringLiteral("#f4f6fb");
+}
+
+QString AbstractTheme::bodyTextColor() const
+{
+    const QVariant v = paramValue(QStringLiteral("body_text_color"));
+    return v.isValid() ? v.toString() : QStringLiteral("#1f2937");
+}
+
 void AbstractTheme::setSourceLangCode(const QString &langCode)
 {
     m_sourceLangCode = langCode;
