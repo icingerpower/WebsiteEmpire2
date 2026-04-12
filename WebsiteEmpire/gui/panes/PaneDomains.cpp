@@ -417,13 +417,16 @@ void PaneDomains::deployLocally()
         QMessageBox msgBox(this);
         msgBox.setWindowTitle(tr("Generate & Publish"));
         msgBox.setText(msg);
-        QPushButton *copyBtn = msgBox.addButton(tr("Copy path"),      QMessageBox::ActionRole);
-        QPushButton *openBtn = msgBox.addButton(tr("Open home page"), QMessageBox::ActionRole);
+        QPushButton *copyBtn    = msgBox.addButton(tr("Copy path"),      QMessageBox::ActionRole);
+        QPushButton *copyUrlBtn = msgBox.addButton(tr("Copy url"),       QMessageBox::ActionRole);
+        QPushButton *openBtn    = msgBox.addButton(tr("Open home page"), QMessageBox::ActionRole);
         msgBox.addButton(QMessageBox::Ok);
         msgBox.exec();
 
         if (msgBox.clickedButton() == copyBtn) {
             QGuiApplication::clipboard()->setText(deployPath);
+        } else if (msgBox.clickedButton() == copyUrlBtn) {
+            QGuiApplication::clipboard()->setText(homeUrl);
         } else if (msgBox.clickedButton() == openBtn) {
             QDesktopServices::openUrl(QUrl(homeUrl));
         }

@@ -20,6 +20,8 @@
 #include "../../launcher/AbstractLauncher.h"
 #include "../../launcher/LauncherTranslate.h"
 
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QMessageBox>
 #include <QSet>
 #include <QSortFilterProxyModel>
@@ -305,6 +307,45 @@ void PanePages::translate()
     translator->start(m_engine, editingLang);
 }
 
+void PanePages::copyUrl()
+{
+    const int id = _selectedPageId();
+    if (id < 0) {
+        QMessageBox::warning(this, tr("No selection"), tr("Please select exactly one page."));
+        return;
+    }
+    if (!m_engine || m_engine->rowCount() == 0) {
+        QMessageBox::warning(this, tr("No engine"), tr("No engine is configured."));
+        return;
+    }
+
+    // Find the first row with lang code "en".
+    QString domain;
+    const int rows = m_engine->rowCount();
+    for (int i = 0; i < rows; ++i) {
+        const QString &lang = m_engine->data(
+            m_engine->index(i, AbstractEngine::COL_LANG_CODE)).toString();
+        if (lang == QLatin1String("en")) {
+            domain = m_engine->data(
+                m_engine->index(i, AbstractEngine::COL_DOMAIN)).toString().trimmed();
+            break;
+        }
+    }
+
+    if (domain.isEmpty()) {
+        QMessageBox::warning(this, tr("No English domain"),
+                             tr("No engine row with language code \"en\" found."));
+        return;
+    }
+
+    const QModelIndex idx     = ui->tableViewPages->currentIndex();
+    const QModelIndex srcIdx  = m_proxyModel->mapToSource(idx);
+    const QString &permalink  = m_model->data(m_model->index(srcIdx.row(), 2)).toString();
+
+    const QString url = QStringLiteral("https://") + domain + permalink;
+    QGuiApplication::clipboard()->setText(url);
+}
+
 void PanePages::viewCommandTranslate()
 {
     const QString cmd = QStringLiteral("WebsiteEmpire --%1 \"%2\" --%3")
@@ -345,6 +386,7 @@ void PanePages::_connectSlots()
     connect(ui->buttonTranslate,    &QPushButton::clicked, this, &PanePages::translate);
     connect(ui->buttonViewCommandTranslate,    &QPushButton::clicked, this, &PanePages::viewCommandTranslate);
     connect(ui->buttonFilter,      &QPushButton::clicked, this, &PanePages::_applyTypeFilter);
+    connect(ui->buttonCopyUrl,     &QPushButton::clicked, this, &PanePages::copyUrl);
     connect(ui->buttonResetFilter, &QPushButton::clicked, this, [this]() {
         ui->comboBoxPageType->setCurrentIndex(0);
         _applyTypeFilter();

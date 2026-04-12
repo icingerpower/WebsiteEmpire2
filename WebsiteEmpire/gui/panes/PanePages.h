@@ -52,6 +52,7 @@ public slots:
     void generateLegalPages();
     void translate();
     void viewCommandTranslate();
+    void copyUrl();
 
     void setVisible(bool visible) override;
 

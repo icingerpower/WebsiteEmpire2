@@ -120,6 +120,13 @@
       </widget>
      </item>
      <item>
+      <widget class="QPushButton" name="buttonCopyUrl">
+       <property name="text">
+        <string>Copy url</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <spacer name="horizontalSpacerFilter">
        <property name="orientation">
         <enum>Qt::Orientation::Horizontal</enum>
