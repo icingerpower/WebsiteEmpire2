@@ -73,6 +73,7 @@ public:
     QList<Param>  getParams()                       const override;
     QString       checkParams(const QList<Param> &) const override;
     QMap<QString, AbstractPageAttributes *> createResultPageAttributes() const override;
+    GeneratorTables getTables()                      const override;
 
     // ---- Job-ID helpers (public for testability) ----------------------------
 

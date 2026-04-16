@@ -8,6 +8,11 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneMenus.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneMenus.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneMenus.ui
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneGeneration.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneGeneration.h
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneGeneration.ui
+    ${CMAKE_CURRENT_LIST_DIR}/panes/GenStrategyTable.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/GenStrategyTable.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.ui
@@ -23,6 +28,9 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/panes/widgets/WidgetEditCommonBlocs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/widgets/WidgetEditCommonBlocs.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/widgets/WidgetEditCommonBlocs.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddGeneration.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddGeneration.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddGeneration.ui
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.ui

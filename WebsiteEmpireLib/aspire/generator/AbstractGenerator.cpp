@@ -219,6 +219,22 @@ QMap<QString, AbstractPageAttributes *> AbstractGenerator::createResultPageAttri
     return {};
 }
 
+AbstractGenerator::GeneratorTables AbstractGenerator::getTables() const
+{
+    return {};
+}
+
+AbstractGenerator::TableDescriptor AbstractGenerator::_makeDescriptor(
+    const QString &id, const QString &name) const
+{
+    TableDescriptor d;
+    d.id        = id;
+    d.name      = name;
+    d.tablePath = workingDir().filePath(
+        QStringLiteral("results_db/") + id + QStringLiteral(".db"));
+    return d;
+}
+
 DownloadedPagesTable *AbstractGenerator::openResultsTable()
 {
     if (!m_resultsTables.isEmpty()) {

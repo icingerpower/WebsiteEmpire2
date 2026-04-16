@@ -16,4 +16,10 @@ set(BLOCS_WIDGETS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocJsWidget.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocJsWidget.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocJsWidget.ui
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocSocialWidget.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocSocialWidget.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocSocialWidget.ui
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocAutoLinkWidget.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocAutoLinkWidget.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocAutoLinkWidget.ui
 )

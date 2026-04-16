@@ -23,6 +23,13 @@ AbstractEngine::AbstractEngine(QObject *parent)
 
 AbstractEngine::~AbstractEngine() = default;
 
+// ---- Subclass identity defaults ---------------------------------------------
+
+QString AbstractEngine::getGeneratorId() const
+{
+    return {};
+}
+
 // ---- Registry ---------------------------------------------------------------
 
 QMap<QString, const AbstractEngine *> AbstractEngine::s_engines;

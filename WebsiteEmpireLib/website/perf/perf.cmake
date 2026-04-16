@@ -1,0 +1,9 @@
+set(PERF_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractPerformanceDataSource.h
+    ${CMAKE_CURRENT_LIST_DIR}/GscSettings.h
+    ${CMAKE_CURRENT_LIST_DIR}/GscSettings.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/GscDataSource.h
+    ${CMAKE_CURRENT_LIST_DIR}/GscDataSource.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/StatsDbDataSource.h
+    ${CMAKE_CURRENT_LIST_DIR}/StatsDbDataSource.cpp
+)

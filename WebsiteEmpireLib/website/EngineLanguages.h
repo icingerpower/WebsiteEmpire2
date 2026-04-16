@@ -21,10 +21,11 @@ public:
     explicit EngineLanguages(QObject *parent = nullptr);
     ~EngineLanguages() override;
 
-    QString          getId()         const override;
-    QString          getName()       const override;
-    QList<Variation> getVariations() const override;
+    QString          getId()          const override;
+    QString          getName()        const override;
+    QList<Variation> getVariations()  const override;
     AbstractEngine  *create(QObject *parent = nullptr) const override;
+    QString          getGeneratorId() const override;
 
     const QList<const AbstractPageType *> &getPageTypes() const override;
 

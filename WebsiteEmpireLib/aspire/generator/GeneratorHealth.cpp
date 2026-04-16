@@ -133,6 +133,45 @@ QMap<QString, AbstractPageAttributes *> GeneratorHealth::createResultPageAttribu
     };
 }
 
+AbstractGenerator::GeneratorTables GeneratorHealth::getTables() const
+{
+    GeneratorTables tables;
+
+    // Primary: one health condition = one article
+    const TableDescriptor condition = _makeDescriptor(
+        QStringLiteral("PageAttributesHealthCondition"), tr("Health Conditions"));
+    tables.primary.insert(condition.id, condition);
+
+    // Category: controlled-vocabulary tables referenced by conditions
+    const TableDescriptor bodyPart = _makeDescriptor(
+        QStringLiteral("PageAttributesHealthBodyPart"), tr("Body Parts"));
+    tables.category.insert(bodyPart.id, bodyPart);
+
+    const TableDescriptor organ = _makeDescriptor(
+        QStringLiteral("PageAttributesHealthOrgan"), tr("Organs"));
+    tables.category.insert(organ.id, organ);
+
+    // ReferredTo: child/detail tables associated with conditions
+    const TableDescriptor symptom = _makeDescriptor(
+        QStringLiteral("PageAttributesHealthSymptom"), tr("Symptoms"));
+    tables.referredTo.insert(symptom.id, symptom);
+
+    const TableDescriptor injury = _makeDescriptor(
+        QStringLiteral("PageAttributesHealthInjury"), tr("Injuries"));
+    tables.referredTo.insert(injury.id, injury);
+
+    const TableDescriptor mental = _makeDescriptor(
+        QStringLiteral("PageAttributesHealthMentalCondition"), tr("Mental Conditions"));
+    tables.referredTo.insert(mental.id, mental);
+
+    const TableDescriptor goal = _makeDescriptor(
+        QStringLiteral("PageAttributesHealthGoal"), tr("Health Goals"));
+    tables.referredTo.insert(goal.id, goal);
+
+    Q_ASSERT(tables.primary.size() == 1);
+    return tables;
+}
+
 // ---- Job-ID helpers ---------------------------------------------------------
 
 QString GeneratorHealth::slugify(const QString &text)

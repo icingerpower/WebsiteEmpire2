@@ -48,6 +48,11 @@ add_test(NAME Test_Generator_Languages COMMAND Test_Generator_Languages)
 target_link_libraries(Test_Generator_Languages PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Sql QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
 target_include_directories(Test_Generator_Languages PRIVATE ../WebsiteEmpireLib)
 
+add_executable(Test_Generator_Health test_generator_health.cpp)
+add_test(NAME Test_Generator_Health COMMAND Test_Generator_Health)
+target_link_libraries(Test_Generator_Health PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Sql QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+target_include_directories(Test_Generator_Health PRIVATE ../WebsiteEmpireLib)
+
 add_executable(Test_Params_Model test_params_model.cpp)
 add_test(NAME Test_Params_Model COMMAND Test_Params_Model)
 target_link_libraries(Test_Params_Model PRIVATE Qt${QT_VERSION_MAJOR}::Test QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)

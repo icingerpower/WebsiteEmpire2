@@ -986,3 +986,23 @@ QMap<QString, AbstractPageAttributes *> GeneratorLanguages::createResultPageAttr
         {tr("Language Words"),  new PageAttributesLangWord()},
     };
 }
+
+AbstractGenerator::GeneratorTables GeneratorLanguages::getTables() const
+{
+    GeneratorTables tables;
+
+    const TableDescriptor word = _makeDescriptor(
+        QStringLiteral("PageAttributesLangWord"), tr("Language Words"));
+    tables.primary.insert(word.id, word);
+
+    const TableDescriptor tag = _makeDescriptor(
+        QStringLiteral("PageAttributesLangTag"), tr("Language Tags"));
+    tables.category.insert(tag.id, tag);
+
+    const TableDescriptor idiom = _makeDescriptor(
+        QStringLiteral("PageAttributesLangIdiom"), tr("Language Idioms"));
+    tables.referredTo.insert(idiom.id, idiom);
+
+    Q_ASSERT(tables.primary.size() == 1);
+    return tables;
+}

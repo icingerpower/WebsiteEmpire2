@@ -895,26 +895,29 @@ QFuture<QString> DownloaderPradize::doFetch(const QString &url)
 void DownloaderPradize::trackFetchResult(const QString &url, const QString &content)
 {
     if (isFetchSuccessful(url, content)) {
-        m_consecutiveFailures = 0;
+        // Successes do NOT reset m_degradedCount.  The old approach reset the
+        // counter on every success, which prevented the session-reset trigger
+        // from firing when failures and successes alternated (the pattern seen
+        // in production: fail, success, fail, fail, fail, success, fail, fail …
+        // kept m_consecutiveFailures below 5 indefinitely despite a ~75% failure
+        // rate).  Counting total failures since the last reset is more robust.
         return;
     }
 
-    ++m_consecutiveFailures;
+    ++m_degradedCount;
 
-    // After 5 consecutive degraded responses (the 11 KB Angular SPA shell
-    // returned when the server rate-limits the IP):
+    // After 5 total degraded responses since the last session reset:
     //   1. Reset the FES session so a fresh _rclientSessionId is acquired
     //      on the next fetch — a new session may carry a fresh rate budget.
-    //   2. Schedule a 60-second backoff so the server's rate-limit counter
+    //   2. Schedule a 30-second backoff so the server's rate-limit counter
     //      has time to reset before the next network request goes out.
     // fetchUrl() reads m_backoffUntilMs and waits out any remaining delay.
-    if (m_consecutiveFailures >= 5) {
+    if (m_degradedCount >= 5) {
         qDebug() << "DownloaderPradize: rate-limit detected after"
-                 << m_consecutiveFailures
-                 << "consecutive degraded responses — resetting session and "
-                    "backing off 60 s";
+                 << m_degradedCount
+                 << "degraded responses — resetting session and backing off 30 s";
         m_sessionAcquired = false;
-        m_consecutiveFailures = 0;
+        m_degradedCount = 0;
         m_backoffUntilMs = QDateTime::currentMSecsSinceEpoch() + 30000;
     }
 }
@@ -962,7 +965,6 @@ QFuture<QString> DownloaderPradize::fetchUrl(const QString &url)
     // sustained rate-limiting is detected (m_sessionAcquired reset above).
     if (!m_sessionAcquired) {
         m_sessionAcquired = true;
-        m_consecutiveFailures = 0;
         const QString tokenUrl =
             QStringLiteral("https://pradize.com/api/v1/fes/token");
         return doFetch(tokenUrl).then(this, [this, url](const QString &) -> QFuture<QString> {

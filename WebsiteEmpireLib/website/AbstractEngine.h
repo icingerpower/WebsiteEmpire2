@@ -57,6 +57,11 @@ public:
     virtual QString            getName()       const = 0;
     virtual QList<Variation>   getVariations() const = 0;
 
+    // Returns the stable id of the AbstractGenerator that produces the source
+    // data for this engine (must match AbstractGenerator::getId()).
+    // Default: empty string — engine is general-purpose / no single generator.
+    virtual QString            getGeneratorId() const;
+
     // Returns a freshly heap-allocated instance of this engine type.
     // The caller owns the returned object.  init() must still be called
     // before the instance is usable.

@@ -3,4 +3,6 @@ set(LAUNCHER_FILES
     ${CMAKE_CURRENT_LIST_DIR}/AbstractLauncher.cpp
     ${CMAKE_CURRENT_LIST_DIR}/LauncherTranslate.h
     ${CMAKE_CURRENT_LIST_DIR}/LauncherTranslate.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/LauncherGeneration.h
+    ${CMAKE_CURRENT_LIST_DIR}/LauncherGeneration.cpp
 )

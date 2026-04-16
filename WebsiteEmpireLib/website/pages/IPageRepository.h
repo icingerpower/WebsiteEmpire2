@@ -122,6 +122,34 @@ public:
      * Call this immediately after saving AI-translated data for a page.
      */
     virtual void setTranslatedAt(int id, const QString &utcIso) = 0;
+
+    // -------------------------------------------------------------------------
+    // AI content generation tracking
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns source pages (sourcePageId == 0) of typeId whose generated_at
+     * IS NULL and whose page_data is empty — i.e. pages that need AI content
+     * generation.  Ordered by id ASC.
+     *
+     * Excludes pages that already have manually-written content (page_data
+     * non-empty) even when generated_at is still NULL, so that manual edits
+     * are never silently overwritten by the generation launcher.
+     */
+    virtual QList<PageRecord> findPendingByTypeId(const QString &typeId) const = 0;
+
+    /**
+     * Total count of source pages (sourcePageId == 0) for typeId, regardless
+     * of whether they have content.  Used together with findPendingByTypeId()
+     * to compute nDone = countByTypeId - findPendingByTypeId().size().
+     */
+    virtual int countByTypeId(const QString &typeId) const = 0;
+
+    /**
+     * Stamps generatedAt to utcIso (ISO 8601 UTC).
+     * Call this immediately after LauncherGeneration saves AI-generated content.
+     */
+    virtual void setGeneratedAt(int id, const QString &utcIso) = 0;
 };
 
 #endif // IPAGEREPOSITORY_H

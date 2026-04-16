@@ -886,6 +886,83 @@ private slots:
     {
         QVERIFY(CountryLangManager::instance()->defaultLangCodes().contains(QStringLiteral("fr")));
     }
+
+    // ==== getTables ============================================================
+
+    void test_get_tables_primary_has_one_entry()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorLanguages> gen(fx.makeGen());
+        QCOMPARE(gen->getTables().primary.size(), 1);
+    }
+
+    void test_get_tables_primary_id_is_lang_word()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorLanguages> gen(fx.makeGen());
+        QVERIFY(gen->getTables().primary.contains(QStringLiteral("PageAttributesLangWord")));
+    }
+
+    void test_get_tables_primary_name_non_empty()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorLanguages> gen(fx.makeGen());
+        const auto &desc = gen->getTables().primary.value(QStringLiteral("PageAttributesLangWord"));
+        QVERIFY(!desc.name.isEmpty());
+    }
+
+    void test_get_tables_primary_path_ends_with_lang_word_db()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorLanguages> gen(fx.makeGen());
+        const auto &desc = gen->getTables().primary.value(QStringLiteral("PageAttributesLangWord"));
+        QVERIFY(desc.tablePath.endsWith(QStringLiteral("PageAttributesLangWord.db")));
+    }
+
+    void test_get_tables_primary_path_under_working_dir()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorLanguages> gen(fx.makeGen());
+        const auto &desc = gen->getTables().primary.value(QStringLiteral("PageAttributesLangWord"));
+        QVERIFY(desc.tablePath.startsWith(fx.tmpDir.path()));
+    }
+
+    void test_get_tables_category_has_one_entry()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorLanguages> gen(fx.makeGen());
+        QCOMPARE(gen->getTables().category.size(), 1);
+    }
+
+    void test_get_tables_category_id_is_lang_tag()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorLanguages> gen(fx.makeGen());
+        QVERIFY(gen->getTables().category.contains(QStringLiteral("PageAttributesLangTag")));
+    }
+
+    void test_get_tables_referred_to_has_one_entry()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorLanguages> gen(fx.makeGen());
+        QCOMPARE(gen->getTables().referredTo.size(), 1);
+    }
+
+    void test_get_tables_referred_to_id_is_lang_idiom()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorLanguages> gen(fx.makeGen());
+        QVERIFY(gen->getTables().referredTo.contains(QStringLiteral("PageAttributesLangIdiom")));
+    }
 };
 
 QTEST_MAIN(Test_Generator_Languages)

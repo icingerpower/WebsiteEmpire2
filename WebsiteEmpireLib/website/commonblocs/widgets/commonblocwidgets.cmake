@@ -5,6 +5,9 @@ set(COMMONBLOCS_WIDGETS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocFooter.h
     ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocFooter.cpp
     ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocFooter.ui
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocCookies.h
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocCookies.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocCookies.ui
     ${CMAKE_CURRENT_LIST_DIR}/DialogMenuItemEdit.h
     ${CMAKE_CURRENT_LIST_DIR}/DialogMenuItemEdit.cpp
     ${CMAKE_CURRENT_LIST_DIR}/DialogMenuItemEdit.ui

@@ -38,6 +38,21 @@ add_empire_test(Test_Website_PageGenerator    test_page_generator.cpp)
 add_empire_test(Test_Engine_PageBlocJs        test_engine_page_bloc_js.cpp)
 add_empire_test(Test_Website_CommonBlocTranslations test_common_bloc_translations.cpp)
 
+# GenStrategyTable test compiles app-layer pane code directly.
+add_executable(Test_Website_GenStrategyTable
+    test_website_gen_strategy_table.cpp
+    ../WebsiteEmpire/gui/panes/GenStrategyTable.cpp)
+add_test(NAME Test_Website_GenStrategyTable COMMAND Test_Website_GenStrategyTable)
+target_link_libraries(Test_Website_GenStrategyTable PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Sql
+    QCoro::Core
+    -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+target_include_directories(Test_Website_GenStrategyTable PRIVATE
+    ../WebsiteEmpireLib
+    ../WebsiteEmpire/gui/panes)
+
 # ShortCodes test does not need Sql or Widgets.
 add_executable(Test_Website_ShortCodes test_website_shortcodes.cpp)
 add_test(NAME Test_Website_ShortCodes COMMAND Test_Website_ShortCodes)

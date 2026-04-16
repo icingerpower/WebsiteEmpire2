@@ -46,6 +46,9 @@ public:
     void setHistoryRedirectType(int, const QString &) override {}
     QString translatedAt(int) const override { return {}; }
     void setTranslatedAt(int, const QString &) override {}
+    QList<PageRecord> findPendingByTypeId(const QString &) const override { return {}; }
+    int countByTypeId(const QString &) const override { return 0; }
+    void setGeneratedAt(int, const QString &) override {}
 
 private:
     QList<PageRecord>                    m_records;

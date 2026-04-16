@@ -515,6 +515,22 @@ QMap<QString, AbstractPageAttributes *> GeneratorFactories::createResultPageAttr
     };
 }
 
+AbstractGenerator::GeneratorTables GeneratorFactories::getTables() const
+{
+    GeneratorTables tables;
+
+    const TableDescriptor factory = _makeDescriptor(
+        QStringLiteral("PageAttributesFactory"), tr("Factories"));
+    tables.primary.insert(factory.id, factory);
+
+    const TableDescriptor cat = _makeDescriptor(
+        QStringLiteral("PageAttributesFactoryCategory"), tr("Factory Categories"));
+    tables.category.insert(cat.id, cat);
+
+    Q_ASSERT(tables.primary.size() == 1);
+    return tables;
+}
+
 // ---- Parameters ------------------------------------------------------------
 
 QList<AbstractGenerator::Param> GeneratorFactories::getParams() const

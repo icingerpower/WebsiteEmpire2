@@ -1631,25 +1631,29 @@ void Test_Downloader_Pradize::test_downloader_fetches_html_product_page_with_ses
 // Integration test — live pradize.com URLs that returned 11 KB degraded
 // responses during production crawl runs.
 //
-// Two batches are covered:
+// Three batches are covered:
 //   • Batch 1 (logged 2026-03-19, session 1): 15 URLs from the first
 //     debug_pages collection that prompted the session-cookie fix.
 //   • Batch 2 (logged 2026-03-19, session 2): 14 URLs from the second
 //     debug_pages collection (all again identical 11 496-byte SPA shells).
+//   • Batch 3 (logged 2026-04-15, session 3): 6 URLs that degraded even
+//     after the 2-week cooldown period, exposing the second bug.
 //
-// The fix verified by this test:
-//   DownloaderPradize::trackFetchResult() detects 5 consecutive degraded
-//   responses and (a) resets m_sessionAcquired so a fresh _rclientSessionId
-//   is obtained, and (b) sets m_backoffUntilMs to 30 000 ms in the future so
-//   fetchUrl() inserts a 30-second pause before the next request, giving the
-//   server's rate-limit counter time to reset.
+// Two fixes are verified by this test:
+//   Fix 1 (Batch 1+2): trackFetchResult() detects degraded responses and
+//     resets the FES session + backs off 30 s.
+//   Fix 2 (Batch 3): the reset threshold counts TOTAL degraded responses
+//     since the last reset, NOT consecutive ones.  The old consecutive logic
+//     never fired when failures and successes alternated (e.g. fail, success,
+//     fail, fail, fail, success, fail, fail) — the counter reset on every
+//     success, keeping it below 5 indefinitely despite a ~75% failure rate.
 //
 // Uses parseSpecificUrls() so the production backoff + session-reset logic
 // runs if the IP is already rate-limited from earlier tests.
 //
-// Test timing: 29 URLs × (2 s delay + ~3 s network) ≈ 145 s, plus up to
-// 2 backoff windows × (5 × 5 s + 30 s) ≈ 100 s → ≈ 245 s worst-case,
-// comfortably within the 300 s QTest watchdog.
+// Test timing: 35 URLs × (2 s delay + ~3 s network) ≈ 175 s, plus up to
+// 2 backoff windows × 30 s ≈ 60 s → ≈ 235 s worst-case, within the 280 s
+// soft-stop timer.
 // ===========================================================================
 
 void Test_Downloader_Pradize::test_parse_failing_urls_from_production_log()
@@ -1686,6 +1690,16 @@ void Test_Downloader_Pradize::test_parse_failing_urls_from_production_log()
         QStringLiteral("https://pradize.com/product/fantasy-white-short-dress-with-sleeves"),
         QStringLiteral("https://pradize.com/product/isabelle-glamour-gown"),
         QStringLiteral("https://pradize.com/product/red-lace-backless-bodysuit-nightwear-lingerie"),
+        // --- Batch 3 (2026-04-15, session 3 debug_pages) ---
+        // These degraded even after a 2-week cooldown, exposing the "consecutive
+        // failures" bug: successes interspersed with failures kept m_consecutiveFailures
+        // below 5 indefinitely.  Fix: count total failures since last reset.
+        QStringLiteral("https://pradize.com/product/silver-sequin-tight-club-mini-dress"),
+        QStringLiteral("https://pradize.com/product/sky-blue-knitted-one-piece-trikini"),
+        QStringLiteral("https://pradize.com/product/sky-blue-off-shoulder-tight-mini-dress-shiny-sleeves"),
+        QStringLiteral("https://pradize.com/product/sparkle-red-classy-off-shoulder-evening-dress"),
+        QStringLiteral("https://pradize.com/product/sparkle-red-wine-club-mini-dress-tight"),
+        QStringLiteral("https://pradize.com/product/sparkle-silver-off-shoulder-long-evening-dress"),
         // NOTE: stunning-red-off-shoulder-white-line-full-length-evening-dress
         // was removed — FES API returns 404 (product no longer exists on pradize.com).
     };

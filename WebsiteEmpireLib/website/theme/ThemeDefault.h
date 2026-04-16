@@ -6,6 +6,7 @@
 #include "website/commonblocs/CommonBlocFooter.h"
 #include "website/commonblocs/CommonBlocMenuTop.h"
 #include "website/commonblocs/CommonBlocMenuBottom.h"
+#include "website/commonblocs/CommonBlocCookies.h"
 
 /**
  * Built-in default theme.
@@ -17,11 +18,12 @@
  * Bottom blocs (rendered below the page body, in order):
  *   1. CommonBlocMenuBottom
  *   2. CommonBlocFooter
+ *   3. CommonBlocCookies  — fixed overlay, always last
  *
  * Configurable params: primary_color, secondary_color, font_family,
  * font_size_base.  Values are saved to {workingDir}/default_params.ini.
  *
- * The four common blocs are held as value members — their raw pointers
+ * The five common blocs are held as value members — their raw pointers
  * remain valid for the lifetime of this object.
  */
 class ThemeDefault : public AbstractTheme
@@ -49,6 +51,7 @@ private:
     CommonBlocMenuTop    m_menuTop;
     CommonBlocMenuBottom m_menuBottom;
     CommonBlocFooter     m_footer;
+    CommonBlocCookies    m_cookies;
 };
 
 #endif // THEMEDEFAULT_H

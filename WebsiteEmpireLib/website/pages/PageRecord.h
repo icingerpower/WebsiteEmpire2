@@ -20,6 +20,12 @@
  * sourcePageId  — 0 for root/original pages; the id of the source page for
  *                 AI-translated copies.  Translated pages may only be edited in
  *                 PageEditorDialog once translatedAt is non-empty.
+ * generatedAt   — ISO 8601 UTC timestamp set by LauncherGeneration after AI
+ *                 content generation; empty for pages whose content has not yet
+ *                 been produced by the AI (or that were written manually without
+ *                 calling setGeneratedAt).  Only meaningful for source pages
+ *                 (sourcePageId == 0); translations track freshness via
+ *                 translatedAt instead.
  */
 struct PageRecord {
     int     id           = 0;
@@ -30,6 +36,7 @@ struct PageRecord {
     QString updatedAt;
     QString translatedAt;
     int     sourcePageId = 0;
+    QString generatedAt;
 };
 
 #endif // PAGERECORD_H

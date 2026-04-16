@@ -29,12 +29,13 @@ static PageRecord rowToRecord(const QSqlQuery &q)
     r.updatedAt    = q.value(5).toString();
     r.translatedAt = q.value(6).isNull() ? QString() : q.value(6).toString();
     r.sourcePageId = q.value(7).isNull() ? 0        : q.value(7).toInt();
+    r.generatedAt  = q.value(8).isNull() ? QString() : q.value(8).toString();
     return r;
 }
 
 static const QLatin1StringView SELECT_PAGES{
     "SELECT id, type_id, permalink, lang, created_at, updated_at,"
-    "       translated_at, source_page_id"
+    "       translated_at, source_page_id, generated_at"
     " FROM pages"};
 
 // =============================================================================
@@ -289,6 +290,58 @@ void PageRepositoryDb::setTranslatedAt(int id, const QString &utcIso)
     QSqlQuery q(m_db.database());
     q.prepare(QStringLiteral(
         "UPDATE pages SET translated_at = :ts WHERE id = :id"));
+    q.bindValue(QStringLiteral(":ts"), utcIso);
+    q.bindValue(QStringLiteral(":id"), id);
+    q.exec();
+}
+
+// =============================================================================
+// AI content generation tracking
+// =============================================================================
+
+QList<PageRecord> PageRepositoryDb::findPendingByTypeId(const QString &typeId) const
+{
+    QList<PageRecord> result;
+    QSqlQuery q(m_db.database());
+    // Source pages (source_page_id IS NULL) of the given type whose
+    // generated_at is NULL and whose page_data is empty.  Pages with
+    // manually-written content (page_data non-empty) are excluded so the
+    // launcher never overwrites human edits.
+    q.prepare(QString::fromLatin1(SELECT_PAGES)
+              + QStringLiteral(
+                  " WHERE type_id = :typeId"
+                  "   AND source_page_id IS NULL"
+                  "   AND generated_at IS NULL"
+                  "   AND NOT EXISTS ("
+                  "         SELECT 1 FROM page_data pd WHERE pd.page_id = pages.id)"
+                  " ORDER BY id ASC"));
+    q.bindValue(QStringLiteral(":typeId"), typeId);
+    q.exec();
+    while (q.next()) {
+        result.append(rowToRecord(q));
+    }
+    return result;
+}
+
+int PageRepositoryDb::countByTypeId(const QString &typeId) const
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM pages"
+        " WHERE type_id = :typeId AND source_page_id IS NULL"));
+    q.bindValue(QStringLiteral(":typeId"), typeId);
+    q.exec();
+    if (q.next()) {
+        return q.value(0).toInt();
+    }
+    return 0;
+}
+
+void PageRepositoryDb::setGeneratedAt(int id, const QString &utcIso)
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "UPDATE pages SET generated_at = :ts WHERE id = :id"));
     q.bindValue(QStringLiteral(":ts"), utcIso);
     q.bindValue(QStringLiteral(":id"), id);
     q.exec();

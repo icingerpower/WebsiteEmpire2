@@ -20,6 +20,11 @@ QString EngineLanguages::getId() const
     return QStringLiteral("EngineLanguages");
 }
 
+QString EngineLanguages::getGeneratorId() const
+{
+    return QStringLiteral("language-learning");
+}
+
 QString EngineLanguages::getName() const
 {
     return tr("Languages");

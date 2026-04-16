@@ -108,6 +108,9 @@ private slots:
     void test_enginearticles_remove_category_clears_attributes();
     void test_enginearticles_remove_parent_cascades_to_child_in_attributes();
     void test_enginearticles_remove_category_content_changed_signal_contains_remaining_ids();
+
+    // --- Generator link ---
+    void test_enginearticles_get_generator_id_empty();
 };
 
 // =============================================================================
@@ -275,7 +278,7 @@ void Test_EngineArticles::test_enginearticles_page_type_has_two_blocs()
     HostTable hostTable(QDir(dir.path()));
     EngineArticles engine;
     engine.init(QDir(dir.path()), hostTable);
-    QCOMPARE(engine.getPageTypes().first()->getPageBlocs().size(), 2);
+    QCOMPARE(engine.getPageTypes().first()->getPageBlocs().size(), 4);
 }
 
 void Test_EngineArticles::test_enginearticles_first_bloc_is_category_bloc()
@@ -651,6 +654,16 @@ void Test_EngineArticles::test_enginearticles_remove_category_content_changed_si
     QVERIFY(newContent.contains(QString::number(keepId)));
     // Removed id must no longer appear.
     QVERIFY(!newContent.contains(QString::number(removeId)));
+}
+
+// =============================================================================
+// Generator link
+
+void Test_EngineArticles::test_enginearticles_get_generator_id_empty()
+{
+    // EngineArticles has no associated aspire generator — should return empty.
+    EngineArticles engine;
+    QVERIFY(engine.getGeneratorId().isEmpty());
 }
 
 QTEST_MAIN(Test_EngineArticles)

@@ -1089,6 +1089,76 @@ private slots:
         // so no additional category row (deduplication within each processReply call).
         QVERIFY(categoryTable->rowCount() >= rowsAfterStep1);
     }
+
+    // ==== getTables ============================================================
+
+    void test_get_tables_primary_has_one_entry()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        QCOMPARE(gen->getTables().primary.size(), 1);
+    }
+
+    void test_get_tables_primary_id_is_factory()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        QVERIFY(gen->getTables().primary.contains(QStringLiteral("PageAttributesFactory")));
+    }
+
+    void test_get_tables_primary_name_non_empty()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        const auto &desc = gen->getTables().primary.value(QStringLiteral("PageAttributesFactory"));
+        QVERIFY(!desc.name.isEmpty());
+    }
+
+    void test_get_tables_primary_path_ends_with_factory_db()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        const auto &desc = gen->getTables().primary.value(QStringLiteral("PageAttributesFactory"));
+        QVERIFY(desc.tablePath.endsWith(QStringLiteral("PageAttributesFactory.db")));
+    }
+
+    void test_get_tables_primary_path_under_working_dir()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        const auto &desc = gen->getTables().primary.value(QStringLiteral("PageAttributesFactory"));
+        QVERIFY(desc.tablePath.startsWith(fx.tmpDir.path()));
+    }
+
+    void test_get_tables_category_has_one_entry()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        QCOMPARE(gen->getTables().category.size(), 1);
+    }
+
+    void test_get_tables_category_id_is_factory_category()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        QVERIFY(gen->getTables().category.contains(
+            QStringLiteral("PageAttributesFactoryCategory")));
+    }
+
+    void test_get_tables_referred_to_is_empty()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        QVERIFY(gen->getTables().referredTo.isEmpty());
+    }
 };
 
 QTEST_MAIN(Test_Generator_Factories)

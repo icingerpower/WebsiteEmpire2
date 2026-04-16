@@ -79,6 +79,7 @@ public:
     QString            getName() const override;
     AbstractGenerator *createInstance(const QDir &workingDir) const override;
     QMap<QString, AbstractPageAttributes *> createResultPageAttributes() const override;
+    GeneratorTables    getTables()                             const override;
 
     // Returns true once the step has been fully processed and no further jobs
     // will be spawned for it.  Safe to call at any time.

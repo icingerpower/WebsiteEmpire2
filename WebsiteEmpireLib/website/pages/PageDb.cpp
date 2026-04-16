@@ -114,4 +114,11 @@ void PageDb::createSchema()
             "ALTER TABLE permalink_history"
             " ADD COLUMN redirect_type TEXT NOT NULL DEFAULT 'permanent'"));
     }
+
+    // pages.generated_at — ISO 8601 UTC; NULL until LauncherGeneration fills content
+    if (!columnExists(m_connectionName, QStringLiteral("pages"),
+                      QStringLiteral("generated_at"))) {
+        q.exec(QStringLiteral(
+            "ALTER TABLE pages ADD COLUMN generated_at TEXT"));
+    }
 }

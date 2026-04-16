@@ -9,6 +9,8 @@ set(PAGES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/AbstractLegalPageDef.cpp
     ${CMAKE_CURRENT_LIST_DIR}/LegalPageDefs.h
     ${CMAKE_CURRENT_LIST_DIR}/LegalPageDefs.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/LinksManager.h
+    ${CMAKE_CURRENT_LIST_DIR}/LinksManager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeArticle.h
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeArticle.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeJsApp.h
@@ -30,6 +32,10 @@ set(PAGES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageTranslator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageCommands.h
     ${CMAKE_CURRENT_LIST_DIR}/PageCommands.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/GenPageQueue.h
+    ${CMAKE_CURRENT_LIST_DIR}/GenPageQueue.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/GenScheduler.h
+    ${CMAKE_CURRENT_LIST_DIR}/GenScheduler.cpp
     ${ATTRIBUTES_FILES}
     ${BLOCS_FILES}
     ${PAGES_WIDGETS_FILES}

@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PageBlocSocialWidget</class>
+ <widget class="QWidget" name="PageBlocSocialWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>700</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>PageBlocSocialWidget</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="buttonBar">
+     <item>
+      <widget class="QPushButton" name="btnApplyAll">
+       <property name="text">
+        <string>Apply All</string>
+       </property>
+       <property name="toolTip">
+        <string>Copy the Facebook title and description to all other platforms</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="buttonSpacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupFacebook">
+     <property name="title">
+      <string>Facebook / Open Graph</string>
+     </property>
+     <layout class="QFormLayout" name="formFacebook">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelFbTitle">
+        <property name="text">
+         <string>Title</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="editFacebookTitle"/>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelFbDesc">
+        <property name="text">
+         <string>Description</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QPlainTextEdit" name="editFacebookDesc">
+        <property name="maximumHeight">
+         <number>80</number>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupTwitter">
+     <property name="title">
+      <string>Twitter / X</string>
+     </property>
+     <layout class="QFormLayout" name="formTwitter">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelTwTitle">
+        <property name="text">
+         <string>Title</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="editTwitterTitle"/>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelTwDesc">
+        <property name="text">
+         <string>Description</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QPlainTextEdit" name="editTwitterDesc">
+        <property name="maximumHeight">
+         <number>80</number>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupPinterest">
+     <property name="title">
+      <string>Pinterest</string>
+     </property>
+     <layout class="QFormLayout" name="formPinterest">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelPtTitle">
+        <property name="text">
+         <string>Title</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="editPinterestTitle"/>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelPtDesc">
+        <property name="text">
+         <string>Description</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QPlainTextEdit" name="editPinterestDesc">
+        <property name="maximumHeight">
+         <number>80</number>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupLinkedIn">
+     <property name="title">
+      <string>LinkedIn</string>
+     </property>
+     <layout class="QFormLayout" name="formLinkedIn">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelLiTitle">
+        <property name="text">
+         <string>Title</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="editLinkedInTitle"/>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelLiDesc">
+        <property name="text">
+         <string>Description</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QPlainTextEdit" name="editLinkedInDesc">
+        <property name="maximumHeight">
+         <number>80</number>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <spacer name="bottomSpacer">
+     <property name="orientation">
+      <enum>Qt::Orientation::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

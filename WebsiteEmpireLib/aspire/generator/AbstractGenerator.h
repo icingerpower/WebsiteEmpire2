@@ -50,6 +50,25 @@ public:
         bool isFolder = false; // Value is a folder path — UI shows a folder picker on edit.
     };
 
+    // Metadata for one result table, used by the empire layer to count and route
+    // articles without depending on the display-name string used by the UI.
+    struct TableDescriptor {
+        QString id;        // Stable — matches AbstractPageAttributes::getId()
+        QString name;      // Human-readable; may be translated; not persisted
+        QString tablePath; // Absolute path to the .db file for this generator instance
+    };
+
+    // Typed grouping of all result tables declared by a generator, keyed by
+    // TableDescriptor::id, for empire-layer article generation.
+    //   primary    — exactly one entry when non-empty: one row = one article/page
+    //   category   — 0..N controlled-vocabulary / lookup tables
+    //   referredTo — 0..N child/detail tables (multiple rows may belong to one Primary row)
+    struct GeneratorTables {
+        QHash<QString, TableDescriptor> primary;    // Q_ASSERT: size == 1 when non-empty
+        QHash<QString, TableDescriptor> category;
+        QHash<QString, TableDescriptor> referredTo;
+    };
+
     explicit AbstractGenerator(const QDir &workingDir = QDir(), QObject *parent = nullptr);
 
     // Unique machine-readable identifier for this generator (used as .ini filename stem).
@@ -104,6 +123,13 @@ public:
     //         table-id filename stem.  Ownership transfers to openResultsTable().
     // Default: empty map — no results tables are created.
     virtual QMap<QString, AbstractPageAttributes *> createResultPageAttributes() const;
+
+    // Returns table-role metadata for empire-layer article generation.
+    // Generators that produce articles must override this.  When any field is
+    // non-empty, primary must contain exactly one entry (Q_ASSERT enforced in
+    // each override — violation signals a dev correction is needed).
+    // Default: returns an empty GeneratorTables{} (no article tables).
+    virtual GeneratorTables getTables() const;
 
     // Creates (if not yet open) all results tables declared by
     // createResultPageAttributes() and returns the first one (keyed alphabetically
@@ -163,6 +189,10 @@ protected:
     // May call addDiscoveredJob() to inject new jobs that arise from this reply
     // (e.g. step-2 jobs discovered when step-1 reveals >N factory kinds).
     virtual void processReply(const QString &jobId, const QJsonObject &reply) = 0;
+
+    // Constructs a TableDescriptor for attrId using this instance's workingDir.
+    // tablePath follows the results_db/ convention used by openResultsTable().
+    TableDescriptor _makeDescriptor(const QString &id, const QString &name) const;
 
     // Adds a job that was not part of the original buildInitialJobIds() list.
     // Safe to call from processReply(); the job is appended to the pending queue and

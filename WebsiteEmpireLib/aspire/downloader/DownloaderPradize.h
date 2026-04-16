@@ -116,16 +116,21 @@ private:
     // Raw network fetch (no session acquisition).
     QFuture<QString> doFetch(const QString &url);
 
-    // Called after every fetch to track consecutive degraded responses.
-    // At 5 consecutive failures: resets the FES session cookie and schedules a
-    // 60-second backoff (stored in m_backoffUntilMs) so the server's rate-limit
-    // counter has time to reset before the next request is issued.
+    // Called after every fetch to track degraded responses.
+    // After 5 total degraded responses since the last session reset (successes
+    // between failures do NOT reset the counter — the old "consecutive" approach
+    // failed when successes and failures alternated, keeping the counter below 5
+    // indefinitely despite a high overall failure rate):
+    //   1. Resets the FES session cookie so a fresh _rclientSessionId is acquired.
+    //   2. Schedules a 30-second backoff (stored in m_backoffUntilMs).
     void trackFetchResult(const QString &url, const QString &content);
 
     QNetworkAccessManager *m_nam = nullptr;
     QStringList m_knownCategories;
     bool m_sessionAcquired = false;
-    int m_consecutiveFailures = 0;
+    // Total degraded responses since the last session reset.
+    // NOT reset on success — see trackFetchResult().
+    int m_degradedCount = 0;
     // Epoch-ms timestamp before which the next network fetch must not start.
     // Set by trackFetchResult() when sustained rate-limiting is detected.
     // fetchUrl() waits out any remaining backoff via QTimer before proceeding.

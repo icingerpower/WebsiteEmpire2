@@ -34,7 +34,7 @@ QList<AbstractCommonBloc *> ThemeDefault::getTopBlocs()
 
 QList<AbstractCommonBloc *> ThemeDefault::getBottomBlocs()
 {
-    return {&m_menuBottom, &m_footer};
+    return {&m_menuBottom, &m_footer, &m_cookies};
 }
 
 QList<Param> ThemeDefault::getParams() const

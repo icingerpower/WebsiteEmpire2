@@ -13,5 +13,9 @@ set(BLOCS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategoryArticles.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocJs.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocJs.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocSocial.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocSocial.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocAutoLink.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocAutoLink.cpp
     ${BLOCS_WIDGETS_FILES}
 )

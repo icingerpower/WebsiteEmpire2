@@ -41,6 +41,10 @@ public:
     QString                          translatedAt(int id) const override;
     void                             setTranslatedAt(int id,
                                                      const QString &utcIso) override;
+    QList<PageRecord>                findPendingByTypeId(const QString &typeId) const override;
+    int                              countByTypeId(const QString &typeId) const override;
+    void                             setGeneratedAt(int id,
+                                                    const QString &utcIso) override;
 
 private:
     PageDb &m_db;

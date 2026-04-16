@@ -58,6 +58,7 @@ private slots:
     void test_load_removes_langs_not_in_default();
     void test_rowcount_equals_langs_times_variations();
     void test_theme_column_never_empty();
+    void test_engine_languages_get_generator_id();
 };
 
 // ---- Identity ---------------------------------------------------------------
@@ -636,6 +637,14 @@ void Test_Website_Engine_Languages::test_theme_column_never_empty()
         QVERIFY2(!theme.isEmpty(),
                  qPrintable(QStringLiteral("Row %1 has empty theme").arg(row)));
     }
+}
+
+// ---- Generator link ----------------------------------------------------------
+
+void Test_Website_Engine_Languages::test_engine_languages_get_generator_id()
+{
+    EngineLanguages engine;
+    QCOMPARE(engine.getGeneratorId(), QStringLiteral("language-learning"));
 }
 
 QTEST_MAIN(Test_Website_Engine_Languages)
