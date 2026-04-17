@@ -96,6 +96,19 @@ public:
     virtual QHash<QString, QString> sourceTexts() const;
 
     /**
+     * Returns the stored translation for fieldId in langCode, or an empty
+     * string when no translation has been saved yet.
+     *
+     * Used by TranslationFieldTable to display the translated text alongside
+     * the source in the inspection UI.
+     *
+     * Default: returns an empty string.  Override in concrete blocs that
+     * store translations (e.g. via BlocTranslations or m_labelTr).
+     */
+    virtual QString translatedText(const QString &fieldId,
+                                   const QString &langCode) const;
+
+    /**
      * Store a translation for fieldId+langCode, produced from the current source.
      * Silently ignored by the default implementation.
      */
@@ -132,6 +145,30 @@ public:
      * Default: no-op.
      */
     virtual void loadTranslations(QSettings &settings);
+
+    // ---- WebCodeAdder translation interface (bridges to sourceTexts / setTranslation) ----
+
+    /**
+     * Bridges WebCodeAdder::collectTranslatables to sourceTexts().
+     * Appends one TranslatableField per non-empty source text entry.
+     */
+    void collectTranslatables(QStringView              origContent,
+                              QList<TranslatableField> &out) const override;
+
+    /**
+     * Bridges WebCodeAdder::applyTranslation to setTranslation().
+     */
+    void applyTranslation(QStringView   origContent,
+                          const QString &fieldId,
+                          const QString &lang,
+                          const QString &text) override;
+
+    /**
+     * Always returns true — common blocs use assertTranslated() for their own
+     * completeness checks; they do not participate in the page-level guard.
+     */
+    bool isTranslationComplete(QStringView   origContent,
+                               const QString &lang) const override;
 };
 
 #endif // ABSTRACTCOMMONBLOC_H

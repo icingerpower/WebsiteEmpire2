@@ -158,6 +158,69 @@ QString BlocTranslations::_sha1(const QString &text)
         QCryptographicHash::hash(text.toUtf8(), QCryptographicHash::Sha1).toHex());
 }
 
+// =============================================================================
+// saveToMap / loadFromMap
+// =============================================================================
+
+void BlocTranslations::saveToMap(QHash<QString, QString> &map) const
+{
+    for (auto fieldIt = m_entries.cbegin(); fieldIt != m_entries.cend(); ++fieldIt) {
+        const QString &fieldId = fieldIt.key();
+        for (auto langIt = fieldIt.value().cbegin(); langIt != fieldIt.value().cend(); ++langIt) {
+            const QString &lang        = langIt.key();
+            const Entry   &entry       = langIt.value();
+            if (entry.text.isEmpty()) {
+                continue;
+            }
+            const QString prefix = QStringLiteral("tr:") + lang + QStringLiteral(":") + fieldId;
+            map.insert(prefix,                              entry.text);
+            map.insert(prefix + QStringLiteral(":hash"),   entry.sourceHash);
+        }
+    }
+}
+
+void BlocTranslations::loadFromMap(const QHash<QString, QString> &map)
+{
+    for (auto it = map.cbegin(); it != map.cend(); ++it) {
+        const QString &key = it.key();
+        // Keys of interest: "tr:<lang>:<fieldId>" (no trailing ":hash")
+        if (!key.startsWith(QStringLiteral("tr:"))) {
+            continue;
+        }
+        if (key.endsWith(QStringLiteral(":hash"))) {
+            continue;
+        }
+
+        // Split "tr:<lang>:<fieldId>" — exactly 3 colon-separated parts.
+        const int firstColon  = key.indexOf(QLatin1Char(':'));           // after "tr"
+        const int secondColon = key.indexOf(QLatin1Char(':'), firstColon + 1);
+        if (firstColon < 0 || secondColon < 0) {
+            continue;
+        }
+        const QString lang    = key.mid(firstColon + 1, secondColon - firstColon - 1);
+        const QString fieldId = key.mid(secondColon + 1);
+
+        if (!m_sources.contains(fieldId)) {
+            continue; // unknown field — skip
+        }
+
+        const QString storedHash  = map.value(key + QStringLiteral(":hash"));
+        const QString currentHash = _sha1(m_sources.value(fieldId));
+
+        if (storedHash == currentHash) {
+            Entry entry;
+            entry.text       = it.value();
+            entry.sourceHash = storedHash;
+            m_entries[fieldId][lang] = entry;
+        }
+        // else: stale translation — discard
+    }
+}
+
+// =============================================================================
+// _purgeStaleFor
+// =============================================================================
+
 void BlocTranslations::_purgeStaleFor(const QString &fieldId, const QString &newHash)
 {
     auto fieldIt = m_entries.find(fieldId);

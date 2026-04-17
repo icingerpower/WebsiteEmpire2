@@ -19,6 +19,9 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageStats.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageStats.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageStats.ui
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneTranslations.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneTranslations.h
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneTranslations.ui
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneSettings.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneSettings.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneSettings.ui

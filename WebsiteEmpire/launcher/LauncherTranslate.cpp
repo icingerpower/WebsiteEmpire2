@@ -7,6 +7,9 @@
 #include "website/pages/PageRepositoryDb.h"
 #include "website/pages/PageTranslator.h"
 #include "website/pages/attributes/CategoryTable.h"
+#include "website/translation/PageAssessor.h"
+#include "website/translation/TranslationScheduler.h"
+#include "website/translation/TranslationSettings.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
 
 #include <QCoreApplication>
@@ -64,6 +67,20 @@ void LauncherTranslate::run(const QString & /*value*/)
     auto *pageDb   = new PageDb(workingDir);
     auto *pageRepo = new PageRepositoryDb(*pageDb);
 
+    // -------------------------------------------------------------------------
+    // Load translation settings and run assessment + scheduling
+    // -------------------------------------------------------------------------
+    const TranslationSettings translationSettings(workingDir);
+
+    if (translationSettings.isConfigured()) {
+        const int assessed = PageAssessor::assess(*pageRepo, translationSettings.targetLangs);
+        if (assessed > 0) {
+            qDebug() << "[Translate] Assessed" << assessed << "new page(s).";
+        }
+    } else {
+        qDebug() << "[Translate] No translation_settings.json found — skipping assessment.";
+    }
+
     auto *translator = new PageTranslator(*pageRepo, *categoryTable, workingDir, holder);
 
     QObject::connect(translator, &PageTranslator::logMessage, holder, [](const QString &msg) {
@@ -81,5 +98,14 @@ void LauncherTranslate::run(const QString & /*value*/)
                          QCoreApplication::quit();
                      });
 
-    translator->start(engine, editingLang);
+    if (translationSettings.isConfigured()) {
+        const QList<PageTranslator::TranslationJob> jobs =
+            TranslationScheduler::buildJobs(*pageRepo, *categoryTable,
+                                            translationSettings, editingLang);
+        qDebug() << "[Translate] Scheduler queued" << jobs.size() << "job(s).";
+        translator->startWithJobs(jobs);
+    } else {
+        // No settings file — fall back to the legacy full scan.
+        translator->start(engine, editingLang);
+    }
 }

@@ -46,6 +46,9 @@ class Test_Website_PageBlocText : public QObject
     Q_OBJECT
 
 private slots:
+    // --- getName ---
+    void test_pageblocktext_get_name_is_not_empty();
+
     // --- createEditWidget ---
     void test_pageblocktext_create_edit_widget_returns_non_null();
     void test_pageblocktext_create_edit_widget_has_no_parent();
@@ -88,11 +91,24 @@ private slots:
     void test_pagebloctext_load_ignores_unknown_keys();
     void test_pagebloctext_load_empty_hash_gives_empty_output();
 
+    // --- Unknown shortcode tag ---
+    void test_pageblocktext_unknown_shortcode_tag_passes_through();
+
     // --- Syntax / validation errors ---
     void test_pageblocktext_missing_mandatory_arg_throws();
     void test_pageblocktext_duplicate_arg_throws();
     void test_pageblocktext_unknown_arg_throws();
 };
+
+// =============================================================================
+// getName
+// =============================================================================
+
+void Test_Website_PageBlocText::test_pageblocktext_get_name_is_not_empty()
+{
+    PageBlocText block;
+    QVERIFY(!block.getName().isEmpty());
+}
 
 // =============================================================================
 // createEditWidget
@@ -431,6 +447,22 @@ void Test_Website_PageBlocText::test_pageblocktext_unknown_arg_throws()
         htmlFrom(block,
                  QStringLiteral("[VIDEO url=\"https://example.com/v.mp4\" badarg=\"x\"][/VIDEO]"));
     }));
+}
+
+// =============================================================================
+// Unknown shortcode tag
+// =============================================================================
+
+void Test_Website_PageBlocText::test_pageblocktext_unknown_shortcode_tag_passes_through()
+{
+    // An unrecognised shortcode tag must be emitted verbatim so it does not
+    // silently disappear from the output.
+    PageBlocText block;
+    const auto &html = htmlFrom(
+        block,
+        QStringLiteral("[FUTURE_TAG arg=\"x\"]content[/FUTURE_TAG]"));
+    QVERIFY(html.contains(QStringLiteral("[FUTURE_TAG")));
+    QVERIFY(html.contains(QStringLiteral("[/FUTURE_TAG]")));
 }
 
 QTEST_MAIN(Test_Website_PageBlocText)

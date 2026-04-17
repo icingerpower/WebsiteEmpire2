@@ -61,6 +61,14 @@ public:
     virtual const QList<const AbstractPageBloc *> &getPageBlocs() const = 0;
 
     /**
+     * Records the language the page was authored in.
+     * Must be called before isTranslationComplete() or addCode().
+     * isTranslationComplete() returns true immediately for lang == authorLang
+     * so that source-language pages are always generated without translation checks.
+     */
+    void setAuthorLang(const QString &lang);
+
+    /**
      * Loads all blocs from a flat key→value map produced by save().
      * Each bloc's keys are namespaced by their position index: "<i>_<key>".
      * Keys with unknown prefixes or unrecognised by a bloc are silently ignored.
@@ -86,6 +94,29 @@ public:
                  QString        &js,
                  QSet<QString>  &cssDoneIds,
                  QSet<QString>  &jsDoneIds) const override;
+
+    /**
+     * Collects all translatable fields across all blocs.
+     * Field ids are prefixed "<i>_" matching the load/save namespace.
+     */
+    void collectTranslatables(QStringView              origContent,
+                              QList<TranslatableField> &out) const override;
+
+    /**
+     * Applies a translated field value to the correct bloc.
+     * fieldId must be in "<i>_<blocFieldId>" form.
+     */
+    void applyTranslation(QStringView   origContent,
+                          const QString &fieldId,
+                          const QString &lang,
+                          const QString &text) override;
+
+    /**
+     * Returns true when all blocs report their translations for lang are complete,
+     * or when lang equals the author language (no translation needed).
+     */
+    bool isTranslationComplete(QStringView   origContent,
+                               const QString &lang) const override;
 
     /**
      * Returns the union of attributes from all blocs.
@@ -120,6 +151,7 @@ public:
     };
 
 private:
+    QString m_authorLang;  ///< set by setAuthorLang(); compared in isTranslationComplete()
     mutable QList<const AbstractAttribute *> m_cachedAttributes;
     mutable bool m_attributesCached = false;
 };

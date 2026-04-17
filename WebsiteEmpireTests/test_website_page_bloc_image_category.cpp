@@ -1,5 +1,11 @@
 #include <QtTest>
 
+#include <QFile>
+#include <QHash>
+#include <QSet>
+#include <QTemporaryDir>
+#include <QTextStream>
+
 #include "website/pages/blocs/widgets/AbstractPageBlockWidget.h"
 #include "website/pages/blocs/PageBlocCategoryArticles.h"
 #include "website/pages/attributes/CategoryTable.h"
@@ -7,6 +13,7 @@
 #include "website/pages/PageRecord.h"
 #include "website/pages/PermalinkHistoryEntry.h"
 #include "website/EngineArticles.h"
+#include "website/HostTable.h"
 
 // =============================================================================
 // FakePageRepository
@@ -49,6 +56,7 @@ public:
     QList<PageRecord> findPendingByTypeId(const QString &) const override { return {}; }
     int countByTypeId(const QString &) const override { return 0; }
     void setGeneratedAt(int, const QString &) override {}
+    void setLangCodesToTranslate(int, const QStringList &) override {}
 
 private:
     QList<PageRecord>                    m_records;
@@ -207,6 +215,9 @@ private slots:
     // --- Sort: combined ---
     void test_catart_sort_combined_interleaves_unique_articles();
     void test_catart_sort_combined_no_duplicates();
+
+    // --- Sort: unknown (fallback) ---
+    void test_catart_unknown_sort_order_falls_back_to_recent();
 
     // --- Multiple entries ---
     void test_catart_two_entries_both_produce_sections();
@@ -600,6 +611,30 @@ void Test_Website_PageBlocCategoryArticles::test_catart_sort_combined_no_duplica
 }
 
 // =============================================================================
+// Sort: unknown (fallback)
+// =============================================================================
+
+void Test_Website_PageBlocCategoryArticles::test_catart_unknown_sort_order_falls_back_to_recent()
+{
+    // An unrecognised sort value must not crash or produce empty output:
+    // the bloc falls back to the "recent" (updatedAt descending) order.
+    m_repo->addPage(makeArticle(1, QStringLiteral("/older.html"),
+                                QStringLiteral("2023-01-01T00:00:00Z"),
+                                QStringLiteral("2024-01-01T00:00:00Z")), articleData(7));
+    m_repo->addPage(makeArticle(2, QStringLiteral("/newer.html"),
+                                QStringLiteral("2023-01-01T00:00:00Z"),
+                                QStringLiteral("2024-09-01T00:00:00Z")), articleData(7));
+    PageBlocCategoryArticles bloc(*m_catTable, *m_repo);
+    const auto &html = htmlFrom(bloc, oneEntryHash(7, QStringLiteral("Cat"), 5,
+                                                    QStringLiteral("unknown_sort")));
+    // Both articles must appear exactly once.
+    QCOMPARE(html.count(QStringLiteral("/older.html")), 1);
+    QCOMPARE(html.count(QStringLiteral("/newer.html")), 1);
+    // Fallback is "recent": newer updatedAt should come first.
+    QVERIFY(html.indexOf(QStringLiteral("/newer.html")) < html.indexOf(QStringLiteral("/older.html")));
+}
+
+// =============================================================================
 // Multiple entries
 // =============================================================================
 
@@ -866,19 +901,40 @@ void Test_Website_PageBlocCategoryArticles::test_catart_appends_css_to_existing_
 
 void Test_Website_PageBlocCategoryArticles::test_catart_translation_pages_excluded()
 {
-    // Source page (sourcePageId == 0): included
-    m_repo->addPage(makeArticle(1, QStringLiteral("/source.html")), articleData(9));
-    // Translation (sourcePageId != 0): must be excluded
-    PageRecord translation = makeArticle(2, QStringLiteral("/fr-source.html"));
-    translation.sourcePageId = 1;
-    m_repo->addPage(translation, articleData(9));
+    // Since Task 9, filtering uses engine.isPageAvailable() rather than
+    // sourcePageId.  Pages absent from the engine's available-pages map are
+    // excluded from the listing.
+    m_repo->addPage(makeArticle(1, QStringLiteral("/source.html")),    articleData(9));
+    m_repo->addPage(makeArticle(2, QStringLiteral("/fr-source.html")), articleData(9));
+
+    // Build a local engine with lang "en" at index 0, restricted to /source.html.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    {
+        QFile csv(QDir(dir.path()).absoluteFilePath(QStringLiteral("engine_domains.csv")));
+        QVERIFY(csv.open(QIODevice::WriteOnly | QIODevice::Text));
+        QTextStream out(&csv);
+        out << QStringLiteral("Enabled;LangCode;Language;Theme;Domain;HostId;HostFolder\n");
+        out << QStringLiteral("1;fr;French;default;fr.example.com;;\n");
+    }
+    HostTable hostTable(QDir(dir.path()));
+    EngineArticles localEngine;
+    localEngine.init(QDir(dir.path()), hostTable);
+
+    QHash<QString, QSet<QString>> map;
+    map[QStringLiteral("fr")].insert(QStringLiteral("/source.html"));
+    localEngine.setAvailablePages(map);
 
     PageBlocCategoryArticles bloc(*m_catTable, *m_repo);
-    const auto &html = htmlFrom(bloc, oneEntryHash(9, QStringLiteral("Cat"), 10,
-                                                    QLatin1String(PageBlocCategoryArticles::SORT_RECENT)));
-    QCOMPARE(html.count(QStringLiteral("<li")), 1);   // 58 — only source page
-    QVERIFY(html.contains(QStringLiteral("/source.html")));    // 59
-    QVERIFY(!html.contains(QStringLiteral("/fr-source.html"))); // 60
+    bloc.load(oneEntryHash(9, QStringLiteral("Cat"), 10,
+                           QLatin1String(PageBlocCategoryArticles::SORT_RECENT)));
+    QString html, css, js;
+    QSet<QString> cssDoneIds, jsDoneIds;
+    bloc.addCode(QStringView{}, localEngine, 0, html, css, js, cssDoneIds, jsDoneIds);
+
+    QCOMPARE(html.count(QStringLiteral("<li")), 1);               // 58 — only /source.html
+    QVERIFY(html.contains(QStringLiteral("/source.html")));       // 59
+    QVERIFY(!html.contains(QStringLiteral("/fr-source.html")));   // 60
 }
 
 // =============================================================================

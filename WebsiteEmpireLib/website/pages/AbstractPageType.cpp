@@ -67,6 +67,15 @@ QList<QString> AbstractPageType::allTypeIds()
 }
 
 // =============================================================================
+// setAuthorLang
+// =============================================================================
+
+void AbstractPageType::setAuthorLang(const QString &lang)
+{
+    m_authorLang = lang;
+}
+
+// =============================================================================
 // load / save
 // =============================================================================
 
@@ -217,6 +226,67 @@ void AbstractPageType::addCode(QStringView     origContent,
     // into html. A page type is the top-level generator, not a fragment.
     Q_UNUSED(css)
     Q_UNUSED(js)
+}
+
+// =============================================================================
+// collectTranslatables / applyTranslation / isTranslationComplete
+// =============================================================================
+
+void AbstractPageType::collectTranslatables(QStringView              origContent,
+                                             QList<TranslatableField> &out) const
+{
+    Q_UNUSED(origContent)
+    const auto &blocs = getPageBlocs();
+    for (int i = 0; i < blocs.size(); ++i) {
+        const QString prefix = QString::number(i) + QStringLiteral("_");
+        QList<TranslatableField> blocFields;
+        blocs.at(i)->collectTranslatables(QStringView{}, blocFields);
+        for (auto &f : blocFields) {
+            f.id = prefix + f.id;
+        }
+        out.append(blocFields);
+    }
+}
+
+void AbstractPageType::applyTranslation(QStringView   origContent,
+                                         const QString &fieldId,
+                                         const QString &lang,
+                                         const QString &text)
+{
+    Q_UNUSED(origContent)
+    // fieldId is "<i>_<blocFieldId>" — split on first '_'.
+    const int sep = fieldId.indexOf(QLatin1Char('_'));
+    if (sep < 0) {
+        return;
+    }
+    bool ok;
+    const int idx = fieldId.left(sep).toInt(&ok);
+    if (!ok) {
+        return;
+    }
+    const auto &blocs = getPageBlocs();
+    if (idx < 0 || idx >= blocs.size()) {
+        return;
+    }
+    const QString blocFieldId = fieldId.mid(sep + 1);
+    const_cast<AbstractPageBloc *>(blocs.at(idx))->applyTranslation(
+        QStringView{}, blocFieldId, lang, text);
+}
+
+bool AbstractPageType::isTranslationComplete(QStringView   origContent,
+                                              const QString &lang) const
+{
+    Q_UNUSED(origContent)
+    // Source language is always complete — no translation needed.
+    if (!m_authorLang.isEmpty() && lang == m_authorLang) {
+        return true;
+    }
+    for (const AbstractPageBloc *bloc : getPageBlocs()) {
+        if (!bloc->isTranslationComplete(QStringView{}, lang)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // =============================================================================

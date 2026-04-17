@@ -173,3 +173,9 @@ void CommonBlocHeader::loadTranslations(QSettings &settings)
 {
     m_tr.loadFromSettings(settings);
 }
+
+QString CommonBlocHeader::translatedText(const QString &fieldId,
+                                         const QString &langCode) const
+{
+    return m_tr.translation(fieldId, langCode);
+}

@@ -45,6 +45,8 @@ public:
     int                              countByTypeId(const QString &typeId) const override;
     void                             setGeneratedAt(int id,
                                                     const QString &utcIso) override;
+    void                             setLangCodesToTranslate(int id,
+                                                             const QStringList &langs) override;
 
 private:
     PageDb &m_db;

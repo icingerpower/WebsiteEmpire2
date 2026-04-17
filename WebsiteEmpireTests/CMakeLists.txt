@@ -21,7 +21,7 @@ macro(add_empire_test TARGET_NAME SOURCE_FILE)
         Qt${QT_VERSION_MAJOR}::Sql
         QCoro::Core
         -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
-    target_include_directories(${TARGET_NAME} PRIVATE ../WebsiteEmpireLib)
+    target_include_directories(${TARGET_NAME} PRIVATE ../WebsiteEmpireLib ${CMAKE_CURRENT_SOURCE_DIR})
 endmacro()
 
 add_empire_test(Test_Website_PageBlocText       test_website_page_bloc_text.cpp)
@@ -36,7 +36,13 @@ add_empire_test(Test_Website_PageDb           test_page_db.cpp)
 add_empire_test(Test_Website_PageRepository   test_page_repository.cpp)
 add_empire_test(Test_Website_PageGenerator    test_page_generator.cpp)
 add_empire_test(Test_Engine_PageBlocJs        test_engine_page_bloc_js.cpp)
-add_empire_test(Test_Website_CommonBlocTranslations test_common_bloc_translations.cpp)
+add_empire_test(Test_Website_CommonBlocTranslations  test_common_bloc_translations.cpp)
+add_empire_test(Test_Website_Translations            test_website_translations.cpp)
+add_empire_test(Test_Translation_Settings            test_translation_settings.cpp)
+add_empire_test(Test_Translation_PageAssessor        test_translation_page_assessor.cpp)
+add_empire_test(Test_Translation_Scheduler           test_translation_scheduler.cpp)
+add_empire_test(Test_Translation_StatusTable         test_translation_status_table.cpp)
+add_empire_test(Test_Translation_FieldTable          test_translation_field_table.cpp)
 
 # GenStrategyTable test compiles app-layer pane code directly.
 add_executable(Test_Website_GenStrategyTable

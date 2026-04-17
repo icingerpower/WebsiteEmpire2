@@ -62,6 +62,8 @@ public:
                                     const QString &sourceLangCode)    const override;
     void        saveTranslations(QSettings &settings)                       override;
     void        loadTranslations(QSettings &settings)                       override;
+    QString     translatedText(const QString &fieldId,
+                               const QString &langCode)               const override;
 
 private:
     QString m_text;

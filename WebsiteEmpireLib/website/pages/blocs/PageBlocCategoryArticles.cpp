@@ -1,5 +1,6 @@
 #include "PageBlocCategoryArticles.h"
 
+#include "website/AbstractEngine.h"
 #include "website/pages/IPageRepository.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/blocs/widgets/PageBlocCategoryArticlesWidget.h"
@@ -78,8 +79,8 @@ void PageBlocCategoryArticles::save(QHash<QString, QString> &values) const
 // =============================================================================
 
 void PageBlocCategoryArticles::addCode(QStringView     /*origContent*/,
-                                       AbstractEngine &/*engine*/,
-                                       int             /*websiteIndex*/,
+                                       AbstractEngine &engine,
+                                       int             websiteIndex,
                                        QString        &html,
                                        QString        &css,
                                        QString        &js,
@@ -95,7 +96,8 @@ void PageBlocCategoryArticles::addCode(QStringView     /*origContent*/,
 
     const auto &allPages = m_repo.findAll();
     for (const auto &record : allPages) {
-        if (record.typeId != QStringLiteral("article") || record.sourcePageId != 0) {
+        if (record.typeId != QStringLiteral("article")
+                || !engine.isPageAvailable(record.permalink, websiteIndex)) {
             continue;
         }
         const auto &data = m_repo.loadData(record.id);

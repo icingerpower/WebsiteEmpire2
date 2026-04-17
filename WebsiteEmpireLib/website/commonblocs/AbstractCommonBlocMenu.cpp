@@ -211,3 +211,9 @@ void AbstractCommonBlocMenu::loadTranslations(QSettings &settings)
     }
     settings.endGroup();
 }
+
+QString AbstractCommonBlocMenu::translatedText(const QString &fieldId,
+                                               const QString &langCode) const
+{
+    return m_labelTr.value(fieldId).value(langCode);
+}

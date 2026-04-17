@@ -50,15 +50,22 @@ QString htmlFrom(ArticleFixture &f, const QString &text)
     return html;
 }
 
-// Returns the substring of html between <body> and </body>.
+// Returns the content rendered inside <main class="page-content">…</main>.
+// AbstractPageType wraps all page-bloc output in this element, so tests that
+// verify bloc-level output should use this helper rather than looking at <body>.
 QString bodyContent(const QString &html)
 {
-    const int start = html.indexOf(QStringLiteral("<body>")) + 6;
-    const int end   = html.indexOf(QStringLiteral("</body>"));
-    if (start < 6 || end < 0 || end <= start) {
+    const QString openTag = QStringLiteral("<main class=\"page-content\">");
+    const int start = html.indexOf(openTag);
+    if (start < 0) {
         return QString();
     }
-    return html.mid(start, end - start);
+    const int contentStart = start + openTag.length();
+    const int end = html.indexOf(QStringLiteral("</main>"), contentStart);
+    if (end < 0) {
+        return QString();
+    }
+    return html.mid(contentStart, end - contentStart);
 }
 
 } // namespace
@@ -73,7 +80,7 @@ class Test_PageTypeArticle : public QObject
 
 private slots:
     // --- getPageBlocs ---
-    void test_pagetypearticle_get_page_blocs_returns_two_blocs();
+    void test_pagetypearticle_get_page_blocs_returns_four_blocs();
     void test_pagetypearticle_get_page_blocs_all_non_null();
     void test_pagetypearticle_get_page_blocs_returns_same_ref_on_repeated_calls();
 
@@ -96,7 +103,7 @@ private slots:
     void test_pagetypearticle_addcode_output_css_js_params_untouched();
 
     // --- addCode: CSS inlining ---
-    void test_pagetypearticle_addcode_no_style_tag_when_no_css();
+    void test_pagetypearticle_addcode_always_has_style_tag_for_base_css();
     void test_pagetypearticle_addcode_css_inlined_in_style_tag();
     void test_pagetypearticle_addcode_style_tag_in_head_before_body();
 
@@ -117,10 +124,11 @@ private slots:
 // getPageBlocs
 // =============================================================================
 
-void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_returns_two_blocs()
+void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_returns_four_blocs()
 {
+    // PageTypeArticle has four blocs: Category, Text, Social, AutoLink.
     ArticleFixture f;
-    QCOMPARE(f.article.getPageBlocs().size(), 2);   // 1
+    QCOMPARE(f.article.getPageBlocs().size(), 4);   // 1
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_all_non_null()
@@ -272,12 +280,13 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_output_css_js_params_unt
 // addCode — CSS inlining
 // =============================================================================
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_no_style_tag_when_no_css()
+void Test_PageTypeArticle::test_pagetypearticle_addcode_always_has_style_tag_for_base_css()
 {
-    // No categories → PageBlocCategory emits no CSS.
+    // AbstractPageType always inlines base layout CSS regardless of bloc content.
     ArticleFixture f;
     const auto &html = htmlFrom(f, QStringLiteral("some text"));
-    QVERIFY(!html.contains(QStringLiteral("<style>")));   // 21
+    QVERIFY(html.contains(QStringLiteral("<style>")));    // 21
+    QVERIFY(html.contains(QStringLiteral("page-content")));   // base CSS class present
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_css_inlined_in_style_tag()

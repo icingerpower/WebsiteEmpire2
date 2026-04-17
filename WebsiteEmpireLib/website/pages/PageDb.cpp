@@ -121,4 +121,12 @@ void PageDb::createSchema()
         q.exec(QStringLiteral(
             "ALTER TABLE pages ADD COLUMN generated_at TEXT"));
     }
+
+    // pages.langs_to_translate — comma-separated BCP-47 codes set by the
+    // assessment step.  NULL / empty = author language only.
+    if (!columnExists(m_connectionName, QStringLiteral("pages"),
+                      QStringLiteral("langs_to_translate"))) {
+        q.exec(QStringLiteral(
+            "ALTER TABLE pages ADD COLUMN langs_to_translate TEXT"));
+    }
 }

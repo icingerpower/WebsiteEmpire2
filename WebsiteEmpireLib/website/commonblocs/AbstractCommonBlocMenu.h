@@ -50,6 +50,8 @@ public:
                                     const QString &sourceLangCode)    const override;
     void        saveTranslations(QSettings &settings)                       override;
     void        loadTranslations(QSettings &settings)                       override;
+    QString     translatedText(const QString &fieldId,
+                               const QString &langCode)               const override;
 
     /**
      * Resolves the translated label for a menu item.

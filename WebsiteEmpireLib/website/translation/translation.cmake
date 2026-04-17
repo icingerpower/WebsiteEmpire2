@@ -1,0 +1,12 @@
+set(TRANSLATION_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/TranslationSettings.h
+    ${CMAKE_CURRENT_LIST_DIR}/TranslationSettings.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAssessor.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAssessor.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/TranslationScheduler.h
+    ${CMAKE_CURRENT_LIST_DIR}/TranslationScheduler.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/TranslationStatusTable.h
+    ${CMAKE_CURRENT_LIST_DIR}/TranslationStatusTable.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/TranslationFieldTable.h
+    ${CMAKE_CURRENT_LIST_DIR}/TranslationFieldTable.cpp
+)

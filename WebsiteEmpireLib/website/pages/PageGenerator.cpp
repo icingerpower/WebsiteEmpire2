@@ -1,13 +1,16 @@
 #include "PageGenerator.h"
 
+#include "ExceptionWithTitleText.h"
 #include "website/AbstractEngine.h"
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/IPageRepository.h"
 #include "website/pages/PageRecord.h"
 #include "website/pages/PermalinkHistoryEntry.h"
 
+#include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QHash>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -116,8 +119,45 @@ int PageGenerator::generateAll(const QDir     &workingDir,
 
     int count = 0;
     const QList<PageRecord> &pages = m_pageRepo.findAll();
+    const QString &currentLang = engine.getLangCode(websiteIndex);
+
+    // Build available-pages index: lang code → set of permalinks that will be
+    // generated.  A page is available in language L when:
+    //   • langCodesToTranslate is non-empty (assessed) AND L equals record.lang
+    //     or L is in langCodesToTranslate, OR
+    //   • langCodesToTranslate is empty (not yet assessed) — the page is treated
+    //     as available in the current generation language for backward compat.
+    // This map is used by blocs (e.g. PageBlocCategoryArticles) to filter links
+    // so only reachable pages are listed.
+    {
+        QHash<QString, QSet<QString>> availablePages;
+        for (const PageRecord &r : std::as_const(pages)) {
+            if (r.langCodesToTranslate.isEmpty()) {
+                // Not yet assessed: treated as available in the current language.
+                availablePages[currentLang].insert(r.permalink);
+            } else {
+                availablePages[r.lang].insert(r.permalink);
+                for (const QString &lang : std::as_const(r.langCodesToTranslate)) {
+                    availablePages[lang].insert(r.permalink);
+                }
+            }
+        }
+        engine.setAvailablePages(availablePages);
+    }
 
     for (const PageRecord &record : std::as_const(pages)) {
+        // Skip pages not intended for this language.
+        // Only apply the language filter when langCodesToTranslate is explicitly set.
+        // Pages with an empty list have not been assessed — generate them for any
+        // language (backward-compatible behaviour preserving pre-assessment state).
+        const bool hasExplicitTargets = !record.langCodesToTranslate.isEmpty();
+        const bool isSourceLang       = (record.lang == currentLang);
+        const bool isTargetLang       = record.langCodesToTranslate.contains(currentLang);
+
+        if (hasExplicitTargets && !isSourceLang && !isTargetLang) {
+            continue;
+        }
+
         auto type = AbstractPageType::createForTypeId(record.typeId, m_categoryTable);
         if (!type) {
             continue;
@@ -125,6 +165,21 @@ int PageGenerator::generateAll(const QDir     &workingDir,
 
         const QHash<QString, QString> &data = m_pageRepo.loadData(record.id);
         type->load(data);
+        type->setAuthorLang(record.lang);
+
+        // Guard: only when translation was explicitly requested for this language
+        // and is incomplete.  An incomplete translation is a workflow bug — raise
+        // so it is caught during CI rather than silently generating source text.
+        if (hasExplicitTargets && isTargetLang
+                && !type->isTranslationComplete(QStringView{}, currentLang)) {
+            ExceptionWithTitleText ex(
+                QCoreApplication::translate("PageGenerator", "Incomplete Translation"),
+                QCoreApplication::translate("PageGenerator",
+                    "Page '%1' has not been fully translated into '%2'. "
+                    "Run the translator before generating.")
+                    .arg(record.permalink, currentLang));
+            ex.raise();
+        }
 
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;

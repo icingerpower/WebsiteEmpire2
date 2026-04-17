@@ -204,3 +204,9 @@ void CommonBlocCookies::loadTranslations(QSettings &settings)
 {
     m_tr.loadFromSettings(settings);
 }
+
+QString CommonBlocCookies::translatedText(const QString &fieldId,
+                                          const QString &langCode) const
+{
+    return m_tr.translation(fieldId, langCode);
+}

@@ -137,3 +137,9 @@ void CommonBlocFooter::loadTranslations(QSettings &settings)
 {
     m_tr.loadFromSettings(settings);
 }
+
+QString CommonBlocFooter::translatedText(const QString &fieldId,
+                                         const QString &langCode) const
+{
+    return m_tr.translation(fieldId, langCode);
+}

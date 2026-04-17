@@ -150,6 +150,18 @@ public:
      * Call this immediately after LauncherGeneration saves AI-generated content.
      */
     virtual void setGeneratedAt(int id, const QString &utcIso) = 0;
+
+    // -------------------------------------------------------------------------
+    // Translation scope management
+    // -------------------------------------------------------------------------
+
+    /**
+     * Persists the langCodesToTranslate list for page id.
+     * The list is stored as a comma-separated string in langs_to_translate.
+     * Pass an empty list to clear (author language only).
+     * Called exclusively by the assessment step.
+     */
+    virtual void setLangCodesToTranslate(int id, const QStringList &langs) = 0;
 };
 
 #endif // IPAGEREPOSITORY_H

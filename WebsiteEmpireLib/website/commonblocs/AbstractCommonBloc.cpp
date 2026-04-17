@@ -10,6 +10,14 @@ QHash<QString, QString> AbstractCommonBloc::sourceTexts() const
     return {};
 }
 
+QString AbstractCommonBloc::translatedText(const QString &fieldId,
+                                           const QString &langCode) const
+{
+    Q_UNUSED(fieldId)
+    Q_UNUSED(langCode)
+    return {};
+}
+
 void AbstractCommonBloc::setTranslation(const QString &fieldId,
                                         const QString &langCode,
                                         const QString &translatedText)
@@ -49,4 +57,33 @@ void AbstractCommonBloc::saveTranslations(QSettings &settings)
 void AbstractCommonBloc::loadTranslations(QSettings &settings)
 {
     Q_UNUSED(settings)
+}
+
+// =============================================================================
+// WebCodeAdder translation bridges
+// =============================================================================
+
+void AbstractCommonBloc::collectTranslatables(QStringView              /*origContent*/,
+                                               QList<TranslatableField> &out) const
+{
+    const QHash<QString, QString> &texts = sourceTexts();
+    for (auto it = texts.cbegin(); it != texts.cend(); ++it) {
+        if (!it.value().isEmpty()) {
+            out.append({it.key(), it.value()});
+        }
+    }
+}
+
+void AbstractCommonBloc::applyTranslation(QStringView   /*origContent*/,
+                                           const QString &fieldId,
+                                           const QString &lang,
+                                           const QString &text)
+{
+    setTranslation(fieldId, lang, text);
+}
+
+bool AbstractCommonBloc::isTranslationComplete(QStringView   /*origContent*/,
+                                                const QString &/*lang*/) const
+{
+    return true;
 }

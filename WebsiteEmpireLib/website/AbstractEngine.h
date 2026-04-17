@@ -3,9 +3,11 @@
 
 #include <QAbstractTableModel>
 #include <QDir>
+#include <QHash>
 #include <QList>
 #include <QMap>
 #include <QScopedPointer>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -104,6 +106,24 @@ public:
      */
     AbstractTheme *getActiveTheme() const;
 
+    /**
+     * Registers the set of available (generated) pages per language code.
+     * Must be called before generateAll() so that blocs such as
+     * PageBlocCategoryArticles can filter links to only pages that exist
+     * in the target language.
+     *
+     * @param pages  Map from BCP-47 lang code to the set of permalinks
+     *               that will be generated for that language.
+     */
+    void setAvailablePages(const QHash<QString, QSet<QString>> &pages);
+
+    /**
+     * Returns true when permalink is in the available-pages set for the
+     * language at websiteIndex.  Always returns true when setAvailablePages()
+     * has not been called (permissive default so blocs work without the guard).
+     */
+    bool isPageAvailable(const QString &permalink, int websiteIndex) const;
+
     // Binds this engine to workingDir and hostTable, then loads engine_domains.csv.
     // Must be called before using the model.
     void init(const QDir &workingDir, const HostTable &hostTable);
@@ -152,6 +172,10 @@ private:
     QDir             m_workingDir;
     const HostTable *m_hostTable  = nullptr;
     AbstractTheme   *m_theme      = nullptr; ///< Not owned; set by setTheme()
+
+    /// Populated by setAvailablePages(); queried by isPageAvailable().
+    /// Empty map → permissive (all pages available).
+    QHash<QString, QSet<QString>> m_availablePages;
     QList<DomainRow> m_rows;
 
     // Backing storage for the default getPageTypes() implementation.

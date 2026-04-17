@@ -1,6 +1,7 @@
 #ifndef PAGEBLOCTEXT_H
 #define PAGEBLOCTEXT_H
 
+#include "website/commonblocs/BlocTranslations.h"
 #include "website/pages/blocs/AbstractPageBloc.h"
 
 /**
@@ -38,7 +39,7 @@ public:
      */
     void save(QHash<QString, QString> &values) const override;
 
-    /** Renders m_text to html; origContent is ignored. */
+    /** Renders m_text (or its translation) to html; origContent is ignored. */
     void addCode(QStringView     origContent,
                  AbstractEngine &engine,
                  int             websiteIndex,
@@ -51,8 +52,31 @@ public:
     /** Returns a new PageBlocTextWidget; ownership is transferred to the caller. */
     AbstractPageBlockWidget *createEditWidget() override;
 
+    // ---- Translation protocol ------------------------------------------------
+
+    /** Emits {KEY_TEXT, m_text} when m_text is non-empty. */
+    void collectTranslatables(QStringView              origContent,
+                              QList<TranslatableField> &out) const override;
+
+    /**
+     * Stores a translated value for fieldId + lang in m_translations.
+     * Changes are persisted on the next save() call.
+     */
+    void applyTranslation(QStringView   origContent,
+                          const QString &fieldId,
+                          const QString &lang,
+                          const QString &text) override;
+
+    /**
+     * Returns true when m_translations.isComplete(lang) is true,
+     * i.e. every non-empty source field has a translation for lang.
+     */
+    bool isTranslationComplete(QStringView   origContent,
+                               const QString &lang) const override;
+
 private:
-    QString m_text;
+    QString          m_text;
+    BlocTranslations m_translations; ///< per-language store for m_text
 
     /**
      * Scans text for [TAG…][/TAG] blocks and delegates each to the registered

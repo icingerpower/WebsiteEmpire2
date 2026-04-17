@@ -7,6 +7,7 @@
 #include "panes/PanePages.h"
 #include "panes/PaneSettings.h"
 #include "panes/PaneTheme.h"
+#include "panes/PaneTranslations.h"
 #include "website/AbstractEngine.h"
 #include "website/WebsiteSettingsTable.h"
 #include "website/theme/AbstractTheme.h"
@@ -61,6 +62,7 @@ void MainWindow::_init()
     ui->tabPages->setup(workingDir, m_engine.data(), m_settingsTable.data());
     ui->tabGeneration->setup(workingDir, m_engine.data(), m_settingsTable.data());
     ui->tabTheme->setTheme(m_theme.data());
+    ui->tabTranslations->setup(workingDir, m_engine.data(), m_theme.data());
 
     connect(ui->tabTheme, &PaneTheme::themeIdSelected,
             this, &MainWindow::_reloadTheme);
@@ -88,4 +90,5 @@ void MainWindow::_reloadTheme(const QString &themeId)
     }
 
     ui->tabTheme->setTheme(m_theme.data());
+    ui->tabTranslations->setTheme(m_theme.data());
 }

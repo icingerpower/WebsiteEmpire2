@@ -30,12 +30,19 @@ static PageRecord rowToRecord(const QSqlQuery &q)
     r.translatedAt = q.value(6).isNull() ? QString() : q.value(6).toString();
     r.sourcePageId = q.value(7).isNull() ? 0        : q.value(7).toInt();
     r.generatedAt  = q.value(8).isNull() ? QString() : q.value(8).toString();
+    // langs_to_translate: stored as comma-separated BCP-47 codes (column 9)
+    if (!q.value(9).isNull()) {
+        const QString raw = q.value(9).toString().trimmed();
+        if (!raw.isEmpty()) {
+            r.langCodesToTranslate = raw.split(QLatin1Char(','), Qt::SkipEmptyParts);
+        }
+    }
     return r;
 }
 
 static const QLatin1StringView SELECT_PAGES{
     "SELECT id, type_id, permalink, lang, created_at, updated_at,"
-    "       translated_at, source_page_id, generated_at"
+    "       translated_at, source_page_id, generated_at, langs_to_translate"
     " FROM pages"};
 
 // =============================================================================
@@ -343,6 +350,21 @@ void PageRepositoryDb::setGeneratedAt(int id, const QString &utcIso)
     q.prepare(QStringLiteral(
         "UPDATE pages SET generated_at = :ts WHERE id = :id"));
     q.bindValue(QStringLiteral(":ts"), utcIso);
+    q.bindValue(QStringLiteral(":id"), id);
+    q.exec();
+}
+
+// =============================================================================
+// setLangCodesToTranslate
+// =============================================================================
+
+void PageRepositoryDb::setLangCodesToTranslate(int id, const QStringList &langs)
+{
+    const QString value = langs.isEmpty() ? QString() : langs.join(QLatin1Char(','));
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "UPDATE pages SET langs_to_translate = :v WHERE id = :id"));
+    q.bindValue(QStringLiteral(":v"),  value.isEmpty() ? QVariant{} : QVariant{value});
     q.bindValue(QStringLiteral(":id"), id);
     q.exec();
 }

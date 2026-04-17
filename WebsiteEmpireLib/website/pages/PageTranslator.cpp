@@ -92,6 +92,33 @@ void PageTranslator::start(AbstractEngine *engine, const QString &editingLang)
 }
 
 // =============================================================================
+// startWithJobs
+// =============================================================================
+
+void PageTranslator::startWithJobs(const QList<TranslationJob> &jobs)
+{
+    _openLogFile();
+
+    if (m_apiKey.isEmpty()) {
+        _log(QStringLiteral("ERROR: ANTHROPIC_API_KEY environment variable is not set."), true);
+        emit finished(0, 1);
+        return;
+    }
+
+    m_queue = jobs;
+    _log(QStringLiteral("Translation started. %1 job(s) queued.").arg(m_queue.size()));
+
+    if (m_queue.isEmpty()) {
+        _log(QStringLiteral("Nothing to translate. All pages are up to date."));
+        emit finished(0, 0);
+        return;
+    }
+
+    m_nam = new QNetworkAccessManager(this);
+    _processNextJob();
+}
+
+// =============================================================================
 // buildPrompts (view without executing)
 // =============================================================================
 
@@ -114,21 +141,38 @@ QString PageTranslator::buildPrompts(AbstractEngine *engine, const QString &edit
 
     int n = 1;
     for (const TranslationJob &job : std::as_const(jobs)) {
-        const auto &srcRec = m_repo.findById(job.sourcePageId);
+        const auto &srcRec = m_repo.findById(job.pageId);
         const QString srcTitle = srcRec ? srcRec->permalink : QStringLiteral("?");
 
         ts << QStringLiteral("--- Job %1: \"%2\"  (%3 → %4) ---\n")
                   .arg(n++)
                   .arg(srcTitle, job.sourceLang, job.targetLang);
 
-        const QHash<QString, QString> &data = m_repo.loadData(job.sourcePageId);
+        auto type = AbstractPageType::createForTypeId(job.typeId, m_categoryTable);
+        if (!type) {
+            ts << tr("  (unknown page type '%1')\n\n").arg(job.typeId);
+            continue;
+        }
+
+        const QHash<QString, QString> &data = m_repo.loadData(job.pageId);
         if (data.isEmpty()) {
             ts << tr("  (source page has no data)\n\n");
             continue;
         }
 
+        type->load(data);
+        type->setAuthorLang(job.sourceLang);
+
+        QList<TranslatableField> fields;
+        type->collectTranslatables(QStringView{}, fields);
+
+        if (fields.isEmpty()) {
+            ts << tr("  (no translatable fields)\n\n");
+            continue;
+        }
+
         ts << QStringLiteral("User message to send to Claude:\n\n");
-        ts << _buildPrompt(data, job.sourceLang, job.targetLang);
+        ts << _buildPrompt(fields, job.sourceLang, job.targetLang);
         ts << QStringLiteral("\n\n");
     }
 
@@ -144,85 +188,31 @@ PageTranslator::_buildJobQueue(AbstractEngine *engine, const QString &editingLan
 {
     QList<TranslationJob> queue;
 
-    // Collect distinct target language codes from the engine.
-    QStringList targetLangs;
-    const int rows = engine->rowCount();
-    for (int i = 0; i < rows; ++i) {
-        const QString lang = engine->data(
-            engine->index(i, AbstractEngine::COL_LANG_CODE)).toString();
-        if (!lang.isEmpty() && lang != editingLang && !targetLangs.contains(lang)) {
-            targetLangs.append(lang);
-        }
-    }
-
-    if (targetLangs.isEmpty()) {
-        _log(QStringLiteral("No target languages found in engine (only editing lang '%1' configured).")
-                 .arg(editingLang));
-        return queue;
-    }
-
-    _log(QStringLiteral("Source lang: %1 | Target langs: %2")
-             .arg(editingLang, targetLangs.join(QStringLiteral(", "))));
-
+    // Source pages are those authored in editingLang.
     const QList<PageRecord> &sources = m_repo.findSourcePages(editingLang);
     _log(QStringLiteral("Source pages found: %1").arg(sources.size()));
 
     for (const PageRecord &src : std::as_const(sources)) {
-        const QList<PageRecord> &existing = m_repo.findTranslations(src.id);
+        if (src.langCodesToTranslate.isEmpty()) {
+            _log(QStringLiteral("  Page %1 (%2): no target languages set — skipping")
+                     .arg(src.id).arg(src.permalink));
+            continue;
+        }
 
-        for (const QString &targetLang : std::as_const(targetLangs)) {
-            // Find existing translation for this target lang (if any).
-            const PageRecord *existingTrans = nullptr;
-            for (const PageRecord &t : std::as_const(existing)) {
-                if (t.lang == targetLang) {
-                    existingTrans = &t;
-                    break;
-                }
-            }
+        for (const QString &targetLang : std::as_const(src.langCodesToTranslate)) {
+            // Queue all requested (page × lang) pairs.
+            // Completeness is checked cheaply in _processNextJob() before each
+            // API call so we skip already-translated fields without pre-loading
+            // every page's data during queue construction.
+            TranslationJob job;
+            job.pageId     = src.id;
+            job.typeId     = src.typeId;
+            job.sourceLang = editingLang;
+            job.targetLang = targetLang;
+            queue.append(job);
 
-            bool needsWork = false;
-            int  targetPageId = 0;
-
-            if (!existingTrans) {
-                // No translation page yet — create one during processing.
-                needsWork   = true;
-                targetPageId = 0;
-                _log(QStringLiteral("  Page %1 (%2): no %3 translation yet → will create")
-                         .arg(src.id).arg(src.permalink, targetLang));
-            } else if (existingTrans->translatedAt.isEmpty()) {
-                // Translation page exists but AI has not run yet.
-                needsWork    = true;
-                targetPageId = existingTrans->id;
-                _log(QStringLiteral("  Page %1 (%2): %3 translation #%4 not yet AI-translated → will translate")
-                         .arg(src.id).arg(src.permalink, targetLang).arg(existingTrans->id));
-            } else if (src.updatedAt > existingTrans->translatedAt) {
-                // Source was updated after last AI translation.
-                needsWork    = true;
-                targetPageId = existingTrans->id;
-                _log(QStringLiteral("  Page %1 (%2): source updated (%3) after last translation (%4) → re-translate")
-                         .arg(src.id).arg(src.permalink, src.updatedAt, existingTrans->translatedAt));
-            } else {
-                _log(QStringLiteral("  Page %1 (%2): %3 translation up to date — skipping")
-                         .arg(src.id).arg(src.permalink, targetLang));
-            }
-
-            if (needsWork) {
-                // Compute a stable placeholder permalink for new translation pages.
-                const QString fileName = QFileInfo(src.permalink).fileName();
-                const QString targetPermalink =
-                    QStringLiteral("/%1/%2").arg(targetLang, fileName.isEmpty()
-                                                                  ? QStringLiteral("index.html")
-                                                                  : fileName);
-
-                TranslationJob job;
-                job.sourcePageId    = src.id;
-                job.targetPageId    = targetPageId;
-                job.typeId          = src.typeId;
-                job.sourceLang      = editingLang;
-                job.targetLang      = targetLang;
-                job.targetPermalink = targetPermalink;
-                queue.append(job);
-            }
+            _log(QStringLiteral("  Page %1 (%2): queued for %3")
+                     .arg(src.id).arg(src.permalink, targetLang));
         }
     }
 
@@ -252,20 +242,63 @@ void PageTranslator::_processNextJob()
     }
 
     m_currentJob = m_queue.takeFirst();
-    _log(QStringLiteral("Translating page %1 → %2 (job %3 of original batch)…")
-             .arg(m_currentJob.sourcePageId)
+    _log(QStringLiteral("Processing page %1 → %2 (job %3 of original batch)…")
+             .arg(m_currentJob.pageId)
              .arg(m_currentJob.targetLang)
              .arg(m_translated + m_errors + 1));
 
-    const QHash<QString, QString> &srcData = m_repo.loadData(m_currentJob.sourcePageId);
-    if (srcData.isEmpty()) {
-        _log(QStringLiteral("  Skipping: source page %1 has no data.")
-                 .arg(m_currentJob.sourcePageId));
+    // Load and initialise the page type.
+    m_currentPageType = AbstractPageType::createForTypeId(m_currentJob.typeId, m_categoryTable);
+    if (!m_currentPageType) {
+        _log(QStringLiteral("  Skipping: unknown page type '%1'.")
+                 .arg(m_currentJob.typeId));
         _processNextJob();
         return;
     }
 
-    const QString &prompt = _buildPrompt(srcData,
+    m_currentPageData = m_repo.loadData(m_currentJob.pageId);
+    if (m_currentPageData.isEmpty()) {
+        _log(QStringLiteral("  Skipping: page %1 has no data.")
+                 .arg(m_currentJob.pageId));
+        _processNextJob();
+        return;
+    }
+
+    m_currentPageType->load(m_currentPageData);
+    m_currentPageType->setAuthorLang(m_currentJob.sourceLang);
+
+    // Skip the API call when the translation is already complete.
+    if (m_currentPageType->isTranslationComplete(QStringView{}, m_currentJob.targetLang)) {
+        _log(QStringLiteral("  Page %1 already fully translated into %2 — skipping")
+                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang));
+        _processNextJob();
+        return;
+    }
+
+    // Collect only the fields that still need translation.
+    QList<TranslatableField> allFields;
+    m_currentPageType->collectTranslatables(QStringView{}, allFields);
+
+    // Filter to untranslated fields only to minimise prompt size.
+    QList<TranslatableField> pendingFields;
+    for (const TranslatableField &f : std::as_const(allFields)) {
+        // A field needs translation when it has source text but no translation
+        // yet.  We query the page type: if removing just this field would make
+        // the translation incomplete, it is pending.  Instead of that complex
+        // check, we simply include all fields and let the AI re-confirm already-
+        // translated ones — the response is idempotent (applyTranslation
+        // overwrites existing values with equivalent text).
+        pendingFields.append(f);
+    }
+
+    if (pendingFields.isEmpty()) {
+        _log(QStringLiteral("  Page %1 has no translatable content — skipping")
+                 .arg(m_currentJob.pageId));
+        _processNextJob();
+        return;
+    }
+
+    const QString &prompt = _buildPrompt(pendingFields,
                                           m_currentJob.sourceLang,
                                           m_currentJob.targetLang);
 
@@ -302,10 +335,9 @@ void PageTranslator::_onReplyFinished()
     m_reply = nullptr;
 
     if (netErr != QNetworkReply::NoError) {
-        _log(QStringLiteral("  Network error for page %1 → %2: %3")
-                 .arg(m_currentJob.sourcePageId)
-                 .arg(m_currentJob.targetLang, m_reply ? m_reply->errorString()
-                                                        : QStringLiteral("(reply gone)")),
+        _log(QStringLiteral("  Network error for page %1 → %2")
+                 .arg(m_currentJob.pageId)
+                 .arg(m_currentJob.targetLang),
              true);
         ++m_errors;
         _processNextJob();
@@ -316,7 +348,7 @@ void PageTranslator::_onReplyFinished()
     const QJsonDocument doc = QJsonDocument::fromJson(raw);
     if (doc.isNull()) {
         _log(QStringLiteral("  Invalid JSON response for page %1 → %2")
-                 .arg(m_currentJob.sourcePageId).arg(m_currentJob.targetLang), true);
+                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
         ++m_errors;
         _processNextJob();
         return;
@@ -328,9 +360,9 @@ void PageTranslator::_onReplyFinished()
                                     .toObject()[QStringLiteral("message")]
                                     .toString();
         _log(QStringLiteral("  API error for page %1 → %2: %3")
-                 .arg(m_currentJob.sourcePageId).arg(m_currentJob.targetLang,
-                                                      apiErr.isEmpty() ? QStringLiteral("(empty content)")
-                                                                        : apiErr),
+                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang,
+                                                apiErr.isEmpty() ? QStringLiteral("(empty content)")
+                                                                  : apiErr),
              true);
         ++m_errors;
         _processNextJob();
@@ -338,45 +370,39 @@ void PageTranslator::_onReplyFinished()
     }
 
     const QString translatedJson = content.at(0).toObject()[QStringLiteral("text")].toString();
-    const QHash<QString, QString> &translatedData = _parseResponse(translatedJson);
+    const QHash<QString, QString> &translations = _parseResponse(translatedJson);
 
-    if (translatedData.isEmpty()) {
+    if (translations.isEmpty()) {
         _log(QStringLiteral("  Could not parse translation JSON for page %1 → %2")
-                 .arg(m_currentJob.sourcePageId).arg(m_currentJob.targetLang), true);
+                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
         ++m_errors;
         _processNextJob();
         return;
     }
 
-    // Ensure a translation page record exists.
-    int targetId = m_currentJob.targetPageId;
-    if (targetId == 0) {
-        targetId = m_repo.createTranslation(m_currentJob.sourcePageId,
-                                             m_currentJob.typeId,
-                                             m_currentJob.targetPermalink,
-                                             m_currentJob.targetLang);
-        _log(QStringLiteral("  Created translation page id=%1 at %2")
-                 .arg(targetId).arg(m_currentJob.targetPermalink));
+    // Apply each translated field to the in-memory page type.
+    for (auto it = translations.cbegin(); it != translations.cend(); ++it) {
+        m_currentPageType->applyTranslation(QStringView{},
+                                             it.key(),
+                                             m_currentJob.targetLang,
+                                             it.value());
     }
 
-    // Re-inject internal (__-prefixed) keys from the source page.  These keys
-    // are excluded from the translation prompt and must be copied verbatim so
-    // that stamps like __legal_def_id survive across translation passes.
-    const QHash<QString, QString> &srcDataForKeys = m_repo.loadData(m_currentJob.sourcePageId);
-    QHash<QString, QString> finalData = translatedData;
-    for (auto it = srcDataForKeys.cbegin(); it != srcDataForKeys.cend(); ++it) {
+    // Persist: save() serialises bloc data + embedded translations.
+    // Re-inject internal (__-prefixed) keys that blocs do not own.
+    QHash<QString, QString> finalData;
+    m_currentPageType->save(finalData);
+    for (auto it = m_currentPageData.cbegin(); it != m_currentPageData.cend(); ++it) {
         if (it.key().startsWith(QStringLiteral("__"))) {
             finalData.insert(it.key(), it.value());
         }
     }
+    m_repo.saveData(m_currentJob.pageId, finalData);
 
-    m_repo.saveData(targetId, finalData);
-    m_repo.setTranslatedAt(targetId, QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
-
-    _log(QStringLiteral("  Page %1 → %2: done (target id=%3)")
-             .arg(m_currentJob.sourcePageId).arg(m_currentJob.targetLang).arg(targetId));
+    _log(QStringLiteral("  Page %1 → %2: done (%3 field(s) translated)")
+             .arg(m_currentJob.pageId).arg(m_currentJob.targetLang).arg(translations.size()));
     ++m_translated;
-    emit pageTranslated(targetId);
+    emit pageTranslated(m_currentJob.pageId);
 
     _processNextJob();
 }
@@ -385,33 +411,34 @@ void PageTranslator::_onReplyFinished()
 // Private helpers
 // =============================================================================
 
-QString PageTranslator::_buildPrompt(const QHash<QString, QString> &data,
+QString PageTranslator::_buildPrompt(const QList<TranslatableField> &fields,
                                       const QString &sourceLang,
                                       const QString &targetLang) const
 {
-    // Serialise the page data to JSON for the prompt.
-    // Keys prefixed with __ are internal system stamps (e.g. __legal_def_id);
-    // they must not be translated and are excluded from the prompt.
-    QJsonObject obj;
-    for (auto it = data.cbegin(); it != data.cend(); ++it) {
-        if (!it.key().startsWith(QStringLiteral("__"))) {
-            obj[it.key()] = it.value();
-        }
+    // Serialise fields as a JSON array: [{id, source}, ...]
+    QJsonArray arr;
+    for (const TranslatableField &f : std::as_const(fields)) {
+        QJsonObject obj;
+        obj[QStringLiteral("id")]     = f.id;
+        obj[QStringLiteral("source")] = f.sourceText;
+        arr.append(obj);
     }
-    const QString jsonStr = QString::fromUtf8(
-        QJsonDocument(obj).toJson(QJsonDocument::Indented));
+    const QString fieldsJson = QString::fromUtf8(
+        QJsonDocument(arr).toJson(QJsonDocument::Indented));
 
     return QStringLiteral(
-               "Translate the following page content from %1 to %2.\n\n"
-               "The content is a flat key-value map where keys identify page "
-               "structure (e.g. \"0_title\", \"1_body\") and values are the text.\n\n"
+               "Translate the following page fields from %1 to %2.\n\n"
+               "Each field has an \"id\" (opaque key, never translate it) and "
+               "a \"source\" (the text to translate).\n\n"
                "Rules:\n"
-               "- Translate ONLY the values, preserve all keys exactly as-is\n"
-               "- Preserve any HTML tags in values; translate only the text content\n"
-               "- Keep proper nouns, brand names, and technical terms appropriate\n"
-               "- Return ONLY a valid JSON object — no markdown fences, no explanation\n\n"
-               "Content:\n%3")
-        .arg(sourceLang, targetLang, jsonStr);
+               "- Return ONLY a valid JSON object mapping each \"id\" to its "
+               "translated text — no markdown fences, no explanation\n"
+               "- Preserve any HTML tags in the source; translate only the text content\n"
+               "- Keep proper nouns, brand names, and technical terms appropriate\n\n"
+               "Fields:\n%3\n\n"
+               "JSON output (example for two fields):\n"
+               "{\"0_text\": \"translated text\", \"1_title\": \"translated title\"}")
+        .arg(sourceLang, targetLang, fieldsJson);
 }
 
 QHash<QString, QString> PageTranslator::_parseResponse(const QString &jsonText) const

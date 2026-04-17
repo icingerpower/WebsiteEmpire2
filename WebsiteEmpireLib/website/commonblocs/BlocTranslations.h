@@ -81,6 +81,23 @@ public:
      */
     void loadFromSettings(QSettings &settings);
 
+    /**
+     * Persist all translations as flat key→value pairs into map.
+     * Key format: "tr:<langCode>:<fieldId>"  — value: translated text.
+     *             "tr:<langCode>:<fieldId>:hash" — value: source SHA1.
+     * Compatible with the page_data flat map (prefixed by AbstractPageType).
+     * Caller must ensure setSource() has been called for each field first.
+     */
+    void saveToMap(QHash<QString, QString> &map) const;
+
+    /**
+     * Restore translations from a flat key→value map produced by saveToMap().
+     * Only loads entries whose stored source hash still matches the current
+     * source (stale translations are silently discarded).
+     * Must be called after setSource() has been called for each known field.
+     */
+    void loadFromMap(const QHash<QString, QString> &map);
+
 private:
     struct Entry {
         QString text;

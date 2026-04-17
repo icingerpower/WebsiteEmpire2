@@ -69,6 +69,27 @@ AbstractTheme *AbstractEngine::getActiveTheme() const
     return m_theme;
 }
 
+void AbstractEngine::setAvailablePages(const QHash<QString, QSet<QString>> &pages)
+{
+    m_availablePages = pages;
+}
+
+bool AbstractEngine::isPageAvailable(const QString &permalink, int websiteIndex) const
+{
+    // Permissive default: if no availability map has been set, every page is
+    // considered available (backwards-compatible behaviour for callers that
+    // do not call setAvailablePages()).
+    if (m_availablePages.isEmpty()) {
+        return true;
+    }
+    const QString &lang = getLangCode(websiteIndex);
+    const auto it = m_availablePages.find(lang);
+    if (it == m_availablePages.cend()) {
+        return false;
+    }
+    return it->contains(permalink);
+}
+
 // ---- Init -------------------------------------------------------------------
 
 void AbstractEngine::init(const QDir &workingDir, const HostTable &hostTable)
