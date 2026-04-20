@@ -151,6 +151,26 @@ public:
      */
     virtual void setGeneratedAt(int id, const QString &utcIso) = 0;
 
+    /**
+     * Records that strategyId was used to attempt content generation for page pageId.
+     * Multiple calls append entries in chronological order.
+     * Called by both LauncherGeneration (on success) and LauncherImprove.
+     */
+    virtual void recordStrategyAttempt(int pageId, const QString &strategyId) = 0;
+
+    /**
+     * Returns the strategy IDs attempted on pageId in attempt order (oldest first).
+     * Returns an empty list if no attempts have been recorded (e.g. legacy pages).
+     */
+    virtual QStringList strategyAttempts(int pageId) const = 0;
+
+    /**
+     * Returns source pages (source_page_id IS NULL) of typeId that have already
+     * been generated (generated_at IS NOT NULL), ordered by id ASC.
+     * Used by LauncherImprove to find candidates for re-generation.
+     */
+    virtual QList<PageRecord> findGeneratedByTypeId(const QString &typeId) const = 0;
+
     // -------------------------------------------------------------------------
     // Translation scope management
     // -------------------------------------------------------------------------

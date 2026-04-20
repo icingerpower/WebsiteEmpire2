@@ -28,7 +28,9 @@ QList<GenScheduler::StrategyAllocation> GenScheduler::computeAllocations(int tot
     QList<Candidate> candidates;
 
     for (const StrategyInfo &info : std::as_const(m_strategies)) {
-        const int pending = m_pageRepo.findPendingByTypeId(info.pageTypeId).size();
+        const int pending = (info.pendingCountOverride >= 0)
+                            ? info.pendingCountOverride
+                            : m_pageRepo.findPendingByTypeId(info.pageTypeId).size();
         if (pending == 0) {
             continue;
         }
@@ -86,9 +88,11 @@ QList<GenScheduler::StrategyAllocation> GenScheduler::computeAllocations(int tot
 
     for (const auto &c : std::as_const(candidates)) {
         StrategyAllocation alloc;
-        alloc.strategyId   = c.info.strategyId;
-        alloc.pageTypeId   = c.info.pageTypeId;
-        alloc.nonSvgImages = c.info.nonSvgImages;
+        alloc.strategyId         = c.info.strategyId;
+        alloc.pageTypeId         = c.info.pageTypeId;
+        alloc.primaryAttrId      = c.info.primaryAttrId;
+        alloc.customInstructions = c.info.customInstructions;
+        alloc.nonSvgImages       = c.info.nonSvgImages;
         alloc.sessionCount = qMax(1, qRound(totalSessions * c.weight / totalWeight));
         sessionsAssigned  += alloc.sessionCount;
         result.append(alloc);

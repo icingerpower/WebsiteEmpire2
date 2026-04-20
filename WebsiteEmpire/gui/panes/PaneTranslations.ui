@@ -29,6 +29,13 @@
       </spacer>
      </item>
      <item>
+      <widget class="QPushButton" name="buttonViewCommands">
+       <property name="text">
+        <string>View commands</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QPushButton" name="buttonReload">
        <property name="text">
         <string>Reload</string>

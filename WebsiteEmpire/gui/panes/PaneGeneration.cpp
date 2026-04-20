@@ -12,12 +12,13 @@
 
 #include <QCoreApplication>
 #include <QFile>
+#include <QFileDialog>
 #include <QMessageBox>
 #include <QProcess>
 #include <QPushButton>
 #include <QSqlDatabase>
 #include <QSqlQuery>
-#include <QUuid>
+#include <QTableWidgetItem>
 
 PaneGeneration::PaneGeneration(QWidget *parent)
     : QWidget(parent)
@@ -29,6 +30,9 @@ PaneGeneration::PaneGeneration(QWidget *parent)
 
 PaneGeneration::~PaneGeneration()
 {
+    if (m_activeProcess) {
+        m_activeProcess->disconnect();
+    }
     delete ui;
 }
 
@@ -46,7 +50,10 @@ void PaneGeneration::setup(const QDir           &workingDir,
             this,
             &PaneGeneration::_onStrategySelectionChanged);
 
-    m_domain  = _primaryDomain(engine, settingsTable);
+    m_domain      = _primaryDomain(engine, settingsTable);
+    m_editingLang = (settingsTable && !settingsTable->editingLangCode().isEmpty())
+                        ? settingsTable->editingLangCode()
+                        : QStringLiteral("en");
     m_isSetup = true;
 }
 
@@ -102,14 +109,14 @@ void PaneGeneration::generateOne()
 
     m_lastOkPermalink.clear();
 
-    ui->textEditPrompt->clear();
-    ui->textEditPrompt->append(tr("Running: %1 %2\n").arg(exe, args.join(QLatin1Char(' '))));
+    ui->textEditOutput->clear();
+    ui->textEditOutput->append(tr("Running: %1 %2\n").arg(exe, args.join(QLatin1Char(' '))));
 
     auto *process = new QProcess(this);
+    m_activeProcess = process;
     connect(process, &QProcess::readyReadStandardOutput, this, [this, process]() {
         const QString text = QString::fromUtf8(process->readAllStandardOutput());
-        ui->textEditPrompt->insertPlainText(text);
-        // Parse "[S…] OK: <permalink>" lines to remember what was generated.
+        ui->textEditOutput->insertPlainText(text);
         const QStringList lines = text.split(QLatin1Char('\n'));
         for (const QString &line : lines) {
             const int pos = line.indexOf(QStringLiteral("] OK: "));
@@ -120,13 +127,14 @@ void PaneGeneration::generateOne()
     });
     connect(process, &QProcess::readyReadStandardError, this, [this, process]() {
         const QString text = QString::fromUtf8(process->readAllStandardError());
-        ui->textEditPrompt->insertPlainText(text);
+        ui->textEditOutput->insertPlainText(text);
     });
     connect(process,
             QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this,
             [this](int exitCode, QProcess::ExitStatus) {
-                ui->textEditPrompt->append(
+                m_activeProcess = nullptr;
+                ui->textEditOutput->append(
                     tr("\nProcess finished (exit code %1).").arg(exitCode));
                 computeRemainingToDo();
 
@@ -162,7 +170,7 @@ void PaneGeneration::viewGenCommand()
                                  workDir,
                                  LauncherGeneration::OPTION_NAME,
                                  LauncherGeneration::OPTION_SESSIONS);
-    ui->textEditPrompt->setPlainText(cmd);
+    ui->textEditOutput->setPlainText(cmd);
 }
 
 void PaneGeneration::computeRemainingToDo()
@@ -179,19 +187,16 @@ void PaneGeneration::computeRemainingToDo()
         const QString typeId = m_strategies->data(
             m_strategies->index(row, GenStrategyTable::COL_PAGE_TYPE)).toString();
 
-        // N Done: pages already generated in pages.db
         const int total   = pageRepo.countByTypeId(typeId);
         const int pending = pageRepo.findPendingByTypeId(typeId).size();
         const int done    = total - pending;
 
-        // N Total: rows in the aspire primary table (source data available).
-        // Falls back to the pages.db total when no source table is linked.
-        const QString primaryAttrId = m_strategies->primaryAttrIdForRow(row);
+        // N Total: count from aspire DB when linked; falls back to pages.db count.
         int nTotal = total;
+        const QString primaryAttrId = m_strategies->primaryAttrIdForRow(row);
         if (!primaryAttrId.isEmpty()) {
-            const QString dbPath = m_workingDir.filePath(
-                QStringLiteral("results_db/") + primaryAttrId + QStringLiteral(".db"));
-            if (QFile::exists(dbPath)) {
+            const QString dbPath = _resolvedDbPath(row);
+            if (!dbPath.isEmpty()) {
                 const QString conn = QStringLiteral("pane_count_")
                                    + primaryAttrId
                                    + QStringLiteral("_")
@@ -208,7 +213,7 @@ void PaneGeneration::computeRemainingToDo()
                             dbCount = q.value(0).toInt();
                         }
                     }
-                } // db and q destroyed here — SQLite lock released
+                }
                 QSqlDatabase::removeDatabase(conn);
                 nTotal = dbCount;
             }
@@ -219,14 +224,106 @@ void PaneGeneration::computeRemainingToDo()
     }
 }
 
+void PaneGeneration::linkDb()
+{
+    if (!m_isSetup) {
+        return;
+    }
+    const QModelIndex current = ui->tableViewStrategies->currentIndex();
+    if (!current.isValid()) {
+        return;
+    }
+    const int row = current.row();
+    const QString primaryAttrId = m_strategies->primaryAttrIdForRow(row);
+    if (primaryAttrId.isEmpty()) {
+        return;
+    }
+
+    const QString dbPath = QFileDialog::getOpenFileName(
+        this,
+        tr("Link source database for '%1'").arg(primaryAttrId),
+        QString{},
+        tr("SQLite databases (*.db)"));
+    if (dbPath.isEmpty()) {
+        return;
+    }
+
+    m_strategies->setPrimaryDbPath(row, dbPath);
+    computeRemainingToDo();
+    _onStrategySelectionChanged(current, QModelIndex{});
+}
+
 // ---- Private slots ----------------------------------------------------------
 
 void PaneGeneration::_onStrategySelectionChanged(const QModelIndex &current,
                                                   const QModelIndex & /*previous*/)
 {
     const bool hasSelection = current.isValid();
-    ui->buttonGenOne->setEnabled(hasSelection);
-    ui->buttonCommandGen->setEnabled(hasSelection);
+
+    if (!hasSelection) {
+        ui->buttonGenOne->setEnabled(false);
+        ui->buttonCommandGen->setEnabled(false);
+        ui->buttonLinkDb->setEnabled(false);
+        ui->textEditPrompt->clear();
+        ui->tableWidgetStrategyParams->setRowCount(0);
+        return;
+    }
+
+    const int row = current.row();
+    const QString primaryAttrId = m_strategies->primaryAttrIdForRow(row);
+    const bool needsDb       = !primaryAttrId.isEmpty();
+    const QString resolvedDb = needsDb ? _resolvedDbPath(row) : QString{};
+    const bool dbReady       = !needsDb || !resolvedDb.isEmpty();
+
+    ui->buttonGenOne->setEnabled(dbReady);
+    ui->buttonCommandGen->setEnabled(dbReady);
+    ui->buttonLinkDb->setEnabled(needsDb);
+
+    ui->textEditPrompt->setPlainText(m_strategies->customInstructionsForRow(row));
+
+    // Build parameter rows dynamically so we can add the DB path when needed.
+    struct ParamRow { QString label; QString value; bool warn = false; };
+    QList<ParamRow> paramRows;
+
+    const auto colVal = [&](int c) {
+        return m_strategies->data(m_strategies->index(row, c)).toString();
+    };
+
+    paramRows.append({ tr("Name"),         colVal(GenStrategyTable::COL_NAME) });
+    paramRows.append({ tr("Page type"),    colVal(GenStrategyTable::COL_PAGE_TYPE) });
+    paramRows.append({ tr("Theme"),        colVal(GenStrategyTable::COL_THEME) });
+    paramRows.append({ tr("Images"),       colVal(GenStrategyTable::COL_NON_SVG_IMAGES) });
+    paramRows.append({ tr("Source table"), colVal(GenStrategyTable::COL_PRIMARY_ATTR_ID) });
+    paramRows.append({ tr("Priority"),     colVal(GenStrategyTable::COL_PRIORITY) });
+    {
+        const QString done  = colVal(GenStrategyTable::COL_N_DONE);
+        const QString total = colVal(GenStrategyTable::COL_N_TOTAL);
+        paramRows.append({ tr("Done / Total"), done + QStringLiteral(" / ") + total });
+    }
+    if (needsDb) {
+        if (resolvedDb.isEmpty()) {
+            paramRows.append({ tr("DB path"),
+                               tr("Not linked — click \"Link to DB\""),
+                               true });
+        } else {
+            paramRows.append({ tr("DB path"), resolvedDb });
+        }
+    }
+
+    auto *tw = ui->tableWidgetStrategyParams;
+    tw->setRowCount(paramRows.size());
+
+    for (int i = 0; i < paramRows.size(); ++i) {
+        const auto &p = paramRows.at(i);
+        tw->setItem(i, 0, new QTableWidgetItem(p.label));
+        auto *valItem = new QTableWidgetItem(p.value);
+        if (p.warn) {
+            valItem->setForeground(Qt::red);
+        }
+        tw->setItem(i, 1, valItem);
+    }
+    tw->resizeColumnsToContents();
+    tw->horizontalHeader()->setStretchLastSection(true);
 }
 
 // ---- Private ----------------------------------------------------------------
@@ -253,6 +350,28 @@ void PaneGeneration::_connectSlots()
             &QPushButton::clicked,
             this,
             &PaneGeneration::computeRemainingToDo);
+    connect(ui->buttonLinkDb,
+            &QPushButton::clicked,
+            this,
+            &PaneGeneration::linkDb);
+}
+
+QString PaneGeneration::_resolvedDbPath(int row) const
+{
+    const QString primaryAttrId = m_strategies->primaryAttrIdForRow(row);
+    if (primaryAttrId.isEmpty()) {
+        return {};
+    }
+    const QString stdPath = m_workingDir.filePath(
+        QStringLiteral("results_db/") + primaryAttrId + QStringLiteral(".db"));
+    if (QFile::exists(stdPath)) {
+        return stdPath;
+    }
+    const QString stored = m_strategies->primaryDbPathForRow(row);
+    if (!stored.isEmpty() && QFile::exists(stored)) {
+        return stored;
+    }
+    return {};
 }
 
 QString PaneGeneration::_primaryDomain(AbstractEngine       *engine,
@@ -264,7 +383,6 @@ QString PaneGeneration::_primaryDomain(AbstractEngine       *engine,
 
     const QString editingLang = settingsTable->editingLangCode();
 
-    // Prefer the domain matching the editing language; fall back to the first row.
     QString domain;
     for (int i = 0; i < engine->rowCount(); ++i) {
         const QString lang = engine->data(
@@ -280,7 +398,6 @@ QString PaneGeneration::_primaryDomain(AbstractEngine       *engine,
             engine->index(0, AbstractEngine::COL_DOMAIN)).toString();
     }
 
-    // Strip trailing slash so we can safely prepend the permalink's leading slash.
     if (domain.endsWith(QLatin1Char('/'))) {
         domain.chop(1);
     }

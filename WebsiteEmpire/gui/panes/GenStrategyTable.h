@@ -25,8 +25,9 @@ public:
     static constexpr int COL_THEME            = 2;
     static constexpr int COL_NON_SVG_IMAGES   = 3;
     static constexpr int COL_PRIMARY_ATTR_ID  = 4; // AbstractPageAttributes::getId() of the aspire primary table
-    static constexpr int COL_N_DONE           = 5;
-    static constexpr int COL_N_TOTAL          = 6;
+    static constexpr int COL_PRIORITY         = 5; // generation priority: 1 = first (normal), 2+ = improvement passes
+    static constexpr int COL_N_DONE           = 6;
+    static constexpr int COL_N_TOTAL          = 7;
 
     explicit GenStrategyTable(const QDir &workingDir, QObject *parent = nullptr);
 
@@ -34,12 +35,15 @@ public:
     // themeId may be empty to mean "all themes".
     // customInstructions may be empty to use the generic prompt.
     // primaryAttrId may be empty to mean "no source table linked".
+    // priority 1 = normal generation pass; 2+ = improvement passes used when
+    //   a page generated with a lower priority number performs poorly.
     QString addRow(const QString &name,
                    const QString &pageTypeId,
                    const QString &themeId,
                    const QString &customInstructions,
                    bool           nonSvgImages,
-                   const QString &primaryAttrId = QString{});
+                   const QString &primaryAttrId = QString{},
+                   int            priority = 1);
 
     // Updates the progress counters for a row and saves.  Used by
     // PaneGeneration::computeRemainingToDo() — never written by the launcher
@@ -58,6 +62,17 @@ public:
 
     // Returns the primaryAttrId for visual row (empty = no source table linked).
     QString primaryAttrIdForRow(int row) const;
+
+    // Returns the resolved path to the aspire DB for visual row.
+    // Set automatically when the user picks the file via the Import dialog.
+    // Empty = use the standard results_db/<primaryAttrId>.db convention.
+    QString primaryDbPathForRow(int row) const;
+
+    // Persists the resolved aspire DB path for visual row and saves strategies.json.
+    void setPrimaryDbPath(int row, const QString &path);
+
+    // Returns the priority for visual row (1 = normal, 2+ = improvement passes).
+    int priorityForRow(int row) const;
 
     // Returns the visual row index for id, or -1 if not found.
     int rowForId(const QString &id) const;
@@ -78,7 +93,9 @@ private:
         QString themeId;             // empty = all themes
         QString customInstructions;  // empty = use generic prompt
         QString primaryAttrId;       // AbstractPageAttributes::getId() of the aspire primary table; empty = none
+        QString primaryDbPath;       // absolute path to the aspire DB file; empty = use results_db/ convention
         bool    nonSvgImages = false;
+        int     priority = 1;
         int     nDone  = 0;
         int     nTotal = 0;
     };

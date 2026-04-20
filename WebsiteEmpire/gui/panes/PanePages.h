@@ -77,6 +77,12 @@ private:
     int _selectedPageId() const;
 
     /**
+     * Returns the id column values for all currently selected rows.
+     * Returns an empty list when nothing is selected.
+     */
+    QList<int> _selectedPageIds() const;
+
+    /**
      * Hides/shows rows in tableViewPages based on the current comboBoxPageType
      * selection.  An empty typeId (index 0, "All page types") shows every row.
      */

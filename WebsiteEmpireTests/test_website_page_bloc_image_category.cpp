@@ -56,6 +56,9 @@ public:
     QList<PageRecord> findPendingByTypeId(const QString &) const override { return {}; }
     int countByTypeId(const QString &) const override { return 0; }
     void setGeneratedAt(int, const QString &) override {}
+    void recordStrategyAttempt(int, const QString &) override {}
+    QStringList strategyAttempts(int) const override { return {}; }
+    QList<PageRecord> findGeneratedByTypeId(const QString &) const override { return {}; }
     void setLangCodesToTranslate(int, const QStringList &) override {}
 
 private:

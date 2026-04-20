@@ -45,6 +45,10 @@ public:
     int                              countByTypeId(const QString &typeId) const override;
     void                             setGeneratedAt(int id,
                                                     const QString &utcIso) override;
+    void                             recordStrategyAttempt(int pageId,
+                                                           const QString &strategyId) override;
+    QStringList                      strategyAttempts(int pageId) const override;
+    QList<PageRecord>                findGeneratedByTypeId(const QString &typeId) const override;
     void                             setLangCodesToTranslate(int id,
                                                              const QStringList &langs) override;
 

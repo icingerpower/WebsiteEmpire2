@@ -13,6 +13,8 @@ class DialogAddGeneration;
 // Modal dialog for collecting the data needed to add a new generation strategy.
 //
 // The OK button is disabled until a non-empty name is entered.
+// When custom instructions are provided, they must contain [TOPIC]; otherwise
+// clicking OK shows a QMessageBox::warning and the dialog stays open.
 // The Theme row (label + combo) is hidden when only one theme is registered,
 // since there is no meaningful choice to make.  In that case themeId() returns
 // an empty string (meaning "all themes / no theme filter").
@@ -40,6 +42,7 @@ public:
 
 private slots:
     void _onNameChanged(const QString &text);
+    void _onAccepted();
 
 private:
     Ui::DialogAddGeneration *ui;

@@ -113,21 +113,23 @@ void PanePages::editPage()
 
 void PanePages::removePage()
 {
-    const int id = _selectedPageId();
-    if (id < 0) {
-        QMessageBox::warning(this, tr("No selection"), tr("Please select a page to remove."));
+    const QList<int> ids = _selectedPageIds();
+    if (ids.isEmpty()) {
+        QMessageBox::warning(this, tr("No selection"), tr("Please select one or more pages to remove."));
         return;
     }
     const auto btn = QMessageBox::question(
         this,
-        tr("Remove page"),
-        tr("Are you sure you want to remove this page? This action cannot be undone."),
+        tr("Remove page(s)"),
+        tr("Are you sure you want to remove %n page(s)? This action cannot be undone.", nullptr, ids.size()),
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);
     if (btn != QMessageBox::Yes) {
         return;
     }
-    m_pageRepo->remove(id);
+    for (const int id : ids) {
+        m_pageRepo->remove(id);
+    }
     _refreshModel();
     _updateHomeButton();
     _updateLegalButton();
@@ -464,6 +466,20 @@ int PanePages::_selectedPageId() const
     const QModelIndex srcIdx = m_proxyModel->mapToSource(idx);
     const QModelIndex idIdx  = m_model->index(srcIdx.row(), 0);
     return m_model->data(idIdx).toInt();
+}
+
+QList<int> PanePages::_selectedPageIds() const
+{
+    const QModelIndexList selected =
+        ui->tableViewPages->selectionModel()->selectedRows();
+    QList<int> ids;
+    ids.reserve(selected.size());
+    for (const QModelIndex &proxyIdx : selected) {
+        const QModelIndex srcIdx = m_proxyModel->mapToSource(proxyIdx);
+        const QModelIndex idIdx  = m_model->index(srcIdx.row(), 0);
+        ids.append(m_model->data(idIdx).toInt());
+    }
+    return ids;
 }
 
 void PanePages::_applyTypeFilter()

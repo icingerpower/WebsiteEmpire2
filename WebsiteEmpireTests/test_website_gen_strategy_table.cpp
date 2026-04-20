@@ -168,13 +168,13 @@ private slots:
 
     // ==== rowCount / columnCount ============================================
 
-    void test_strategy_table_column_count_is_seven()
+    void test_strategy_table_column_count_is_eight()
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         GenStrategyTable table(QDir(dir.path()));
-        // Name, PageType, Theme, NonSvgImages, PrimaryAttrId, NDone, NTotal
-        QCOMPARE(table.columnCount(), 7);
+        // Name, PageType, Theme, NonSvgImages, PrimaryAttrId, Priority, NDone, NTotal
+        QCOMPARE(table.columnCount(), 8);
     }
 
     void test_strategy_table_column_count_with_valid_parent_returns_zero()
@@ -201,7 +201,7 @@ private slots:
 
     void test_strategy_table_col_constants_cover_all_columns()
     {
-        // All seven column constants must be in [0, columnCount)
+        // All eight column constants must be in [0, columnCount)
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         GenStrategyTable table(QDir(dir.path()));
@@ -211,6 +211,7 @@ private slots:
         QVERIFY(GenStrategyTable::COL_THEME            >= 0 && GenStrategyTable::COL_THEME            < n);
         QVERIFY(GenStrategyTable::COL_NON_SVG_IMAGES   >= 0 && GenStrategyTable::COL_NON_SVG_IMAGES   < n);
         QVERIFY(GenStrategyTable::COL_PRIMARY_ATTR_ID  >= 0 && GenStrategyTable::COL_PRIMARY_ATTR_ID  < n);
+        QVERIFY(GenStrategyTable::COL_PRIORITY         >= 0 && GenStrategyTable::COL_PRIORITY         < n);
         QVERIFY(GenStrategyTable::COL_N_DONE           >= 0 && GenStrategyTable::COL_N_DONE           < n);
         QVERIFY(GenStrategyTable::COL_N_TOTAL          >= 0 && GenStrategyTable::COL_N_TOTAL          < n);
     }
@@ -223,6 +224,7 @@ private slots:
             GenStrategyTable::COL_THEME,
             GenStrategyTable::COL_NON_SVG_IMAGES,
             GenStrategyTable::COL_PRIMARY_ATTR_ID,
+            GenStrategyTable::COL_PRIORITY,
             GenStrategyTable::COL_N_DONE,
             GenStrategyTable::COL_N_TOTAL,
         };
@@ -383,6 +385,47 @@ private slots:
         GenStrategyTable table(QDir(dir.path()));
         QCOMPARE(table.primaryAttrIdForRow(0), QString{});
         QCOMPARE(table.primaryAttrIdForRow(-1), QString{});
+    }
+
+    // ==== priorityForRow ====================================================
+
+    void test_strategy_table_priority_defaults_to_one()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        GenStrategyTable table(QDir(dir.path()));
+        table.addRow(QStringLiteral("A"), QStringLiteral("article"),
+                     QString{}, QString{}, false);
+        QCOMPARE(table.priorityForRow(0), 1);
+    }
+
+    void test_strategy_table_priority_for_row_returns_set_value()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        GenStrategyTable table(QDir(dir.path()));
+        table.addRow(QStringLiteral("A"), QStringLiteral("article"),
+                     QString{}, QString{}, false, QString{}, 3);
+        QCOMPARE(table.priorityForRow(0), 3);
+    }
+
+    void test_strategy_table_priority_for_row_out_of_range_returns_one()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        GenStrategyTable table(QDir(dir.path()));
+        QCOMPARE(table.priorityForRow(0), 1);
+        QCOMPARE(table.priorityForRow(-1), 1);
+    }
+
+    void test_strategy_table_priority_clamped_to_one_minimum()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        GenStrategyTable table(QDir(dir.path()));
+        table.addRow(QStringLiteral("A"), QStringLiteral("article"),
+                     QString{}, QString{}, false, QString{}, 0);
+        QCOMPARE(table.priorityForRow(0), 1);
     }
 
     // ==== setNDone ==========================================================
@@ -588,6 +631,16 @@ private slots:
                      QStringLiteral("PageAttributesUnknownXYZ"));
         QCOMPARE(table.data(table.index(0, GenStrategyTable::COL_PRIMARY_ATTR_ID)).toString(),
                  QStringLiteral("PageAttributesUnknownXYZ"));
+    }
+
+    void test_strategy_table_data_col_priority_initial_is_one()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        GenStrategyTable table(QDir(dir.path()));
+        table.addRow(QStringLiteral("A"), QStringLiteral("article"),
+                     QString{}, QString{}, false);
+        QCOMPARE(table.data(table.index(0, GenStrategyTable::COL_PRIORITY)).toInt(), 1);
     }
 
     void test_strategy_table_data_col_n_done_initial_is_zero()
@@ -925,6 +978,19 @@ private slots:
                  QStringLiteral("No"));
     }
 
+    void test_strategy_table_persists_priority()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        {
+            GenStrategyTable t(QDir(dir.path()));
+            t.addRow(QStringLiteral("A"), QStringLiteral("article"),
+                     QString{}, QString{}, false, QString{}, 2);
+        }
+        GenStrategyTable t2(QDir(dir.path()));
+        QCOMPARE(t2.priorityForRow(0), 2);
+    }
+
     void test_strategy_table_persists_n_done_after_set()
     {
         QTemporaryDir dir;
@@ -1033,6 +1099,27 @@ private slots:
         QCOMPARE(table.data(table.index(0, GenStrategyTable::COL_NAME)).toString(),
                  QStringLiteral("Legacy Row"));
         QCOMPARE(table.data(table.index(0, GenStrategyTable::COL_N_DONE)).toInt(), 5);
+    }
+
+    void test_strategy_table_migration_missing_priority_defaults_to_one()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QJsonObject row;
+        row[QStringLiteral("id")]                 = QStringLiteral("legacy-uuid-5678");
+        row[QStringLiteral("name")]               = QStringLiteral("Old Strategy");
+        row[QStringLiteral("pageTypeId")]         = QStringLiteral("article");
+        row[QStringLiteral("themeId")]            = QString{};
+        row[QStringLiteral("customInstructions")] = QString{};
+        row[QStringLiteral("nonSvgImages")]       = false;
+        row[QStringLiteral("nDone")]              = 0;
+        row[QStringLiteral("nTotal")]             = 5;
+        // "priority" key intentionally absent — must load as 1
+        QVERIFY(writeJson(dir, QJsonArray{row}));
+
+        GenStrategyTable table(QDir(dir.path()));
+        QCOMPARE(table.rowCount(), 1);
+        QCOMPARE(table.priorityForRow(0), 1);
     }
 
     void test_strategy_table_migration_row_without_id_gets_generated_id()

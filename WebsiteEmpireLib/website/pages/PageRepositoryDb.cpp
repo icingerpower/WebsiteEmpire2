@@ -355,6 +355,55 @@ void PageRepositoryDb::setGeneratedAt(int id, const QString &utcIso)
 }
 
 // =============================================================================
+// Strategy attempt tracking
+// =============================================================================
+
+void PageRepositoryDb::recordStrategyAttempt(int pageId, const QString &strategyId)
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "INSERT INTO strategy_attempts (page_id, strategy_id, attempted_at)"
+        " VALUES (:page_id, :strategy_id, :at)"));
+    q.bindValue(QStringLiteral(":page_id"),     pageId);
+    q.bindValue(QStringLiteral(":strategy_id"), strategyId);
+    q.bindValue(QStringLiteral(":at"),          currentUtc());
+    q.exec();
+}
+
+QStringList PageRepositoryDb::strategyAttempts(int pageId) const
+{
+    QStringList result;
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "SELECT strategy_id FROM strategy_attempts"
+        " WHERE page_id = :page_id ORDER BY id ASC"));
+    q.bindValue(QStringLiteral(":page_id"), pageId);
+    q.exec();
+    while (q.next()) {
+        result.append(q.value(0).toString());
+    }
+    return result;
+}
+
+QList<PageRecord> PageRepositoryDb::findGeneratedByTypeId(const QString &typeId) const
+{
+    QList<PageRecord> result;
+    QSqlQuery q(m_db.database());
+    q.prepare(QString::fromLatin1(SELECT_PAGES)
+              + QStringLiteral(
+                  " WHERE type_id = :typeId"
+                  "   AND source_page_id IS NULL"
+                  "   AND generated_at IS NOT NULL"
+                  " ORDER BY id ASC"));
+    q.bindValue(QStringLiteral(":typeId"), typeId);
+    q.exec();
+    while (q.next()) {
+        result.append(rowToRecord(q));
+    }
+    return result;
+}
+
+// =============================================================================
 // setLangCodesToTranslate
 // =============================================================================
 

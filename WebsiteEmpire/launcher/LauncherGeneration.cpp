@@ -20,21 +20,17 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
-#include <QProcessEnvironment>
-#include <QSettings>
+#include <QFile>
+#include <QProcess>
+#include <QRegularExpression>
+#include <QSet>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QTemporaryDir>
 #include <QTextStream>
 
-#include <QCoro/QCoroSignal>
+#include <QCoro/QCoroProcess>
 #include <QCoro/QCoroTask>
-
-static constexpr const char *CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
-static constexpr const char *CLAUDE_MODEL   = "claude-sonnet-4-6";
 
 const QString LauncherGeneration::OPTION_NAME     = QStringLiteral("generation");
 const QString LauncherGeneration::OPTION_SESSIONS = QStringLiteral("sessions");
@@ -65,18 +61,63 @@ struct GenRunState {
 };
 
 // ---------------------------------------------------------------------------
+// claude CLI helper — mirrors ClaudeRunner in WebsiteAspire; no API key needed
+// ---------------------------------------------------------------------------
+
+static QCoro::Task<QString> runClaudePrompt(const QString &prompt)
+{
+    QTemporaryDir tempDir;
+    if (!tempDir.isValid()) {
+        co_return QStringLiteral("__ERROR__: failed to create temp dir");
+    }
+
+    const QString promptPath = tempDir.path() + QStringLiteral("/prompt.txt");
+    {
+        QFile f(promptPath);
+        if (!f.open(QIODevice::WriteOnly)) {
+            co_return QStringLiteral("__ERROR__: failed to write prompt file");
+        }
+        f.write(prompt.toUtf8());
+    }
+
+    QProcess process;
+    process.setProgram(QStringLiteral("claude"));
+    process.setArguments({QStringLiteral("-p"), QStringLiteral("-"),
+                          QStringLiteral("--dangerously-skip-permissions")});
+    process.setStandardInputFile(promptPath);
+
+    co_await qCoro(process).start();
+    co_await qCoro(process).waitForFinished(-1);
+
+    if (process.error() == QProcess::FailedToStart) {
+        co_return QStringLiteral("__ERROR__: claude executable not found in PATH");
+    }
+    if (process.exitCode() != 0) {
+        co_return QStringLiteral("__ERROR__: ")
+            + QString::fromUtf8(process.readAllStandardError()).trimmed();
+    }
+    co_return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+}
+
+// ---------------------------------------------------------------------------
 // Per-session coroutine
 // ---------------------------------------------------------------------------
 
 static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
-                                               const QString  apiKey,
+                                               QString        strategyId,
                                                AbstractEngine *engine,
                                                int             websiteIndex,
                                                GenRunState    *state,
                                                int             sessionIndex)
 {
-    const int sNum = sessionIndex + 1;
-    QNetworkAccessManager nam;
+    int sNum = sessionIndex + 1;
+    // PageRepositoryDb holds a PageDb& (reference member) so both types have deleted
+    // move/default constructors.  Declaring them here — before any co_await — means
+    // GCC knows they are always initialised in the frame and never needs to generate
+    // a default-constructor call for them.
+    QDir             workDir = WorkingDirectoryManager::instance()->workingDir();
+    PageDb           pageDb(workDir);
+    PageRepositoryDb pageRepo(pageDb);
 
     while (!g_stopRequested && queue->hasNext()) {
         // Honour --limit if set.
@@ -85,7 +126,7 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
             break;
         }
 
-        const PageRecord page = queue->peekNext();
+        PageRecord page = queue->peekNext();
         queue->advance();
 
         *(state->out) << QStringLiteral("[S%1] Generating page %2 (%3, %4 remaining)\n")
@@ -95,69 +136,55 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
                              .arg(queue->pendingCount());
         state->out->flush();
 
-        // ---- Build Claude API request -------------------------------------
-        const QString prompt = queue->buildPrompt(page, *engine, websiteIndex);
+        // ---- Step 1: free-form content draft -----------------------------
+        QString step1Prompt = queue->buildStep1Prompt(page, *engine, websiteIndex);
+        QString step1Text   = co_await runClaudePrompt(step1Prompt);
 
-        QJsonObject msgObj;
-        msgObj[QStringLiteral("role")]    = QStringLiteral("user");
-        msgObj[QStringLiteral("content")] = prompt;
-
-        QJsonObject body;
-        body[QStringLiteral("model")]      = QLatin1StringView(CLAUDE_MODEL);
-        body[QStringLiteral("max_tokens")] = 4096;
-        body[QStringLiteral("messages")]   = QJsonArray{msgObj};
-
-        const QByteArray bodyBytes = QJsonDocument(body).toJson(QJsonDocument::Compact);
-
-        QNetworkRequest req{QUrl(QLatin1StringView(CLAUDE_API_URL))};
-        req.setHeader(QNetworkRequest::ContentTypeHeader,
-                      QByteArrayLiteral("application/json"));
-        req.setRawHeader(QByteArrayLiteral("x-api-key"),         apiKey.toUtf8());
-        req.setRawHeader(QByteArrayLiteral("anthropic-version"),
-                         QByteArrayLiteral("2023-06-01"));
-
-        QNetworkReply *reply = nam.post(req, bodyBytes);
-        co_await qCoro(reply, &QNetworkReply::finished);
-
-        if (reply->error() != QNetworkReply::NoError) {
-            *(state->out) << QStringLiteral("[S%1] FAIL (network): %2 — %3\n")
-                                 .arg(sNum)
-                                 .arg(page.permalink, reply->errorString());
-            state->out->flush();
-            reply->deleteLater();
-            continue;
-        }
-
-        // ---- Parse API response ------------------------------------------
-        const QByteArray raw = reply->readAll();
-        reply->deleteLater();
-
-        const QJsonDocument doc   = QJsonDocument::fromJson(raw);
-        const QJsonArray    cont  = doc.object()[QStringLiteral("content")].toArray();
-        if (cont.isEmpty()) {
-            const QString apiErr = doc.object()[QStringLiteral("error")]
-                                       .toObject()[QStringLiteral("message")]
-                                       .toString();
-            *(state->out) << QStringLiteral("[S%1] FAIL (API): %2 — %3\n")
-                                 .arg(sNum)
-                                 .arg(page.permalink,
-                                      apiErr.isEmpty() ? QStringLiteral("empty content")
-                                                       : apiErr);
+        if (step1Text.startsWith(QStringLiteral("__ERROR__"))) {
+            *(state->out) << QStringLiteral("[S%1] FAIL (step1): %2 — %3\n")
+                                 .arg(sNum).arg(page.permalink, step1Text);
             state->out->flush();
             continue;
         }
 
-        const QString responseText =
-            cont.at(0).toObject()[QStringLiteral("text")].toString();
+        *(state->out) << QStringLiteral("[S%1] Step 1 done: %2\n")
+                             .arg(sNum).arg(page.permalink);
+        state->out->flush();
+
+        // ---- Step 2: reformat draft into JSON ----------------------------
+        QString step2FullPrompt = QStringLiteral(
+            "The following is a draft response to a web content writing request.\n\n"
+            "=== Original Request ===\n")
+            + step1Prompt
+            + QStringLiteral("\n\n=== Draft Response ===\n")
+            + step1Text
+            + QStringLiteral("\n\n=== Formatting Task ===\n")
+            + queue->buildStep2Prompt();
+        QString responseText = co_await runClaudePrompt(step2FullPrompt);
+
+        if (responseText.startsWith(QStringLiteral("__ERROR__"))) {
+            *(state->out) << QStringLiteral("[S%1] FAIL (step2): %2 — %3\n")
+                                 .arg(sNum).arg(page.permalink, responseText);
+            state->out->flush();
+            continue;
+        }
+
+        // ---- For source-DB-backed pages (id == 0), create the row first --
+        int pageId = page.id;
+        if (pageId == 0) {
+            pageId = pageRepo.create(page.typeId, page.permalink, page.lang);
+            if (pageId <= 0) {
+                // Permalink already exists (race between sessions) — skip.
+                *(state->out) << QStringLiteral("[S%1] SKIP (exists): %2\n")
+                                     .arg(sNum).arg(page.permalink);
+                state->out->flush();
+                continue;
+            }
+        }
 
         // ---- Save result -------------------------------------------------
-        // GenPageQueue::processReply needs a live IPageRepository.
-        // We use a dedicated PageDb per session to avoid cross-thread locks.
-        const QDir workDir = WorkingDirectoryManager::instance()->workingDir();
-        PageDb            pageDb(workDir);
-        PageRepositoryDb  pageRepo(pageDb);
-
-        if (queue->processReply(page.id, responseText, pageRepo)) {
+        if (queue->processReply(pageId, responseText, pageRepo)) {
+            pageRepo.recordStrategyAttempt(pageId, strategyId);
             state->jobsCompleted.fetch_add(1);
             *(state->out) << QStringLiteral("[S%1] OK: %2\n")
                                  .arg(sNum).arg(page.permalink);
@@ -216,15 +243,6 @@ void LauncherGeneration::run(const QString & /*value*/)
     // ---- Resolve engine and API key ---------------------------------------
     const QDir workingDir = WorkingDirectoryManager::instance()->workingDir();
     const auto &settings  = WorkingDirectoryManager::instance()->settings();
-
-    const QString apiKey = QProcessEnvironment::systemEnvironment()
-                               .value(QStringLiteral("ANTHROPIC_API_KEY"));
-    if (apiKey.isEmpty()) {
-        *out << QStringLiteral("ERROR: ANTHROPIC_API_KEY environment variable is not set.\n");
-        out->flush();
-        QCoreApplication::quit();
-        return;
-    }
 
     const QString engineId = settings->value(QStringLiteral("engineId")).toString();
     const AbstractEngine *proto = AbstractEngine::ALL_ENGINES().value(engineId, nullptr);
@@ -285,18 +303,132 @@ void LauncherGeneration::run(const QString & /*value*/)
     PageDb           schedDb(workingDir);
     PageRepositoryDb schedRepo(schedDb);
 
+    // ---- Build virtual pages for source-DB-backed strategies ----------------
+    // For strategies that reference an aspire DB (primaryAttrId != ""), we read
+    // items from results_db/<primaryAttrId>.db and build PageRecord items with
+    // id == 0 for those not yet present in pages.db.  The page row is created
+    // atomically in runGenerationSession just before saving the generated content.
+
+    static const QRegularExpression reNonAlnum(QStringLiteral("[^a-z0-9]+"));
+
+    // Pre-load all existing permalinks once (avoid repeated findAll() calls).
+    const QList<PageRecord> allExistingPages = schedRepo.findAll();
+    QSet<QString> allExistingPermalinks;
+    allExistingPermalinks.reserve(allExistingPages.size());
+    for (const PageRecord &p : std::as_const(allExistingPages)) {
+        allExistingPermalinks.insert(p.permalink);
+    }
+
+    // virtualPagesByStrategyId — keyed by stable strategy UUID
+    QHash<QString, QList<PageRecord>> virtualPagesByStrategyId;
+
     // Build GUI-independent strategy list for the scheduler.
+    // Normal generation only runs priority-1 strategies; higher priorities are
+    // reserved for the --improve pass on underperforming pages.
     QList<GenScheduler::StrategyInfo> strategyInfos;
     strategyInfos.reserve(strategyTable->rowCount());
     for (int row = 0; row < strategyTable->rowCount(); ++row) {
+        const int prio = strategyTable->priorityForRow(row);
+        if (prio != 1) {
+            continue;
+        }
         GenScheduler::StrategyInfo info;
-        info.strategyId   = strategyTable->idForRow(row);
-        info.pageTypeId   = strategyTable->data(
+        info.strategyId         = strategyTable->idForRow(row);
+        info.pageTypeId         = strategyTable->data(
             strategyTable->index(row, GenStrategyTable::COL_PAGE_TYPE)).toString();
-        info.themeId      = strategyTable->themeIdForRow(row);
-        info.nonSvgImages = strategyTable->data(
+        info.themeId            = strategyTable->themeIdForRow(row);
+        info.customInstructions = strategyTable->customInstructionsForRow(row);
+        info.primaryAttrId      = strategyTable->primaryAttrIdForRow(row);
+        info.nonSvgImages       = strategyTable->data(
             strategyTable->index(row, GenStrategyTable::COL_NON_SVG_IMAGES)).toString()
             == QStringLiteral("Yes");
+        info.priority           = prio;
+
+        // For source-DB-backed strategies, read aspire DB and compute pending items.
+        if (!info.primaryAttrId.isEmpty()) {
+            // Resolve DB path: stored path first, then results_db/ convention.
+            QString dbPath = strategyTable->primaryDbPathForRow(row);
+            if (dbPath.isEmpty() || !QFile::exists(dbPath)) {
+                dbPath = workingDir.filePath(
+                    QStringLiteral("results_db/") + info.primaryAttrId + QStringLiteral(".db"));
+            }
+
+            QList<PageRecord> virtualPages;
+
+            *out << QStringLiteral("Source DB for '%1': %2 — %3\n")
+                        .arg(info.pageTypeId,
+                             dbPath,
+                             QFile::exists(dbPath) ? QStringLiteral("found") : QStringLiteral("NOT FOUND"));
+            out->flush();
+
+            if (QFile::exists(dbPath)) {
+                const QString connName = QStringLiteral("gen_src_") + info.strategyId;
+                QString nameColumn;
+                QStringList names;
+                {
+                    QSqlDatabase srcDb = QSqlDatabase::addDatabase(
+                        QStringLiteral("QSQLITE"), connName);
+                    srcDb.setDatabaseName(dbPath);
+                    if (srcDb.open()) {
+                        QSqlQuery pq(srcDb);
+                        if (pq.exec(QStringLiteral("PRAGMA table_info(records)"))) {
+                            while (pq.next()) {
+                                const QString col = pq.value(1).toString();
+                                if (col != QStringLiteral("id") && nameColumn.isEmpty()) {
+                                    nameColumn = col;
+                                }
+                            }
+                        }
+                        if (!nameColumn.isEmpty()) {
+                            QSqlQuery q(srcDb);
+                            q.exec(QStringLiteral("SELECT ") + nameColumn
+                                   + QStringLiteral(" FROM records ORDER BY id"));
+                            while (q.next()) {
+                                const QString v = q.value(0).toString().trimmed();
+                                if (!v.isEmpty()) {
+                                    names << v;
+                                }
+                            }
+                        }
+                    }
+                }
+                QSqlDatabase::removeDatabase(connName);
+
+                for (const QString &name : std::as_const(names)) {
+                    QString slug = name.toLower();
+                    slug.replace(reNonAlnum, QStringLiteral("-"));
+                    while (slug.startsWith(QLatin1Char('-'))) { slug.remove(0, 1); }
+                    while (slug.endsWith(QLatin1Char('-')))   { slug.chop(1); }
+                    if (slug.isEmpty()) { continue; }
+
+                    const QString permalink = QLatin1Char('/') + slug;
+                    if (allExistingPermalinks.contains(permalink)) { continue; }
+
+                    PageRecord vp;
+                    vp.id        = 0;
+                    vp.typeId    = info.pageTypeId;
+                    vp.permalink = permalink;
+                    vp.lang      = editingLang;
+                    virtualPages.append(vp);
+                }
+
+                if (jobsLimit >= 0 && virtualPages.size() > jobsLimit) {
+                    virtualPages = virtualPages.mid(0, jobsLimit);
+                }
+            }
+
+            if (!virtualPages.isEmpty()) {
+                info.pendingCountOverride = virtualPages.size();
+                *out << QStringLiteral("  → %1 item(s) pending (already in pages.db excluded)\n")
+                            .arg(info.pendingCountOverride);
+                out->flush();
+                virtualPagesByStrategyId.insert(info.strategyId, std::move(virtualPages));
+            }
+            // When virtualPages is empty (all items already in pages.db), leave
+            // pendingCountOverride == -1 so the scheduler falls back to
+            // findPendingByTypeId() — existing pending stubs still get processed.
+        }
+
         strategyInfos.append(info);
     }
 
@@ -321,15 +453,32 @@ void LauncherGeneration::run(const QString & /*value*/)
     state->out       = out;
 
     for (const auto &alloc : std::as_const(allocations)) {
-        // Each queue uses its own PageDb connection (thread-safe isolation).
-        PageDb           *queueDb   = new PageDb(workingDir);
-        PageRepositoryDb *queueRepo = new PageRepositoryDb(*queueDb);
+        GenPageQueue *queue = nullptr;
 
-        auto *queue = new GenPageQueue(alloc.pageTypeId,
-                                        alloc.nonSvgImages,
-                                        *queueRepo,
-                                        *categoryTable,
-                                        jobsLimit);
+        if (!alloc.primaryAttrId.isEmpty()
+            && virtualPagesByStrategyId.contains(alloc.strategyId)) {
+            // Source-DB-backed strategy: use pre-built virtual pages.
+            auto &vPages = virtualPagesByStrategyId[alloc.strategyId];
+            queue = new GenPageQueue(alloc.pageTypeId,
+                                     alloc.nonSvgImages,
+                                     vPages,
+                                     *categoryTable,
+                                     alloc.customInstructions);
+        } else {
+            // Classic strategy: read pending pages from pages.db.
+            PageDb           *queueDb   = new PageDb(workingDir);
+            PageRepositoryDb *queueRepo = new PageRepositoryDb(*queueDb);
+            queue = new GenPageQueue(alloc.pageTypeId,
+                                     alloc.nonSvgImages,
+                                     *queueRepo,
+                                     *categoryTable,
+                                     alloc.customInstructions,
+                                     jobsLimit);
+            // queueDb / queueRepo intentionally leak — coroutines hold references
+            // across suspension points; process exit cleans up.
+            Q_UNUSED(queueDb)
+            Q_UNUSED(queueRepo)
+        }
 
         state->activeCount += alloc.sessionCount;
 
@@ -339,15 +488,10 @@ void LauncherGeneration::run(const QString & /*value*/)
                     .arg(queue->pendingCount());
 
         for (int s = 0; s < alloc.sessionCount; ++s) {
-            runGenerationSession(queue, apiKey, engine, 0 /*websiteIndex*/,
+            runGenerationSession(queue, alloc.strategyId,
+                                  engine, 0 /*websiteIndex*/,
                                   state, state->activeCount - alloc.sessionCount + s);
         }
-
-        // queueDb and queueRepo are intentionally not deleted here: the
-        // coroutines reference them across suspension points.  They leak
-        // on process exit — acceptable for a short-lived CLI tool.
-        Q_UNUSED(queueDb)
-        Q_UNUSED(queueRepo)
     }
 
     out->flush();

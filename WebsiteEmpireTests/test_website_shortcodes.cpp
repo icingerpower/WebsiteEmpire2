@@ -8,6 +8,8 @@
 #include "website/shortcodes/ShortCodeImageFix.h"
 #include "website/shortcodes/ShortCodeImageTr.h"
 #include "website/shortcodes/ShortCodeTitle.h"
+#include "website/shortcodes/ShortCodeBold.h"
+#include "website/shortcodes/ShortCodeItalic.h"
 #include "website/EngineArticles.h"
 #include "ExceptionWithTitleText.h"
 
@@ -293,6 +295,46 @@ private slots:
     void test_title_add_code_unknown_argument_throws();
     void test_title_add_code_mismatched_tags_throws();
     void test_title_add_code_duplicate_argument_throws();
+
+    // --- ShortCodeBold: identity & argument contract ---
+    void test_bold_tag_name();
+    void test_bold_available_arguments_count();
+
+    // --- ShortCodeBold: registry & factory ---
+    void test_bold_registered_in_all_shortcodes();
+    void test_bold_for_tag_returns_instance();
+
+    // --- ShortCodeBold: addCode output ---
+    void test_bold_add_code_strong_tag_in_html();
+    void test_bold_add_code_inner_content_in_html();
+    void test_bold_add_code_appends_to_existing_html();
+    void test_bold_add_code_does_not_touch_css();
+    void test_bold_add_code_does_not_touch_js();
+    void test_bold_add_code_via_for_tag();
+
+    // --- ShortCodeBold: validation error cases ---
+    void test_bold_add_code_unknown_argument_throws();
+    void test_bold_add_code_mismatched_tags_throws();
+
+    // --- ShortCodeItalic: identity & argument contract ---
+    void test_italic_tag_name();
+    void test_italic_available_arguments_count();
+
+    // --- ShortCodeItalic: registry & factory ---
+    void test_italic_registered_in_all_shortcodes();
+    void test_italic_for_tag_returns_instance();
+
+    // --- ShortCodeItalic: addCode output ---
+    void test_italic_add_code_em_tag_in_html();
+    void test_italic_add_code_inner_content_in_html();
+    void test_italic_add_code_appends_to_existing_html();
+    void test_italic_add_code_does_not_touch_css();
+    void test_italic_add_code_does_not_touch_js();
+    void test_italic_add_code_via_for_tag();
+
+    // --- ShortCodeItalic: validation error cases ---
+    void test_italic_add_code_unknown_argument_throws();
+    void test_italic_add_code_mismatched_tags_throws();
 };
 
 // =============================================================================
@@ -2089,6 +2131,246 @@ void Test_Website_ShortCodes::test_title_add_code_duplicate_argument_throws()
         QString html, css, js;
         QSet<QString> cssDoneIds, jsDoneIds;
         sc.addCode(QStringLiteral("[TITLE level=\"1\" level=\"2\"]Hello[/TITLE]"),
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    }));
+}
+
+// =============================================================================
+// ShortCodeBold — identity & argument contract
+// =============================================================================
+
+void Test_Website_ShortCodes::test_bold_tag_name()
+{
+    ShortCodeBold sc;
+    QCOMPARE(sc.getTag(), QStringLiteral("BOLD"));
+}
+
+void Test_Website_ShortCodes::test_bold_available_arguments_count()
+{
+    ShortCodeBold sc;
+    QCOMPARE(sc.availableArguments().size(), 0);
+}
+
+// =============================================================================
+// ShortCodeBold — registry & factory
+// =============================================================================
+
+void Test_Website_ShortCodes::test_bold_registered_in_all_shortcodes()
+{
+    const auto &all = AbstractShortCode::ALL_SHORTCODES();
+    QVERIFY(all.contains(QStringLiteral("BOLD")));
+    QVERIFY(all.value(QStringLiteral("BOLD")) != nullptr);
+}
+
+void Test_Website_ShortCodes::test_bold_for_tag_returns_instance()
+{
+    const AbstractShortCode *sc = AbstractShortCode::forTag(u"BOLD");
+    QVERIFY(sc != nullptr);
+    QCOMPARE(sc->getTag(), QStringLiteral("BOLD"));
+}
+
+// =============================================================================
+// ShortCodeBold — addCode output
+// =============================================================================
+
+void Test_Website_ShortCodes::test_bold_add_code_strong_tag_in_html()
+{
+    ShortCodeBold sc;
+    const QString html = htmlFrom(sc, QStringLiteral("[BOLD]important[/BOLD]"));
+    QCOMPARE(html, QStringLiteral("<strong>important</strong>"));
+}
+
+void Test_Website_ShortCodes::test_bold_add_code_inner_content_in_html()
+{
+    ShortCodeBold sc;
+    const QString html = htmlFrom(sc, QStringLiteral("[BOLD]key term[/BOLD]"));
+    QVERIFY(html.contains(QStringLiteral("key term")));
+}
+
+void Test_Website_ShortCodes::test_bold_add_code_appends_to_existing_html()
+{
+    ShortCodeBold sc;
+    const QString prefix = QStringLiteral("<p>before</p>");
+    QString html = prefix;
+    QString css, js;
+    QSet<QString> cssDoneIds, jsDoneIds;
+    sc.addCode(QStringLiteral("[BOLD]hi[/BOLD]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    QVERIFY(html.startsWith(prefix));
+    QVERIFY(html.size() > prefix.size());
+}
+
+void Test_Website_ShortCodes::test_bold_add_code_does_not_touch_css()
+{
+    ShortCodeBold sc;
+    QString html, js;
+    QString css = QStringLiteral("existing-css");
+    QSet<QString> cssDoneIds, jsDoneIds;
+    sc.addCode(QStringLiteral("[BOLD]hi[/BOLD]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    QCOMPARE(css, QStringLiteral("existing-css"));
+    QVERIFY(cssDoneIds.isEmpty());
+}
+
+void Test_Website_ShortCodes::test_bold_add_code_does_not_touch_js()
+{
+    ShortCodeBold sc;
+    QString html, css;
+    QString js = QStringLiteral("existing-js");
+    QSet<QString> cssDoneIds, jsDoneIds;
+    sc.addCode(QStringLiteral("[BOLD]hi[/BOLD]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    QCOMPARE(js, QStringLiteral("existing-js"));
+    QVERIFY(jsDoneIds.isEmpty());
+}
+
+void Test_Website_ShortCodes::test_bold_add_code_via_for_tag()
+{
+    const AbstractShortCode *sc = AbstractShortCode::forTag(u"BOLD");
+    QVERIFY(sc != nullptr);
+    const QString html = htmlFrom(*sc, QStringLiteral("[BOLD]via factory[/BOLD]"));
+    QCOMPARE(html, QStringLiteral("<strong>via factory</strong>"));
+}
+
+// =============================================================================
+// ShortCodeBold — validation error cases
+// =============================================================================
+
+void Test_Website_ShortCodes::test_bold_add_code_unknown_argument_throws()
+{
+    ShortCodeBold sc;
+    QVERIFY(throwsShortCodeException([&sc] {
+        QString html, css, js;
+        QSet<QString> cssDoneIds, jsDoneIds;
+        sc.addCode(QStringLiteral("[BOLD class=\"big\"]hi[/BOLD]"),
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    }));
+}
+
+void Test_Website_ShortCodes::test_bold_add_code_mismatched_tags_throws()
+{
+    ShortCodeBold sc;
+    QVERIFY(throwsShortCodeException([&sc] {
+        QString html, css, js;
+        QSet<QString> cssDoneIds, jsDoneIds;
+        sc.addCode(QStringLiteral("[BOLD]hi[/ITALIC]"),
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    }));
+}
+
+// =============================================================================
+// ShortCodeItalic — identity & argument contract
+// =============================================================================
+
+void Test_Website_ShortCodes::test_italic_tag_name()
+{
+    ShortCodeItalic sc;
+    QCOMPARE(sc.getTag(), QStringLiteral("ITALIC"));
+}
+
+void Test_Website_ShortCodes::test_italic_available_arguments_count()
+{
+    ShortCodeItalic sc;
+    QCOMPARE(sc.availableArguments().size(), 0);
+}
+
+// =============================================================================
+// ShortCodeItalic — registry & factory
+// =============================================================================
+
+void Test_Website_ShortCodes::test_italic_registered_in_all_shortcodes()
+{
+    const auto &all = AbstractShortCode::ALL_SHORTCODES();
+    QVERIFY(all.contains(QStringLiteral("ITALIC")));
+    QVERIFY(all.value(QStringLiteral("ITALIC")) != nullptr);
+}
+
+void Test_Website_ShortCodes::test_italic_for_tag_returns_instance()
+{
+    const AbstractShortCode *sc = AbstractShortCode::forTag(u"ITALIC");
+    QVERIFY(sc != nullptr);
+    QCOMPARE(sc->getTag(), QStringLiteral("ITALIC"));
+}
+
+// =============================================================================
+// ShortCodeItalic — addCode output
+// =============================================================================
+
+void Test_Website_ShortCodes::test_italic_add_code_em_tag_in_html()
+{
+    ShortCodeItalic sc;
+    const QString html = htmlFrom(sc, QStringLiteral("[ITALIC]emphasis[/ITALIC]"));
+    QCOMPARE(html, QStringLiteral("<em>emphasis</em>"));
+}
+
+void Test_Website_ShortCodes::test_italic_add_code_inner_content_in_html()
+{
+    ShortCodeItalic sc;
+    const QString html = htmlFrom(sc, QStringLiteral("[ITALIC]technical term[/ITALIC]"));
+    QVERIFY(html.contains(QStringLiteral("technical term")));
+}
+
+void Test_Website_ShortCodes::test_italic_add_code_appends_to_existing_html()
+{
+    ShortCodeItalic sc;
+    const QString prefix = QStringLiteral("<p>before</p>");
+    QString html = prefix;
+    QString css, js;
+    QSet<QString> cssDoneIds, jsDoneIds;
+    sc.addCode(QStringLiteral("[ITALIC]hi[/ITALIC]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    QVERIFY(html.startsWith(prefix));
+    QVERIFY(html.size() > prefix.size());
+}
+
+void Test_Website_ShortCodes::test_italic_add_code_does_not_touch_css()
+{
+    ShortCodeItalic sc;
+    QString html, js;
+    QString css = QStringLiteral("existing-css");
+    QSet<QString> cssDoneIds, jsDoneIds;
+    sc.addCode(QStringLiteral("[ITALIC]hi[/ITALIC]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    QCOMPARE(css, QStringLiteral("existing-css"));
+    QVERIFY(cssDoneIds.isEmpty());
+}
+
+void Test_Website_ShortCodes::test_italic_add_code_does_not_touch_js()
+{
+    ShortCodeItalic sc;
+    QString html, css;
+    QString js = QStringLiteral("existing-js");
+    QSet<QString> cssDoneIds, jsDoneIds;
+    sc.addCode(QStringLiteral("[ITALIC]hi[/ITALIC]"), engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    QCOMPARE(js, QStringLiteral("existing-js"));
+    QVERIFY(jsDoneIds.isEmpty());
+}
+
+void Test_Website_ShortCodes::test_italic_add_code_via_for_tag()
+{
+    const AbstractShortCode *sc = AbstractShortCode::forTag(u"ITALIC");
+    QVERIFY(sc != nullptr);
+    const QString html = htmlFrom(*sc, QStringLiteral("[ITALIC]via factory[/ITALIC]"));
+    QCOMPARE(html, QStringLiteral("<em>via factory</em>"));
+}
+
+// =============================================================================
+// ShortCodeItalic — validation error cases
+// =============================================================================
+
+void Test_Website_ShortCodes::test_italic_add_code_unknown_argument_throws()
+{
+    ShortCodeItalic sc;
+    QVERIFY(throwsShortCodeException([&sc] {
+        QString html, css, js;
+        QSet<QString> cssDoneIds, jsDoneIds;
+        sc.addCode(QStringLiteral("[ITALIC class=\"x\"]hi[/ITALIC]"),
+                   engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    }));
+}
+
+void Test_Website_ShortCodes::test_italic_add_code_mismatched_tags_throws()
+{
+    ShortCodeItalic sc;
+    QVERIFY(throwsShortCodeException([&sc] {
+        QString html, css, js;
+        QSet<QString> cssDoneIds, jsDoneIds;
+        sc.addCode(QStringLiteral("[ITALIC]hi[/BOLD]"),
                    engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     }));
 }

@@ -9,4 +9,6 @@ set(TRANSLATION_FILES
     ${CMAKE_CURRENT_LIST_DIR}/TranslationStatusTable.cpp
     ${CMAKE_CURRENT_LIST_DIR}/TranslationFieldTable.h
     ${CMAKE_CURRENT_LIST_DIR}/TranslationFieldTable.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocTranslator.h
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocTranslator.cpp
 )

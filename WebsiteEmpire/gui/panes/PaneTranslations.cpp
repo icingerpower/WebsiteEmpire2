@@ -1,11 +1,18 @@
 #include "PaneTranslations.h"
 #include "ui_PaneTranslations.h"
 
+#include "launcher/AbstractLauncher.h"
+#include "launcher/LauncherTranslate.h"
+#include "launcher/LauncherTranslateCommon.h"
 #include "website/AbstractEngine.h"
 #include "website/commonblocs/AbstractCommonBloc.h"
 
+#include <QDialog>
 #include <QHeaderView>
+#include <QPlainTextEdit>
+#include <QPushButton>
 #include <QSet>
+#include <QVBoxLayout>
 #include "website/pages/PageDb.h"
 #include "website/pages/PageRepositoryDb.h"
 #include "website/pages/attributes/CategoryTable.h"
@@ -19,7 +26,8 @@ PaneTranslations::PaneTranslations(QWidget *parent)
 {
     ui->setupUi(this);
     ui->labelConfigWarning->setVisible(false);
-    connect(ui->buttonReload, &QPushButton::clicked, this, &PaneTranslations::_reload);
+    connect(ui->buttonReload,        &QPushButton::clicked, this, &PaneTranslations::_reload);
+    connect(ui->buttonViewCommands,  &QPushButton::clicked, this, &PaneTranslations::_viewCommands);
 }
 
 PaneTranslations::~PaneTranslations()
@@ -133,6 +141,41 @@ void PaneTranslations::_initModels()
     ui->labelConfigWarning->setVisible(!warningText.isEmpty());
 
     _updateProgressLabels();
+}
+
+void PaneTranslations::_viewCommands()
+{
+    const QString workingPath = m_workingDir.absolutePath();
+
+    const QString cmd1 = QStringLiteral("WebsiteEmpire --%1 \"%2\" --%3")
+        .arg(AbstractLauncher::OPTION_WORKING_DIR,
+             workingPath,
+             LauncherTranslate::OPTION_NAME);
+
+    const QString cmd2 = QStringLiteral("WebsiteEmpire --%1 \"%2\" --%3")
+        .arg(AbstractLauncher::OPTION_WORKING_DIR,
+             workingPath,
+             LauncherTranslateCommon::OPTION_NAME);
+
+    const QString text = tr("# Translate pages:\n%1\n\n# Translate common blocs (header, footer, …):\n%2")
+        .arg(cmd1, cmd2);
+
+    auto *dlg  = new QDialog(this);
+    dlg->setWindowTitle(tr("Translation Commands"));
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->resize(700, 260);
+
+    auto *edit = new QPlainTextEdit(text, dlg);
+    edit->setReadOnly(true);
+
+    auto *btn = new QPushButton(tr("Close"), dlg);
+    connect(btn, &QPushButton::clicked, dlg, &QDialog::accept);
+
+    auto *layout = new QVBoxLayout(dlg);
+    layout->addWidget(edit);
+    layout->addWidget(btn);
+
+    dlg->exec();
 }
 
 void PaneTranslations::_updateProgressLabels()

@@ -19,6 +19,10 @@ set(SHORTCODES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/ShortCodeImageTr.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ShortCodeTitle.h
     ${CMAKE_CURRENT_LIST_DIR}/ShortCodeTitle.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeBold.h
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeBold.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeItalic.h
+    ${CMAKE_CURRENT_LIST_DIR}/ShortCodeItalic.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeVideoDialog.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeVideoDialog.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeVideoDialog.ui
@@ -34,4 +38,7 @@ set(SHORTCODES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeTitleDialog.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeTitleDialog.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeTitleDialog.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeInlineDialog.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeInlineDialog.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/ShortCodeInlineDialog.ui
 )

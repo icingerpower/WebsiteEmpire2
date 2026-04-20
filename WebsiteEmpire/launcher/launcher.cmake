@@ -5,4 +5,8 @@ set(LAUNCHER_FILES
     ${CMAKE_CURRENT_LIST_DIR}/LauncherTranslate.cpp
     ${CMAKE_CURRENT_LIST_DIR}/LauncherGeneration.h
     ${CMAKE_CURRENT_LIST_DIR}/LauncherGeneration.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/LauncherImprove.h
+    ${CMAKE_CURRENT_LIST_DIR}/LauncherImprove.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/LauncherTranslateCommon.h
+    ${CMAKE_CURRENT_LIST_DIR}/LauncherTranslateCommon.cpp
 )

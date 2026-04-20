@@ -9,7 +9,7 @@
 #include <QJsonObject>
 #include <QUuid>
 
-static constexpr int COLUMN_COUNT = 7;
+static constexpr int COLUMN_COUNT = 8;
 
 static const QString JSON_KEY_ID                   = QStringLiteral("id");
 static const QString JSON_KEY_NAME                 = QStringLiteral("name");
@@ -17,7 +17,9 @@ static const QString JSON_KEY_PAGE_TYPE_ID         = QStringLiteral("pageTypeId"
 static const QString JSON_KEY_THEME_ID             = QStringLiteral("themeId");
 static const QString JSON_KEY_CUSTOM_INSTRUCTIONS  = QStringLiteral("customInstructions");
 static const QString JSON_KEY_PRIMARY_ATTR_ID      = QStringLiteral("primaryAttrId");
+static const QString JSON_KEY_PRIMARY_DB_PATH      = QStringLiteral("primaryDbPath");
 static const QString JSON_KEY_NON_SVG_IMAGES       = QStringLiteral("nonSvgImages");
+static const QString JSON_KEY_PRIORITY             = QStringLiteral("priority");
 static const QString JSON_KEY_N_DONE               = QStringLiteral("nDone");
 static const QString JSON_KEY_N_TOTAL              = QStringLiteral("nTotal");
 
@@ -35,7 +37,8 @@ QString GenStrategyTable::addRow(const QString &name,
                                   const QString &themeId,
                                   const QString &customInstructions,
                                   bool           nonSvgImages,
-                                  const QString &primaryAttrId)
+                                  const QString &primaryAttrId,
+                                  int            priority)
 {
     const int row = m_rows.size();
     beginInsertRows(QModelIndex(), row, row);
@@ -47,6 +50,7 @@ QString GenStrategyTable::addRow(const QString &name,
     newRow.customInstructions = customInstructions;
     newRow.primaryAttrId      = primaryAttrId;
     newRow.nonSvgImages       = nonSvgImages;
+    newRow.priority           = qMax(1, priority);
     m_rows.append(newRow);
     endInsertRows();
     _save();
@@ -83,6 +87,31 @@ QString GenStrategyTable::primaryAttrIdForRow(int row) const
         return {};
     }
     return m_rows.at(row).primaryAttrId;
+}
+
+QString GenStrategyTable::primaryDbPathForRow(int row) const
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return {};
+    }
+    return m_rows.at(row).primaryDbPath;
+}
+
+void GenStrategyTable::setPrimaryDbPath(int row, const QString &path)
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return;
+    }
+    m_rows[row].primaryDbPath = path;
+    _save();
+}
+
+int GenStrategyTable::priorityForRow(int row) const
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return 1;
+    }
+    return m_rows.at(row).priority;
 }
 
 void GenStrategyTable::setNDone(int row, int value)
@@ -168,6 +197,7 @@ QVariant GenStrategyTable::data(const QModelIndex &index, int role) const
             return proto ? proto->getName() : row.themeId;
         }
         case COL_NON_SVG_IMAGES: return row.nonSvgImages ? tr("Yes") : tr("No");
+        case COL_PRIORITY:       return row.priority;
         case COL_PRIMARY_ATTR_ID: {
             if (row.primaryAttrId.isEmpty()) {
                 return tr("(None)");
@@ -201,6 +231,7 @@ QVariant GenStrategyTable::headerData(int section, Qt::Orientation orientation, 
     case COL_THEME:           return tr("Theme");
     case COL_NON_SVG_IMAGES:  return tr("Non-svg images");
     case COL_PRIMARY_ATTR_ID: return tr("Source table");
+    case COL_PRIORITY:        return tr("Priority");
     case COL_N_DONE:          return tr("N done");
     case COL_N_TOTAL:         return tr("N total");
     default:                  return {};
@@ -259,7 +290,9 @@ void GenStrategyTable::_load()
         row.themeId            = obj.value(JSON_KEY_THEME_ID).toString();
         row.customInstructions = obj.value(JSON_KEY_CUSTOM_INSTRUCTIONS).toString();
         row.primaryAttrId      = obj.value(JSON_KEY_PRIMARY_ATTR_ID).toString();
+        row.primaryDbPath      = obj.value(JSON_KEY_PRIMARY_DB_PATH).toString();
         row.nonSvgImages       = obj.value(JSON_KEY_NON_SVG_IMAGES).toBool(false);
+        row.priority           = obj.value(JSON_KEY_PRIORITY).toInt(1);
         row.nDone              = obj.value(JSON_KEY_N_DONE).toInt(0);
         row.nTotal             = obj.value(JSON_KEY_N_TOTAL).toInt(0);
 
@@ -283,7 +316,9 @@ void GenStrategyTable::_save() const
         obj.insert(JSON_KEY_THEME_ID,            row.themeId);
         obj.insert(JSON_KEY_CUSTOM_INSTRUCTIONS, row.customInstructions);
         obj.insert(JSON_KEY_PRIMARY_ATTR_ID,     row.primaryAttrId);
+        obj.insert(JSON_KEY_PRIMARY_DB_PATH,     row.primaryDbPath);
         obj.insert(JSON_KEY_NON_SVG_IMAGES,      row.nonSvgImages);
+        obj.insert(JSON_KEY_PRIORITY,            row.priority);
         obj.insert(JSON_KEY_N_DONE,              row.nDone);
         obj.insert(JSON_KEY_N_TOTAL,             row.nTotal);
         arr.append(obj);

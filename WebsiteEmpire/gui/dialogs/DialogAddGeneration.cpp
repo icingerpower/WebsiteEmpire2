@@ -7,6 +7,7 @@
 #include "website/theme/AbstractTheme.h"
 
 #include <QDialogButtonBox>
+#include <QMessageBox>
 #include <QPushButton>
 
 DialogAddGeneration::DialogAddGeneration(AbstractEngine *engine, QWidget *parent)
@@ -75,7 +76,7 @@ DialogAddGeneration::DialogAddGeneration(AbstractEngine *engine, QWidget *parent
             &QLineEdit::textChanged,
             this,
             &DialogAddGeneration::_onNameChanged);
-    connect(ui->buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(ui->buttonBox, &QDialogButtonBox::accepted, this, &DialogAddGeneration::_onAccepted);
     connect(ui->buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 }
 
@@ -122,4 +123,18 @@ bool DialogAddGeneration::nonSvgImages() const
 void DialogAddGeneration::_onNameChanged(const QString &text)
 {
     ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled(!text.trimmed().isEmpty());
+}
+
+void DialogAddGeneration::_onAccepted()
+{
+    const QString instructions = ui->plainTextEditInstructions->toPlainText().trimmed();
+    if (!instructions.isEmpty() && !instructions.contains(QStringLiteral("[TOPIC]"))) {
+        QMessageBox::warning(this,
+                             tr("Missing [TOPIC]"),
+                             tr("Your custom instructions must contain [TOPIC] so the generator "
+                                "knows where to insert the page topic.\n\n"
+                                "Please add [TOPIC] to your instructions and try again."));
+        return;
+    }
+    accept();
 }

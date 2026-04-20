@@ -79,6 +79,13 @@ private:
      */
     void _reload();
 
+    /**
+     * Shows a small dialog containing the two CLI commands the user should run
+     * to translate pages and common blocs respectively.
+     * Connected to the "View commands" button.
+     */
+    void _viewCommands();
+
     /** Refreshes the progress labels from the current model state. */
     void _updateProgressLabels();
 

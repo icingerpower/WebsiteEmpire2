@@ -66,6 +66,19 @@ private slots:
     void test_pagerepo_permalink_history_empty_initially();
     void test_pagerepo_permalink_history_grows_on_each_update();
     void test_pagerepo_permalink_history_chronological_order();
+
+    // --- recordStrategyAttempt / strategyAttempts ---
+    void test_pagerepo_strategy_attempts_empty_initially();
+    void test_pagerepo_strategy_attempts_records_single_attempt();
+    void test_pagerepo_strategy_attempts_appends_in_order();
+    void test_pagerepo_strategy_attempts_scoped_to_page();
+    void test_pagerepo_strategy_attempts_cascade_delete();
+
+    // --- findGeneratedByTypeId ---
+    void test_pagerepo_findgeneratedbytypeid_empty_initially();
+    void test_pagerepo_findgeneratedbytypeid_returns_generated_pages();
+    void test_pagerepo_findgeneratedbytypeid_excludes_ungenerated();
+    void test_pagerepo_findgeneratedbytypeid_filters_by_type_id();
 };
 
 // ---------------------------------------------------------------------------
@@ -302,6 +315,103 @@ void Test_PageRepository::test_pagerepo_permalink_history_chronological_order()
     const auto &history = f.repo.permalinkHistory(id);
     QCOMPARE(history.at(0).permalink, QStringLiteral("/v1.html"));
     QCOMPARE(history.at(1).permalink, QStringLiteral("/v2.html"));
+}
+
+// ---------------------------------------------------------------------------
+// recordStrategyAttempt / strategyAttempts
+// ---------------------------------------------------------------------------
+
+void Test_PageRepository::test_pagerepo_strategy_attempts_empty_initially()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/p.html"), QStringLiteral("en"));
+    QVERIFY(f.repo.strategyAttempts(id).isEmpty());
+}
+
+void Test_PageRepository::test_pagerepo_strategy_attempts_records_single_attempt()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/p.html"), QStringLiteral("en"));
+    f.repo.recordStrategyAttempt(id, QStringLiteral("strategy-abc"));
+    const QStringList attempts = f.repo.strategyAttempts(id);
+    QCOMPARE(attempts.size(), 1);
+    QCOMPARE(attempts.at(0), QStringLiteral("strategy-abc"));
+}
+
+void Test_PageRepository::test_pagerepo_strategy_attempts_appends_in_order()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/p.html"), QStringLiteral("en"));
+    f.repo.recordStrategyAttempt(id, QStringLiteral("strategy-1"));
+    f.repo.recordStrategyAttempt(id, QStringLiteral("strategy-2"));
+    f.repo.recordStrategyAttempt(id, QStringLiteral("strategy-3"));
+    const QStringList attempts = f.repo.strategyAttempts(id);
+    QCOMPARE(attempts.size(), 3);
+    QCOMPARE(attempts.at(0), QStringLiteral("strategy-1"));
+    QCOMPARE(attempts.at(1), QStringLiteral("strategy-2"));
+    QCOMPARE(attempts.at(2), QStringLiteral("strategy-3"));
+}
+
+void Test_PageRepository::test_pagerepo_strategy_attempts_scoped_to_page()
+{
+    Fixture f;
+    const int id1 = f.repo.create(QStringLiteral("article"), QStringLiteral("/a.html"), QStringLiteral("en"));
+    const int id2 = f.repo.create(QStringLiteral("article"), QStringLiteral("/b.html"), QStringLiteral("en"));
+    f.repo.recordStrategyAttempt(id1, QStringLiteral("strategy-x"));
+    QVERIFY(f.repo.strategyAttempts(id2).isEmpty());
+    QCOMPARE(f.repo.strategyAttempts(id1).size(), 1);
+}
+
+void Test_PageRepository::test_pagerepo_strategy_attempts_cascade_delete()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/p.html"), QStringLiteral("en"));
+    f.repo.recordStrategyAttempt(id, QStringLiteral("strategy-abc"));
+    f.repo.remove(id);
+    QVERIFY(f.repo.strategyAttempts(id).isEmpty());
+}
+
+// ---------------------------------------------------------------------------
+// findGeneratedByTypeId
+// ---------------------------------------------------------------------------
+
+void Test_PageRepository::test_pagerepo_findgeneratedbytypeid_empty_initially()
+{
+    Fixture f;
+    QVERIFY(f.repo.findGeneratedByTypeId(QStringLiteral("article")).isEmpty());
+}
+
+void Test_PageRepository::test_pagerepo_findgeneratedbytypeid_returns_generated_pages()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/p.html"), QStringLiteral("en"));
+    f.repo.setGeneratedAt(id, QStringLiteral("2024-01-01T00:00:00Z"));
+    const QList<PageRecord> results = f.repo.findGeneratedByTypeId(QStringLiteral("article"));
+    QCOMPARE(results.size(), 1);
+    QCOMPARE(results.at(0).id, id);
+}
+
+void Test_PageRepository::test_pagerepo_findgeneratedbytypeid_excludes_ungenerated()
+{
+    Fixture f;
+    f.repo.create(QStringLiteral("article"), QStringLiteral("/p.html"), QStringLiteral("en"));
+    // No setGeneratedAt call — page remains ungenerated
+    QVERIFY(f.repo.findGeneratedByTypeId(QStringLiteral("article")).isEmpty());
+}
+
+void Test_PageRepository::test_pagerepo_findgeneratedbytypeid_filters_by_type_id()
+{
+    Fixture f;
+    const int id1 = f.repo.create(QStringLiteral("article"), QStringLiteral("/a.html"), QStringLiteral("en"));
+    const int id2 = f.repo.create(QStringLiteral("product"), QStringLiteral("/b.html"), QStringLiteral("en"));
+    f.repo.setGeneratedAt(id1, QStringLiteral("2024-01-01T00:00:00Z"));
+    f.repo.setGeneratedAt(id2, QStringLiteral("2024-01-01T00:00:00Z"));
+    const QList<PageRecord> articles = f.repo.findGeneratedByTypeId(QStringLiteral("article"));
+    QCOMPARE(articles.size(), 1);
+    QCOMPARE(articles.at(0).id, id1);
+    const QList<PageRecord> products = f.repo.findGeneratedByTypeId(QStringLiteral("product"));
+    QCOMPARE(products.size(), 1);
+    QCOMPARE(products.at(0).id, id2);
 }
 
 QTEST_MAIN(Test_PageRepository)

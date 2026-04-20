@@ -31,16 +31,21 @@ class GenScheduler
 public:
     /** Flat descriptor for one row of GenStrategyTable, GUI-layer independent. */
     struct StrategyInfo {
-        QString strategyId;         // stable UUID from GenStrategyTable
+        QString strategyId;            // stable UUID from GenStrategyTable
         QString pageTypeId;
-        QString themeId;            // empty = all themes / no filter
-        QString customInstructions; // empty = use generic prompt
+        QString themeId;               // empty = all themes / no filter
+        QString customInstructions;    // empty = use generic prompt
+        QString primaryAttrId;         // AbstractPageAttributes::getId(); empty = no source DB
         bool    nonSvgImages = false;
+        int     priority            = 1;  // 1 = normal generation; 2+ = improvement passes
+        int     pendingCountOverride = -1; // >= 0 overrides pageRepo pending count
     };
 
     struct StrategyAllocation {
         QString strategyId;
         QString pageTypeId;
+        QString primaryAttrId;         // forwarded from StrategyInfo; empty = no source DB
+        QString customInstructions;    // forwarded from StrategyInfo
         bool    nonSvgImages = false;
         int     sessionCount = 1;
     };

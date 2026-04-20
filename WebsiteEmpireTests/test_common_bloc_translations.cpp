@@ -19,6 +19,7 @@
 #include "website/commonblocs/MenuItem.h"
 #include "website/theme/AbstractTheme.h"
 #include "website/theme/ThemeDefault.h"
+#include "website/translation/CommonBlocTranslator.h"
 
 // =============================================================================
 // Helpers
@@ -766,6 +767,125 @@ void Test_AbstractTheme_Translation::test_theme_save_load_blocs_with_translation
 }
 
 // =============================================================================
+// Test_CommonBlocTranslator
+// =============================================================================
+
+class Test_CommonBlocTranslator : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void test_common_bloc_translator_build_jobs_empty_when_no_blocs();
+    void test_common_bloc_translator_build_jobs_skips_null_blocs();
+    void test_common_bloc_translator_build_jobs_skips_bloc_with_no_source_texts();
+    void test_common_bloc_translator_build_jobs_skips_source_lang();
+    void test_common_bloc_translator_build_jobs_one_job_when_missing();
+    void test_common_bloc_translator_build_jobs_skips_fully_translated_pair();
+    void test_common_bloc_translator_build_jobs_multiple_blocs_and_langs();
+    void test_common_bloc_translator_build_jobs_job_fields_correct();
+};
+
+void Test_CommonBlocTranslator::test_common_bloc_translator_build_jobs_empty_when_no_blocs()
+{
+    const QList<CommonBlocTranslator::TranslationJob> jobs =
+        CommonBlocTranslator::buildJobs({}, QStringLiteral("en"),
+                                        {QStringLiteral("fr")});
+    QVERIFY(jobs.isEmpty());
+}
+
+void Test_CommonBlocTranslator::test_common_bloc_translator_build_jobs_skips_null_blocs()
+{
+    QList<AbstractCommonBloc *> blocs = {nullptr, nullptr};
+    const QList<CommonBlocTranslator::TranslationJob> jobs =
+        CommonBlocTranslator::buildJobs(blocs, QStringLiteral("en"),
+                                        {QStringLiteral("fr")});
+    QVERIFY(jobs.isEmpty());
+}
+
+void Test_CommonBlocTranslator::test_common_bloc_translator_build_jobs_skips_bloc_with_no_source_texts()
+{
+    CommonBlocHeader header;
+    // No title or subtitle set — sourceTexts() returns empty hash.
+    QList<AbstractCommonBloc *> blocs = {&header};
+    const QList<CommonBlocTranslator::TranslationJob> jobs =
+        CommonBlocTranslator::buildJobs(blocs, QStringLiteral("en"),
+                                        {QStringLiteral("fr")});
+    QVERIFY(jobs.isEmpty());
+}
+
+void Test_CommonBlocTranslator::test_common_bloc_translator_build_jobs_skips_source_lang()
+{
+    CommonBlocHeader header;
+    header.setTitle(QStringLiteral("Title"));
+    QList<AbstractCommonBloc *> blocs = {&header};
+    // en is both source and target — must be skipped.
+    const QList<CommonBlocTranslator::TranslationJob> jobs =
+        CommonBlocTranslator::buildJobs(blocs, QStringLiteral("en"),
+                                        {QStringLiteral("en")});
+    QVERIFY(jobs.isEmpty());
+}
+
+void Test_CommonBlocTranslator::test_common_bloc_translator_build_jobs_one_job_when_missing()
+{
+    CommonBlocHeader header;
+    header.setTitle(QStringLiteral("Title"));
+    // No fr translation set → missingTranslations("fr", "en") is non-empty.
+    QList<AbstractCommonBloc *> blocs = {&header};
+    const QList<CommonBlocTranslator::TranslationJob> jobs =
+        CommonBlocTranslator::buildJobs(blocs, QStringLiteral("en"),
+                                        {QStringLiteral("fr")});
+    QCOMPARE(jobs.size(), 1);
+}
+
+void Test_CommonBlocTranslator::test_common_bloc_translator_build_jobs_skips_fully_translated_pair()
+{
+    CommonBlocHeader header;
+    header.setTitle(QStringLiteral("Title"));
+    header.setTranslation(QLatin1String(CommonBlocHeader::KEY_TITLE),
+                          QStringLiteral("fr"), QStringLiteral("Titre"));
+    // All fields now translated for fr → no job needed.
+    QList<AbstractCommonBloc *> blocs = {&header};
+    const QList<CommonBlocTranslator::TranslationJob> jobs =
+        CommonBlocTranslator::buildJobs(blocs, QStringLiteral("en"),
+                                        {QStringLiteral("fr")});
+    QVERIFY(jobs.isEmpty());
+}
+
+void Test_CommonBlocTranslator::test_common_bloc_translator_build_jobs_multiple_blocs_and_langs()
+{
+    CommonBlocHeader header;
+    header.setTitle(QStringLiteral("Title"));
+
+    CommonBlocFooter footer;
+    footer.setText(QStringLiteral("Copyright"));
+
+    QList<AbstractCommonBloc *> blocs = {&header, &footer};
+    // Two target langs; source lang "en" must be excluded.
+    // Header is untranslated for both fr and de → 2 jobs.
+    // Footer is untranslated for both fr and de → 2 more jobs.
+    // Total: 4 jobs.
+    const QList<CommonBlocTranslator::TranslationJob> jobs =
+        CommonBlocTranslator::buildJobs(blocs, QStringLiteral("en"),
+                                        {QStringLiteral("fr"), QStringLiteral("de")});
+    QCOMPARE(jobs.size(), 4);
+}
+
+void Test_CommonBlocTranslator::test_common_bloc_translator_build_jobs_job_fields_correct()
+{
+    CommonBlocHeader header;
+    header.setTitle(QStringLiteral("Title"));
+    QList<AbstractCommonBloc *> blocs = {&header};
+    const QList<CommonBlocTranslator::TranslationJob> jobs =
+        CommonBlocTranslator::buildJobs(blocs, QStringLiteral("en"),
+                                        {QStringLiteral("fr")});
+    QCOMPARE(jobs.size(), 1);
+    const auto &job = jobs.first();
+    QCOMPARE(job.blocId,     QLatin1String(CommonBlocHeader::ID));
+    QCOMPARE(job.sourceLang, QStringLiteral("en"));
+    QCOMPARE(job.targetLang, QStringLiteral("fr"));
+}
+
+// =============================================================================
 // Main — run all test classes
 // =============================================================================
 
@@ -788,6 +908,10 @@ int main(int argc, char *argv[])
     }
     {
         Test_AbstractTheme_Translation t;
+        status |= QTest::qExec(&t, argc, argv);
+    }
+    {
+        Test_CommonBlocTranslator t;
         status |= QTest::qExec(&t, argc, argv);
     }
 
