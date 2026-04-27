@@ -20,13 +20,20 @@ class IPageRepository;
  * limit (−1 = unlimited).  The caller pops pages one at a time, sends the
  * built prompt to the Claude API, and calls processReply() with the response.
  *
- * Prompt building — two-step strategy
- * ------------------------------------
- * buildStep1Prompt() asks Claude to write content freely (no JSON constraints).
- * buildStep2Prompt() asks Claude to reformat its draft into the JSON schema.
- * The caller sends step1, appends Claude's reply, then sends step2 as the
- * next user turn so the model already has the full draft in context.
- * processReply() is called only on step2's output.
+ * Prompt building — two-call split strategy
+ * -------------------------------------------
+ * buildContentPrompt() asks Claude to write the article body as free-form text
+ * with shortcodes.  This call succeeds for any article length because the
+ * output has no JSON encoding overhead.
+ *
+ * buildMetadataPrompt() asks Claude to generate a small JSON object with all
+ * schema fields EXCEPT 1_text.  The output is always small (~1 000 chars).
+ *
+ * processContentAndMetadata() combines the article text and metadata JSON into
+ * the page record.
+ *
+ * buildCombinedPrompt() / buildStep1Prompt() / buildStep2Prompt() are retained
+ * but are no longer called by the launchers.
  *
  * Reply processing
  * ----------------
@@ -86,6 +93,56 @@ public:
      * so the model already has the full content context.
      */
     QString buildStep2Prompt() const;
+
+    /**
+     * Combined single-step prompt: asks Claude to write AND format the content
+     * directly as JSON in one pass, eliminating the step-2 reproduction overhead.
+     *
+     * Use this instead of buildStep1Prompt() + buildStep2Prompt() whenever the
+     * expected article length may be large, to avoid hitting Claude's output
+     * token limit when reproducing the full draft as JSON values.
+     *
+     * extraContext — optional per-page context for improvement passes.
+     */
+    QString buildCombinedPrompt(const PageRecord &page,
+                                 AbstractEngine   &engine,
+                                 int               websiteIndex,
+                                 const QString    &extraContext = {}) const;
+
+    /**
+     * Content-only prompt: asks Claude to write the article body as free-form text
+     * with shortcodes (no JSON constraints).  For long articles this avoids the
+     * output-token-limit issue that occurs when encoding the full text as a JSON
+     * string value.  Feed the result to buildMetadataPrompt() and
+     * processContentAndMetadata().
+     *
+     * extraContext — optional per-page context for improvement passes.
+     */
+    QString buildContentPrompt(const PageRecord &page,
+                               AbstractEngine   &engine,
+                               int               websiteIndex,
+                               const QString    &extraContext = {}) const;
+
+    /**
+     * Metadata prompt: given the article text produced by buildContentPrompt(),
+     * asks Claude to generate a small JSON object containing ALL schema fields
+     * EXCEPT 1_text.  Output is always small (~1 000 chars), within token budget.
+     *
+     * articleText — the raw text returned by Claude for buildContentPrompt().
+     */
+    QString buildMetadataPrompt(const PageRecord &page,
+                                 const QString   &articleText) const;
+
+    /**
+     * Saves articleText as the "1_text" field and all other fields from the
+     * parsed metadataJson.  If metadataJson is empty or unparseable, only 1_text
+     * is saved.  Stamps generated_at on success.
+     * Returns true if at least 1_text was saved successfully.
+     */
+    bool processContentAndMetadata(int              pageId,
+                                    const QString   &articleText,
+                                    const QString   &metadataJson,
+                                    IPageRepository &pageRepo);
 
     /**
      * Parses responseText (Claude's text reply), saves the key→value data via

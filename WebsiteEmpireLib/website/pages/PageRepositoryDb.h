@@ -4,6 +4,8 @@
 #include "website/pages/IPageRepository.h"
 #include "website/pages/PageDb.h"
 
+#include <QSet>
+
 /**
  * IPageRepository backed by PageDb (QSqlDatabase / QSQLITE).
  *
@@ -52,10 +54,17 @@ public:
     void                             setLangCodesToTranslate(int id,
                                                              const QStringList &langs) override;
 
-private:
-    PageDb &m_db;
+    // Returns the number of generated pages (generated_at IS NOT NULL) whose
+    // permalink is in expectedPermalinks.  Used by the GUI to cross-reference
+    // pages.db with an aspire DB's topic set so that manually-added pages
+    // that have no matching topic are never counted as "done".
+    int countGeneratedMatchingPermalinks(const QString      &typeId,
+                                          const QSet<QString> &expectedPermalinks) const;
 
     static QString currentUtc();
+
+private:
+    PageDb &m_db;
 };
 
 #endif // PAGEREPOSITORYDB_H

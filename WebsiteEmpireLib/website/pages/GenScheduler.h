@@ -16,11 +16,13 @@ class IPageRepository;
  * 1. Iterate strategies; skip those with no pending pages.
  * 2. If a performance data source is available and returns data for the
  *    domain, weight each strategy by its total GSC impressions (or visits).
- *    Strategies with no data or zero impressions receive a floor weight of 1
- *    so they always get at least one session.
- * 3. Distribute totalSessions proportionally.  Every active strategy gets a
- *    minimum of 1 session; any remainder goes to the highest-weight strategy.
- * 4. If no data source is configured or fetchData() returns empty, all active
+ *    Strategies with no data or zero impressions receive a floor weight of 1.
+ * 3. If there are more active strategies than totalSessions, keep only the
+ *    top-weighted ones (stable-sorted so equal-weight ties keep original order).
+ * 4. Distribute totalSessions proportionally among the kept strategies.
+ *    Every included strategy gets a minimum of 1 session; any remainder goes
+ *    to the highest-count strategy.
+ * 5. If no data source is configured or fetchData() returns empty, all active
  *    strategies receive equal session counts (even distribution).
  *
  * The caller owns IPageRepository and the data source pointer; both must

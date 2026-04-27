@@ -81,6 +81,18 @@ QString GenStrategyTable::customInstructionsForRow(int row) const
     return m_rows.at(row).customInstructions;
 }
 
+void GenStrategyTable::setCustomInstructions(int row, const QString &instructions)
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return;
+    }
+    if (m_rows.at(row).customInstructions == instructions) {
+        return;
+    }
+    m_rows[row].customInstructions = instructions;
+    _save();
+}
+
 QString GenStrategyTable::primaryAttrIdForRow(int row) const
 {
     if (row < 0 || row >= m_rows.size()) {

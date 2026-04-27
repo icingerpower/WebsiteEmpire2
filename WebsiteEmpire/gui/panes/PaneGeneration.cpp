@@ -16,9 +16,24 @@
 #include <QMessageBox>
 #include <QProcess>
 #include <QPushButton>
+#include <QRegularExpression>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTableWidgetItem>
+#include <QTextEdit>
+
+// Mirrors the slug logic in LauncherGeneration: lower-case, collapse non-alnum to '-',
+// strip leading/trailing dashes.  Must stay in sync with the launcher.
+static QString makeTopicSlug(const QString &name)
+{
+    static const QRegularExpression s_reNonAlnum(QStringLiteral("[^a-z0-9]+"));
+    QString slug = name.toLower();
+    slug.replace(s_reNonAlnum, QStringLiteral("-"));
+    while (slug.startsWith(QLatin1Char('-'))) { slug.remove(0, 1); }
+    while (slug.endsWith(QLatin1Char('-')))   { slug.chop(1); }
+    return slug;
+}
 
 PaneGeneration::PaneGeneration(QWidget *parent)
     : QWidget(parent)
@@ -33,6 +48,7 @@ PaneGeneration::~PaneGeneration()
     if (m_activeProcess) {
         m_activeProcess->disconnect();
     }
+    _saveCurrentPrompt(); // persist any unsaved edits before ui is torn down
     delete ui;
 }
 
@@ -59,6 +75,9 @@ void PaneGeneration::setup(const QDir           &workingDir,
 
 void PaneGeneration::setVisible(bool visible)
 {
+    if (!visible) {
+        _saveCurrentPrompt();
+    }
     QWidget::setVisible(visible);
 }
 
@@ -112,6 +131,9 @@ void PaneGeneration::generateOne()
     ui->textEditOutput->clear();
     ui->textEditOutput->append(tr("Running: %1 %2\n").arg(exe, args.join(QLatin1Char(' '))));
 
+    ui->progressBarGeneration->setVisible(true);
+    ui->buttonGenOne->setEnabled(false);
+
     auto *process = new QProcess(this);
     m_activeProcess = process;
     connect(process, &QProcess::readyReadStandardOutput, this, [this, process]() {
@@ -132,10 +154,15 @@ void PaneGeneration::generateOne()
     connect(process,
             QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this,
-            [this](int exitCode, QProcess::ExitStatus) {
+            [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
                 m_activeProcess = nullptr;
-                ui->textEditOutput->append(
-                    tr("\nProcess finished (exit code %1).").arg(exitCode));
+                ui->progressBarGeneration->setVisible(false);
+                ui->buttonGenOne->setEnabled(true);
+                const QString statusMsg = (exitStatus == QProcess::CrashExit)
+                    ? tr("\nProcess CRASHED (signal %1) — run the generation command in a "
+                         "terminal for a backtrace.").arg(exitCode)
+                    : tr("\nProcess finished (exit code %1).").arg(exitCode);
+                ui->textEditOutput->append(statusMsg);
                 computeRemainingToDo();
 
                 if (exitCode == 0 && !m_lastOkPermalink.isEmpty()) {
@@ -148,12 +175,8 @@ void PaneGeneration::generateOne()
                         tr("One page was generated successfully.\n\nURL:\n%1")
                             .arg(location));
                 }
+                process->deleteLater();
             });
-    connect(process,
-            QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            process,
-            &QProcess::deleteLater);
-
     process->start(exe, args);
 }
 
@@ -162,15 +185,30 @@ void PaneGeneration::viewGenCommand()
     if (!m_isSetup) {
         return;
     }
+
+    const QModelIndex idx = ui->tableViewStrategies->currentIndex();
+    if (!idx.isValid()) {
+        return;
+    }
+    const QString strategyId = m_strategies->idForRow(idx.row());
+
     const QString exe     = QCoreApplication::applicationFilePath();
     const QString workDir = m_workingDir.absolutePath();
-    const QString cmd = QStringLiteral("%1 --%2 \"%3\" --%4 --%5 3")
+    const QString cmd = QStringLiteral("%1 --%2 \"%3\" --%4 --%5 %6 --%7 1")
                             .arg(exe,
                                  AbstractLauncher::OPTION_WORKING_DIR,
                                  workDir,
                                  LauncherGeneration::OPTION_NAME,
-                                 LauncherGeneration::OPTION_SESSIONS);
-    ui->textEditOutput->setPlainText(cmd);
+                                 LauncherGeneration::OPTION_STRATEGY,
+                                 strategyId,
+                                 LauncherGeneration::OPTION_LIMIT);
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle(tr("Generation command"));
+    msgBox.setText(tr("Run this command in a terminal to generate one page for the selected strategy:"));
+    msgBox.setDetailedText(cmd);
+    msgBox.setStandardButtons(QMessageBox::Ok);
+    msgBox.exec();
 }
 
 void PaneGeneration::computeRemainingToDo()
@@ -187,36 +225,65 @@ void PaneGeneration::computeRemainingToDo()
         const QString typeId = m_strategies->data(
             m_strategies->index(row, GenStrategyTable::COL_PAGE_TYPE)).toString();
 
-        const int total   = pageRepo.countByTypeId(typeId);
-        const int pending = pageRepo.findPendingByTypeId(typeId).size();
-        const int done    = total - pending;
+        int done   = 0;
+        int nTotal = pageRepo.countByTypeId(typeId);
 
-        // N Total: count from aspire DB when linked; falls back to pages.db count.
-        int nTotal = total;
-        const QString primaryAttrId = m_strategies->primaryAttrIdForRow(row);
-        if (!primaryAttrId.isEmpty()) {
-            const QString dbPath = _resolvedDbPath(row);
-            if (!dbPath.isEmpty()) {
-                const QString conn = QStringLiteral("pane_count_")
-                                   + primaryAttrId
-                                   + QStringLiteral("_")
-                                   + QString::number(row);
-                int dbCount = 0;
-                {
-                    QSqlDatabase db =
-                        QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
-                    db.setDatabaseName(dbPath);
-                    if (db.open()) {
-                        QSqlQuery q(db);
-                        if (q.exec(QStringLiteral("SELECT COUNT(*) FROM records"))
-                            && q.next()) {
-                            dbCount = q.value(0).toInt();
+        const QString dbPath = _resolvedDbPath(row);
+        if (!dbPath.isEmpty()) {
+            // DB is linked: read all topic names, build expected permalink set,
+            // then count only generated pages whose permalink matches a topic.
+            // This ensures manually-added pages that have no corresponding DB topic
+            // are never counted as "done".
+            const QString conn = QStringLiteral("pane_count_row_") + QString::number(row);
+            QSet<QString> expectedPermalinks;
+            int dbCount = 0;
+            {
+                QSqlDatabase db =
+                    QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+                db.setDatabaseName(dbPath);
+                if (db.open()) {
+                    QSqlQuery countQ(db);
+                    if (countQ.exec(QStringLiteral("SELECT COUNT(*) FROM records"))
+                        && countQ.next()) {
+                        dbCount = countQ.value(0).toInt();
+                    }
+
+                    // Detect the first non-id column (the topic name field).
+                    QString nameColumn;
+                    QSqlQuery pragmaQ(db);
+                    if (pragmaQ.exec(QStringLiteral("PRAGMA table_info(records)"))) {
+                        while (pragmaQ.next()) {
+                            const QString col = pragmaQ.value(1).toString();
+                            if (col != QStringLiteral("id") && nameColumn.isEmpty()) {
+                                nameColumn = col;
+                            }
+                        }
+                    }
+                    if (!nameColumn.isEmpty()) {
+                        QSqlQuery topicQ(db);
+                        topicQ.exec(QStringLiteral("SELECT ") + nameColumn
+                                    + QStringLiteral(" FROM records"));
+                        while (topicQ.next()) {
+                            const QString name = topicQ.value(0).toString().trimmed();
+                            if (!name.isEmpty()) {
+                                const QString slug = makeTopicSlug(name);
+                                if (!slug.isEmpty()) {
+                                    expectedPermalinks.insert(
+                                        QLatin1Char('/') + slug);
+                                }
+                            }
                         }
                     }
                 }
-                QSqlDatabase::removeDatabase(conn);
-                nTotal = dbCount;
             }
+            QSqlDatabase::removeDatabase(conn);
+
+            nTotal = dbCount;
+            done   = pageRepo.countGeneratedMatchingPermalinks(typeId,
+                                                                expectedPermalinks);
+        } else {
+            // No DB linked: count all AI-generated pages of this type.
+            done = pageRepo.findGeneratedByTypeId(typeId).size();
         }
 
         m_strategies->setNDone(row, done);
@@ -235,20 +302,23 @@ void PaneGeneration::linkDb()
     }
     const int row = current.row();
     const QString primaryAttrId = m_strategies->primaryAttrIdForRow(row);
-    if (primaryAttrId.isEmpty()) {
-        return;
-    }
 
+    const QString label = primaryAttrId.isEmpty()
+                            ? tr("Link source database")
+                            : tr("Link source database for '%1'").arg(primaryAttrId);
     const QString dbPath = QFileDialog::getOpenFileName(
         this,
-        tr("Link source database for '%1'").arg(primaryAttrId),
-        QString{},
+        label,
+        m_workingDir.absolutePath(),
         tr("SQLite databases (*.db)"));
     if (dbPath.isEmpty()) {
         return;
     }
 
-    m_strategies->setPrimaryDbPath(row, dbPath);
+    // Store as a path relative to the working directory so it survives Dropbox
+    // sync to a machine with a different absolute path prefix.
+    const QString storedPath = m_workingDir.relativeFilePath(dbPath);
+    m_strategies->setPrimaryDbPath(row, storedPath);
     computeRemainingToDo();
     _onStrategySelectionChanged(current, QModelIndex{});
 }
@@ -256,8 +326,14 @@ void PaneGeneration::linkDb()
 // ---- Private slots ----------------------------------------------------------
 
 void PaneGeneration::_onStrategySelectionChanged(const QModelIndex &current,
-                                                  const QModelIndex & /*previous*/)
+                                                  const QModelIndex &previous)
 {
+    // Persist any edits the user made to the prompt before switching rows.
+    if (previous.isValid() && m_isSetup) {
+        m_strategies->setCustomInstructions(previous.row(),
+                                             ui->textEditPrompt->toPlainText());
+    }
+
     const bool hasSelection = current.isValid();
 
     if (!hasSelection) {
@@ -272,14 +348,17 @@ void PaneGeneration::_onStrategySelectionChanged(const QModelIndex &current,
     const int row = current.row();
     const QString primaryAttrId = m_strategies->primaryAttrIdForRow(row);
     const bool needsDb       = !primaryAttrId.isEmpty();
-    const QString resolvedDb = needsDb ? _resolvedDbPath(row) : QString{};
-    const bool dbReady       = !needsDb || !resolvedDb.isEmpty();
+    const QString resolvedDb = _resolvedDbPath(row);
+    // Generation buttons require a linked DB only when a source table is configured.
+    const bool dbReady = !needsDb || !resolvedDb.isEmpty();
 
     ui->buttonGenOne->setEnabled(dbReady);
     ui->buttonCommandGen->setEnabled(dbReady);
-    ui->buttonLinkDb->setEnabled(needsDb);
+    ui->buttonLinkDb->setEnabled(true); // always allow picking/changing the linked DB
 
+    m_updatingPrompt = true;
     ui->textEditPrompt->setPlainText(m_strategies->customInstructionsForRow(row));
+    m_updatingPrompt = false;
 
     // Build parameter rows dynamically so we can add the DB path when needed.
     struct ParamRow { QString label; QString value; bool warn = false; };
@@ -300,11 +379,16 @@ void PaneGeneration::_onStrategySelectionChanged(const QModelIndex &current,
         const QString total = colVal(GenStrategyTable::COL_N_TOTAL);
         paramRows.append({ tr("Done / Total"), done + QStringLiteral(" / ") + total });
     }
-    if (needsDb) {
+    {
+        // Always show the DB path row so the user knows whether one is linked.
+        const QString storedRaw = m_strategies->primaryDbPathForRow(row);
         if (resolvedDb.isEmpty()) {
+            const bool mustLink = needsDb; // generation blocked until linked
             paramRows.append({ tr("DB path"),
-                               tr("Not linked — click \"Link to DB\""),
-                               true });
+                               storedRaw.isEmpty()
+                                   ? tr("Not linked — click \"Link to DB\"")
+                                   : tr("Not found: %1").arg(storedRaw),
+                               mustLink });
         } else {
             paramRows.append({ tr("DB path"), resolvedDb });
         }
@@ -354,23 +438,65 @@ void PaneGeneration::_connectSlots()
             &QPushButton::clicked,
             this,
             &PaneGeneration::linkDb);
+    connect(ui->textEditPrompt,
+            &QTextEdit::textChanged,
+            this,
+            &PaneGeneration::_onPromptEdited);
+}
+
+void PaneGeneration::_onPromptEdited()
+{
+    if (m_updatingPrompt || !m_isSetup) {
+        return;
+    }
+    const QModelIndex current = ui->tableViewStrategies->currentIndex();
+    if (!current.isValid()) {
+        return;
+    }
+    m_strategies->setCustomInstructions(current.row(),
+                                         ui->textEditPrompt->toPlainText());
+}
+
+void PaneGeneration::_saveCurrentPrompt()
+{
+    if (!m_isSetup) {
+        return;
+    }
+    const QModelIndex current = ui->tableViewStrategies->currentIndex();
+    if (!current.isValid()) {
+        return;
+    }
+    m_strategies->setCustomInstructions(current.row(),
+                                         ui->textEditPrompt->toPlainText());
 }
 
 QString PaneGeneration::_resolvedDbPath(int row) const
 {
+    // 1. Standard convention: results_db/<primaryAttrId>.db inside working directory.
+    //    Only applicable when a source table is configured.
     const QString primaryAttrId = m_strategies->primaryAttrIdForRow(row);
-    if (primaryAttrId.isEmpty()) {
-        return {};
+    if (!primaryAttrId.isEmpty()) {
+        const QString stdPath = m_workingDir.filePath(
+            QStringLiteral("results_db/") + primaryAttrId + QStringLiteral(".db"));
+        if (QFile::exists(stdPath)) {
+            return stdPath;
+        }
     }
-    const QString stdPath = m_workingDir.filePath(
-        QStringLiteral("results_db/") + primaryAttrId + QStringLiteral(".db"));
-    if (QFile::exists(stdPath)) {
-        return stdPath;
-    }
+
+    // 2. Stored path — may be relative (new, portable format) or absolute (legacy).
+    //    Relative paths are resolved against the working directory so that a
+    //    Dropbox-synced working directory opens correctly on any machine.
     const QString stored = m_strategies->primaryDbPathForRow(row);
-    if (!stored.isEmpty() && QFile::exists(stored)) {
-        return stored;
+    if (!stored.isEmpty()) {
+        if (QFile::exists(stored)) {
+            return QDir::cleanPath(stored); // absolute path that still resolves
+        }
+        const QString resolved = m_workingDir.absoluteFilePath(stored);
+        if (QFile::exists(resolved)) {
+            return QDir::cleanPath(resolved); // relative path resolved, .. removed
+        }
     }
+
     return {};
 }
 

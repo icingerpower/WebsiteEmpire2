@@ -167,6 +167,239 @@ QString GenPageQueue::buildStep2Prompt() const
         .arg(schemaJson);
 }
 
+QString GenPageQueue::buildCombinedPrompt(const PageRecord &page,
+                                           AbstractEngine   &engine,
+                                           int               websiteIndex,
+                                           const QString    &extraContext) const
+{
+    const QString lang = engine.getLangCode(websiteIndex);
+    const QString effectiveLang = lang.isEmpty() ? page.lang : lang;
+
+    // ---- Part 1: topic, page type, language, images (mirrors buildStep1Prompt
+    //      but replaces "Write freely" with "write AND output as JSON") --------
+
+    QString prompt = QStringLiteral(
+               "Write comprehensive, high-quality content for a web page about the topic "
+               "described by this permalink: %1\n\n"
+               "Page type : %2\n"
+               "Language  : %3\n"
+               "Images    : %4\n\n"
+               "Write the content and output it DIRECTLY as the JSON object below — "
+               "no preamble, no markdown. Cover all important aspects of the topic with "
+               "relevant, engaging content. Include a title, introduction, main body with "
+               "key information, and a conclusion. Write entirely in %3.\n"
+               "%5")
+        .arg(page.permalink,
+             m_pageTypeId,
+             effectiveLang,
+             m_nonSvgImages ? QStringLiteral("include non-SVG images")
+                            : QStringLiteral("no images"),
+             m_nonSvgImages
+                 ? QStringLiteral("Reference images as relative paths (e.g. /images/foo.jpg).\n")
+                 : QString());
+
+    if (!m_customInstructions.isEmpty()) {
+        prompt += QStringLiteral("\n\nAdditional instructions:\n");
+        QString instructions = m_customInstructions;
+        instructions.replace(QStringLiteral("[TOPIC]"), page.permalink);
+        prompt += instructions;
+    }
+
+    if (!extraContext.isEmpty()) {
+        prompt += QStringLiteral("\n\nImprovement context:\n");
+        prompt += extraContext;
+    }
+
+    // ---- Part 2: cleaning rules, shortcodes, JSON schema (mirrors
+    //      buildStep2Prompt with rephrased intro lines) ------------------------
+
+    const QHash<QString, QString> &schema = _schema();
+
+    QJsonObject skeleton;
+    for (auto it = schema.cbegin(); it != schema.cend(); ++it) {
+        skeleton[it.key()] = it.value();
+    }
+    const QString schemaJson = QString::fromUtf8(
+        QJsonDocument(skeleton).toJson(QJsonDocument::Indented));
+
+    prompt += QStringLiteral(
+        "\n\nOutput the content DIRECTLY as a JSON object. "
+        "Apply ALL of the following rules to every text value:\n\n"
+
+        "── CLEANING ─────────────────────────────────────────────────────────────\n"
+        "• Remove all meta-commentary: sentences that reference the prompt, the\n"
+        "  writing task, or yourself (e.g. \"Here is the content:\", \"I'll cover…\",\n"
+        "  \"Note:\", \"As requested…\", \"This article…\"). Pure content only.\n"
+        "• Remove all raw HTML tags (<b>, <strong>, <em>, <i>, <a>, <img>, <p>,\n"
+        "  <h1>…<h6>, <br>, etc.). Replace them with shortcodes (see below) or\n"
+        "  plain text. No HTML may remain in any value.\n\n"
+
+        "── SHORTCODES ───────────────────────────────────────────────────────────\n"
+        "Use ONLY the shortcodes below. Do NOT invent other tags.\n\n"
+        "Headings (use levels 2–4 for sections, never level 1 inside body text):\n"
+        "  [TITLE level=\"2\"]Section heading[/TITLE]\n\n"
+        "Bold (key terms, important facts):\n"
+        "  [BOLD]important text[/BOLD]\n\n"
+        "Italic (technical terms, titles of works, light emphasis):\n"
+        "  [ITALIC]emphasized text[/ITALIC]\n\n"
+        "Links — use LINKFIX for every hyperlink:\n"
+        "  [LINKFIX url=\"https://example.com\"]anchor text[/LINKFIX]\n"
+        "  [LINKFIX url=\"https://example.com\" rel=\"nofollow\"]anchor text[/LINKFIX]\n"
+        "  RULES:\n"
+        "  • Only use URLs you are certain are real and correct.\n"
+        "  • Do NOT invent or guess URLs. If no real URL is known, write the\n"
+        "    reference as plain text (e.g. \"According to the WHO report (2023)\").\n"
+        "  • Study citations written as [1], [2], etc. must be kept ONLY when a\n"
+        "    real URL is available; wrap as:\n"
+        "    [LINKFIX url=\"https://...\"]source title [1][/LINKFIX]\n"
+        "    Otherwise remove the bracketed number entirely.\n\n"
+        "Images — use IMGFIX for every image reference:\n"
+        "  [IMGFIX id=\"unique-slug\" fileName=\"image.jpg\" alt=\"description\"][/IMGFIX]\n"
+        "  [IMGFIX id=\"unique-slug\" fileName=\"diagram.svg\" alt=\"description\"][/IMGFIX]\n"
+        "  RULES:\n"
+        "  • Place images at the most relevant position in the content flow\n"
+        "    (not all grouped at the top or bottom).\n"
+        "  • Each image must have a unique id (use a short descriptive slug).\n"
+        "  • SVG images are fully supported; use the same IMGFIX syntax.\n"
+        "  • If you include inline SVG code (<svg>…</svg>), replace it with an\n"
+        "    IMGFIX shortcode referencing a .svg file name instead.\n\n"
+
+        "── JSON OUTPUT ──────────────────────────────────────────────────────────\n"
+        "Fill ALL values in the structure below with the content you write. "
+        "Do NOT change any key.\n\n"
+        "%1\n\n"
+        "Return ONLY a valid JSON object — no markdown fences, no explanation.")
+        .arg(schemaJson);
+
+    return prompt;
+}
+
+// ---- Two-call split: content + metadata ------------------------------------
+
+QString GenPageQueue::buildContentPrompt(const PageRecord &page,
+                                          AbstractEngine   &engine,
+                                          int               websiteIndex,
+                                          const QString    &extraContext) const
+{
+    const QString lang = engine.getLangCode(websiteIndex);
+    const QString effectiveLang = lang.isEmpty() ? page.lang : lang;
+
+    QString prompt = QStringLiteral(
+               "Write comprehensive, high-quality content for a web page about the topic "
+               "described by this permalink: %1\n\n"
+               "Page type : %2\n"
+               "Language  : %3\n"
+               "Images    : %4\n\n"
+               "Write freely and naturally. Cover all important aspects of the topic with "
+               "relevant, engaging content. Include a title, introduction, main body with "
+               "key information, and a conclusion. Write entirely in %3.\n"
+               "%5")
+        .arg(page.permalink,
+             m_pageTypeId,
+             effectiveLang,
+             m_nonSvgImages ? QStringLiteral("include non-SVG images")
+                            : QStringLiteral("no images"),
+             m_nonSvgImages
+                 ? QStringLiteral("Reference images as relative paths (e.g. /images/foo.jpg).\n")
+                 : QString());
+
+    if (!m_customInstructions.isEmpty()) {
+        prompt += QStringLiteral("\n\nAdditional instructions:\n");
+        QString instructions = m_customInstructions;
+        instructions.replace(QStringLiteral("[TOPIC]"), page.permalink);
+        prompt += instructions;
+    }
+
+    if (!extraContext.isEmpty()) {
+        prompt += QStringLiteral("\n\nImprovement context:\n");
+        prompt += extraContext;
+    }
+
+    prompt += QStringLiteral(
+        "\n\n"
+        "── FORMATTING ───────────────────────────────────────────────────────────\n"
+        "Use ONLY the shortcodes below. Do NOT use HTML tags.\n\n"
+        "Headings (use levels 2–4 for sections, never level 1 inside body text):\n"
+        "  [TITLE level=\"2\"]Section heading[/TITLE]\n\n"
+        "Bold (key terms, important facts):\n"
+        "  [BOLD]important text[/BOLD]\n\n"
+        "Italic (technical terms, titles of works, light emphasis):\n"
+        "  [ITALIC]emphasized text[/ITALIC]\n\n"
+        "Links — use LINKFIX for every hyperlink:\n"
+        "  [LINKFIX url=\"https://example.com\"]anchor text[/LINKFIX]\n"
+        "  RULES:\n"
+        "  • Only use URLs you are certain are real and correct.\n"
+        "  • Do NOT invent or guess URLs. If no real URL is known, write the\n"
+        "    reference as plain text (e.g. \"According to the WHO report (2023)\").\n\n"
+        "Images — use IMGFIX for every image reference:\n"
+        "  [IMGFIX id=\"unique-slug\" fileName=\"image.jpg\" alt=\"description\"][/IMGFIX]\n"
+        "  RULES:\n"
+        "  • Each image must have a unique id (use a short descriptive slug).\n"
+        "  • If you include inline SVG code, replace it with IMGFIX referencing a .svg file.\n\n"
+        "Return ONLY the article content — no preamble, no meta-commentary about the task.");
+
+    return prompt;
+}
+
+QString GenPageQueue::buildMetadataPrompt(const PageRecord &page,
+                                           const QString   &articleText) const
+{
+    const QHash<QString, QString> &schema = _schema();
+
+    // Build metadata-only schema: exclude all keys starting with "1_"
+    QJsonObject metaSkeleton;
+    for (auto it = schema.cbegin(); it != schema.cend(); ++it) {
+        if (!it.key().startsWith(QStringLiteral("1_"))) {
+            metaSkeleton[it.key()] = it.value();
+        }
+    }
+    const QString schemaJson = QString::fromUtf8(
+        QJsonDocument(metaSkeleton).toJson(QJsonDocument::Indented));
+
+    return QStringLiteral(
+        "The following is an article for the web page: %1\n\n"
+        "=== Article Content ===\n"
+        "%2\n\n"
+        "=== Task ===\n"
+        "Fill the JSON structure below with metadata derived from the article above.\n"
+        "Do NOT include the article body — only fill the fields shown.\n"
+        "Do NOT change any key.\n\n"
+        "%3\n\n"
+        "Return ONLY a valid JSON object — no markdown fences, no explanation.")
+        .arg(page.permalink, articleText, schemaJson);
+}
+
+bool GenPageQueue::processContentAndMetadata(int              pageId,
+                                              const QString   &articleText,
+                                              const QString   &metadataJson,
+                                              IPageRepository &pageRepo)
+{
+    if (articleText.trimmed().isEmpty()) {
+        return false;
+    }
+
+    // Start with the full schema (all keys empty) and fill in what we have.
+    QHash<QString, QString> data = _schema();
+
+    // 1_text: the article body from the content call.
+    data[QStringLiteral("1_text")] = articleText.trimmed();
+
+    // Metadata fields: parsed from the metadata JSON call.
+    if (!metadataJson.isEmpty()) {
+        const QHash<QString, QString> meta = _parseJson(metadataJson);
+        for (auto it = meta.cbegin(); it != meta.cend(); ++it) {
+            // Never overwrite 1_text with anything from the metadata call.
+            if (!it.key().startsWith(QStringLiteral("1_")) && data.contains(it.key())) {
+                data[it.key()] = it.value();
+            }
+        }
+    }
+
+    pageRepo.saveData(pageId, data);
+    pageRepo.setGeneratedAt(pageId, QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+    return true;
+}
+
 // ---- Reply processing -------------------------------------------------------
 
 bool GenPageQueue::processReply(int             pageId,

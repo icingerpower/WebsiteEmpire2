@@ -385,6 +385,22 @@ QStringList PageRepositoryDb::strategyAttempts(int pageId) const
     return result;
 }
 
+int PageRepositoryDb::countGeneratedMatchingPermalinks(
+    const QString &typeId, const QSet<QString> &expectedPermalinks) const
+{
+    if (expectedPermalinks.isEmpty()) {
+        return 0;
+    }
+    const QList<PageRecord> &generated = findGeneratedByTypeId(typeId);
+    int count = 0;
+    for (const PageRecord &p : std::as_const(generated)) {
+        if (expectedPermalinks.contains(p.permalink)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 QList<PageRecord> PageRepositoryDb::findGeneratedByTypeId(const QString &typeId) const
 {
     QList<PageRecord> result;

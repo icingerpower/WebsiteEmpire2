@@ -60,6 +60,10 @@ public:
     // Returns the custom instructions for visual row, or empty if out of range or not set.
     QString customInstructionsForRow(int row) const;
 
+    // Replaces the custom instructions for visual row and saves strategies.json.
+    // No-op when the value has not changed or the row is out of range.
+    void setCustomInstructions(int row, const QString &instructions);
+
     // Returns the primaryAttrId for visual row (empty = no source table linked).
     QString primaryAttrIdForRow(int row) const;
 

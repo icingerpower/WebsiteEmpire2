@@ -72,18 +72,20 @@ struct ImproveJob {
 // claude CLI helper — mirrors ClaudeRunner in WebsiteAspire; no API key needed
 // ---------------------------------------------------------------------------
 
-static QCoro::Task<QString> runClaudePrompt(const QString &prompt)
+static QCoro::Task<QString> runClaudePrompt(QString prompt)
 {
+    QString result;
+
     QTemporaryDir tempDir;
     if (!tempDir.isValid()) {
-        co_return QStringLiteral("__ERROR__: failed to create temp dir");
+        co_return result;
     }
 
     const QString promptPath = tempDir.path() + QStringLiteral("/prompt.txt");
     {
         QFile f(promptPath);
         if (!f.open(QIODevice::WriteOnly)) {
-            co_return QStringLiteral("__ERROR__: failed to write prompt file");
+            co_return result;
         }
         f.write(prompt.toUtf8());
     }
@@ -98,13 +100,14 @@ static QCoro::Task<QString> runClaudePrompt(const QString &prompt)
     co_await qCoro(process).waitForFinished(-1);
 
     if (process.error() == QProcess::FailedToStart) {
-        co_return QStringLiteral("__ERROR__: claude executable not found in PATH");
+        result = QStringLiteral("__ERROR__: claude executable not found in PATH");
+    } else if (process.exitCode() != 0) {
+        result = QStringLiteral("__ERROR__: ")
+                 + QString::fromUtf8(process.readAllStandardError()).trimmed();
+    } else {
+        result = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
     }
-    if (process.exitCode() != 0) {
-        co_return QStringLiteral("__ERROR__: ")
-            + QString::fromUtf8(process.readAllStandardError()).trimmed();
-    }
-    co_return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+    co_return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,45 +135,36 @@ static QCoro::Task<bool> processImproveJob(const ImproveJob &job,
     GenPageQueue     queue(job.page.typeId, job.nonSvgImages, pageRepo,
                            *categoryTable, job.customInstructions);
 
-    // ---- Step 1: free-form draft with failure context ----------------------
-    QString step1Prompt = queue.buildStep1Prompt(job.page, *engine, 0, job.extraContext);
-    QString step1Text   = co_await runClaudePrompt(step1Prompt);
+    // ---- Call 1: write article content as free-form text ------------------
+    const QString contentPrompt = queue.buildContentPrompt(
+        job.page, *engine, 0, job.extraContext);
+    const QString articleText = co_await runClaudePrompt(contentPrompt);
 
-    if (step1Text.startsWith(QStringLiteral("__ERROR__"))) {
-        *out << QStringLiteral("[S%1] FAIL (step1): %2 — %3\n")
-                    .arg(sNum).arg(job.page.permalink, step1Text);
+    if (articleText.startsWith(QStringLiteral("__ERROR__"))) {
+        *out << QStringLiteral("[S%1] FAIL (content): %2 — %3\n")
+                    .arg(sNum).arg(job.page.permalink, articleText);
         out->flush();
         co_return false;
     }
 
-    *out << QStringLiteral("[S%1] Step 1 done: %2\n").arg(sNum).arg(job.page.permalink);
+    *out << QStringLiteral("[S%1] Content done: %2 — generating metadata...\n")
+                .arg(sNum).arg(job.page.permalink);
     out->flush();
 
-    // ---- Step 2: reformat into JSON schema ---------------------------------
-    QString step2FullPrompt = QStringLiteral(
-        "The following is a draft response to a web content writing request.\n\n"
-        "=== Original Request ===\n")
-        + step1Prompt
-        + QStringLiteral("\n\n=== Draft Response ===\n")
-        + step1Text
-        + QStringLiteral("\n\n=== Formatting Task ===\n")
-        + queue.buildStep2Prompt();
-    QString responseText = co_await runClaudePrompt(step2FullPrompt);
+    // ---- Call 2: metadata JSON from the article ---------------------------
+    const QString metadataPrompt = queue.buildMetadataPrompt(job.page, articleText);
+    const QString metadataJson = co_await runClaudePrompt(metadataPrompt);
 
-    if (responseText.startsWith(QStringLiteral("__ERROR__"))) {
-        *out << QStringLiteral("[S%1] FAIL (step2): %2 — %3\n")
-                    .arg(sNum).arg(job.page.permalink, responseText);
-        out->flush();
-        co_return false;
-    }
+    const QString safeMetadata = metadataJson.startsWith(QStringLiteral("__ERROR__"))
+                                 ? QString{} : metadataJson;
 
-    // ---- Save and record attempt -------------------------------------------
-    if (queue.processReply(job.page.id, responseText, pageRepo)) {
+    // ---- Save and record attempt ------------------------------------------
+    if (queue.processContentAndMetadata(job.page.id, articleText, safeMetadata, pageRepo)) {
         pageRepo.recordStrategyAttempt(job.page.id, job.strategyId);
         co_return true;
     }
 
-    *out << QStringLiteral("[S%1] FAIL (parse): %2 — could not parse JSON reply\n")
+    *out << QStringLiteral("[S%1] FAIL (empty content): %2\n")
                 .arg(sNum).arg(job.page.permalink);
     out->flush();
     co_return false;

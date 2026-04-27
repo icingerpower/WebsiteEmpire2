@@ -74,6 +74,19 @@ QList<GenScheduler::StrategyAllocation> GenScheduler::computeAllocations(int tot
         }
     }
 
+    // ---- Cap candidates to totalSessions ----------------------------------------
+    // Each active strategy gets at least 1 session, so we can run at most
+    // totalSessions strategies concurrently.  When more candidates exist than
+    // available sessions, keep only the highest-weight ones (stable sort preserves
+    // original order for equal weights, so the first-listed strategy wins ties).
+    if (static_cast<int>(candidates.size()) > totalSessions) {
+        std::stable_sort(candidates.begin(), candidates.end(),
+                         [](const Candidate &a, const Candidate &b) {
+                             return a.weight > b.weight;
+                         });
+        candidates.resize(totalSessions);
+    }
+
     // ---- Distribute sessions proportionally --------------------------------
     const double totalWeight = [&]() {
         double sum = 0.0;
