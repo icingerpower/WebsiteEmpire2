@@ -374,9 +374,12 @@ void PaneDomains::deployLocally()
         QSet<QString> seenDomains;
         const int rows = m_engine->rowCount();
         for (int i = 0; i < rows; ++i) {
-            const QString domain = m_engine->data(
+            const QString rawDomain = m_engine->data(
                 m_engine->index(i, AbstractEngine::COL_DOMAIN)).toString().trimmed();
-            if (domain.isEmpty() || seenDomains.contains(domain)) {
+            // Fall back to "localhost" when no domain is configured so that local
+            // development works even before production domains are assigned.
+            const QString domain = rawDomain.isEmpty() ? QStringLiteral("localhost") : rawDomain;
+            if (seenDomains.contains(domain)) {
                 continue;
             }
             seenDomains.insert(domain);

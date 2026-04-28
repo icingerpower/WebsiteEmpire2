@@ -4,8 +4,8 @@ project(WebsiteEmpire VERSION 0.1 LANGUAGES CXX)
 
 include(../common.cmake)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Network Sql)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Network Sql)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Network Sql Svg)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Network Sql Svg)
 
 setup_qcoro(COMPONENTS Core)
 
@@ -43,6 +43,7 @@ endif()
 target_link_libraries(WebsiteEmpire PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
+    Qt${QT_VERSION_MAJOR}::Svg
     QCoro::Core
     -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
 

@@ -4,6 +4,7 @@
 #include "website/AbstractEngine.h"
 #include "website/HostTable.h"
 #include "website/WebsiteSettingsTable.h"
+#include "website/ImageWriter.h"
 #include "website/pages/GenPageQueue.h"
 #include "website/pages/GenScheduler.h"
 #include "website/pages/PageDb.h"
@@ -75,7 +76,13 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt)
         co_return result;
     }
 
-    const QString promptPath = tempDir.path() + QStringLiteral("/prompt.txt");
+    // Write the prompt into a subdirectory so the process working directory
+    // stays clean — Claude Code auto-loads files from cwd, which would cause
+    // it to read prompt.txt as a file in context and produce a preamble like
+    // "The file looks good. Let me output the full article content now:".
+    const QString promptSubdir = tempDir.path() + QStringLiteral("/prompt");
+    QDir().mkdir(promptSubdir);
+    const QString promptPath = promptSubdir + QStringLiteral("/prompt.txt");
     {
         QFile f(promptPath);
         if (!f.open(QIODevice::WriteOnly)) {
@@ -126,6 +133,7 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
     QDir             workDir = WorkingDirectoryManager::instance()->workingDir();
     PageDb           pageDb(workDir);
     PageRepositoryDb pageRepo(pageDb);
+    ImageWriter      imageWriter(workDir);
 
     while (!g_stopRequested && queue->hasNext()) {
         // Honour --limit if set.
@@ -199,6 +207,46 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
             state->jobsCompleted.fetch_add(1);
             *(state->out) << QStringLiteral("[S%1] OK: %2\n")
                                  .arg(sNum).arg(page.permalink);
+
+            // ---- Generate SVG images referenced in the article --------------
+            const QList<GenPageQueue::ImgFixRef> imgRefs =
+                GenPageQueue::parseImgFixRefs(articleText);
+            const QString domain = engine->data(
+                engine->index(websiteIndex, AbstractEngine::COL_DOMAIN)).toString();
+            const QString lang = engine->getLangCode(websiteIndex);
+            for (const auto &ref : std::as_const(imgRefs)) {
+                if (!ref.fileName.endsWith(QStringLiteral(".svg"), Qt::CaseInsensitive)) {
+                    continue;
+                }
+                *(state->out) << QStringLiteral("[S%1] Generating SVG: %2...\n")
+                                     .arg(sNum).arg(ref.fileName);
+                state->out->flush();
+
+                const QString svgPrompt = GenPageQueue::buildSvgPrompt(ref, page.permalink, lang);
+                const QString svgResponse = co_await runClaudePrompt(svgPrompt);
+
+                if (svgResponse.startsWith(QStringLiteral("__ERROR__"))) {
+                    *(state->out) << QStringLiteral("[S%1] WARN (SVG): %2 — %3\n")
+                                         .arg(sNum).arg(ref.fileName, svgResponse);
+                    state->out->flush();
+                    continue;
+                }
+
+                const int svgStart = svgResponse.indexOf(QStringLiteral("<svg"));
+                const int svgEnd   = svgResponse.lastIndexOf(QStringLiteral("</svg>"));
+                if (svgStart < 0 || svgEnd < svgStart) {
+                    *(state->out) << QStringLiteral("[S%1] WARN (SVG): %2 — no valid <svg> in response\n")
+                                         .arg(sNum).arg(ref.fileName);
+                    state->out->flush();
+                    continue;
+                }
+
+                const QString svgContent = svgResponse.mid(svgStart, svgEnd + 6 - svgStart);
+                imageWriter.writeSvg(svgContent.toUtf8(), domain, ref.fileName);
+                *(state->out) << QStringLiteral("[S%1] SVG saved: %2\n")
+                                     .arg(sNum).arg(ref.fileName);
+                state->out->flush();
+            }
         } else {
             *(state->out) << QStringLiteral("[S%1] FAIL (empty content): %2\n")
                                  .arg(sNum).arg(page.permalink);

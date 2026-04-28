@@ -45,6 +45,16 @@ class GenPageQueue
 {
 public:
     /**
+     * Image reference parsed from an [IMGFIX ...] shortcode in article text.
+     * Used by parseImgFixRefs() and buildSvgPrompt().
+     */
+    struct ImgFixRef {
+        QString id;
+        QString fileName;
+        QString alt;
+    };
+
+    /**
      * pageTypeId          — stable id used with AbstractPageType::createForTypeId()
      * nonSvgImages        — passed through to the prompt as a generation hint
      * customInstructions  — strategy-level extra instructions appended to step-1 prompt
@@ -152,6 +162,20 @@ public:
     bool processReply(int             pageId,
                       const QString  &responseText,
                       IPageRepository &pageRepo);
+
+    /**
+     * Extracts every [IMGFIX ...] occurrence from articleText and returns one
+     * ImgFixRef per occurrence whose id and fileName are both non-empty.
+     */
+    static QList<ImgFixRef> parseImgFixRefs(const QString &articleText);
+
+    /**
+     * Builds a Claude prompt that produces a standalone SVG for the given image
+     * reference.  permalink and lang give the article context.
+     */
+    static QString buildSvgPrompt(const ImgFixRef &ref,
+                                   const QString   &permalink,
+                                   const QString   &lang);
 
 private:
     // Returns the content schema for this page type: key → "" (all empty).

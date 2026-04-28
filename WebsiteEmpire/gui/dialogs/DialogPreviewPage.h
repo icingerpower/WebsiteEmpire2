@@ -2,6 +2,7 @@
 #define DIALOGPREVIEWPAGE_H
 
 #include <QDialog>
+#include <QDir>
 #include <QList>
 
 class AbstractEngine;
@@ -36,6 +37,7 @@ public:
     explicit DialogPreviewPage(IPageRepository &repo,
                                CategoryTable   &categoryTable,
                                AbstractEngine  &engine,
+                               const QDir      &workingDir,
                                int              pageId,
                                QWidget         *parent = nullptr);
     ~DialogPreviewPage() override;
@@ -45,11 +47,15 @@ private slots:
 
 private:
     void _renderPage(int pageId);
+    // Replaces <img src="/file.svg"> tags in html with PNG data URIs rendered
+    // from the SVG blobs in images.db.  No-op if images.db does not exist.
+    void _inlineSvgs(QString &html);
 
     Ui::DialogPreviewPage *ui;
     IPageRepository       &m_repo;
     CategoryTable         &m_categoryTable;
     AbstractEngine        &m_engine;
+    QDir                   m_workingDir;
 
     QList<int> m_pageIds; // parallel to listLanguages rows
 };

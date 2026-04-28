@@ -15,7 +15,7 @@ QStringList CountryLangManager::defaultLangCodes() const
 {
     return {
         // Tier 1 — over 200 million total speakers
-        QStringLiteral("zh"), QStringLiteral("es"), QStringLiteral("hi"),
+        QStringLiteral("en"), QStringLiteral("zh"), QStringLiteral("es"), QStringLiteral("hi"),
         QStringLiteral("ar"), QStringLiteral("bn"), QStringLiteral("pt"),
         QStringLiteral("ru"), QStringLiteral("ur"), QStringLiteral("ms"),
         QStringLiteral("id"),

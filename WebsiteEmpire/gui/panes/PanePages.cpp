@@ -149,7 +149,7 @@ void PanePages::previewPage()
                                 "Please select an engine before previewing."));
         return;
     }
-    DialogPreviewPage dlg(*m_pageRepo, *m_categoryTable, *m_engine, id, this);
+    DialogPreviewPage dlg(*m_pageRepo, *m_categoryTable, *m_engine, m_workingDir, id, this);
     dlg.exec();
 }
 

@@ -8,6 +8,7 @@
 #include <QDateTime>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 
 GenPageQueue::GenPageQueue(const QString   &pageTypeId,
                             bool             nonSvgImages,
@@ -335,7 +336,14 @@ QString GenPageQueue::buildContentPrompt(const PageRecord &page,
         "  [IMGFIX id=\"unique-slug\" fileName=\"image.jpg\" alt=\"description\"][/IMGFIX]\n"
         "  RULES:\n"
         "  • Each image must have a unique id (use a short descriptive slug).\n"
-        "  • If you include inline SVG code, replace it with IMGFIX referencing a .svg file.\n\n"
+        "  • Use fileName=\"name.svg\" for diagrams and charts; \"name.jpg\" for photos.\n"
+        "  • NEVER write raw SVG, HTML, or XML anywhere in the article body.\n"
+        "  • Any diagram, chart, or illustration MUST be represented solely as an\n"
+        "    [IMGFIX] shortcode — the SVG will be generated separately.\n\n"
+        "ABSOLUTE RULES (violations will corrupt the output):\n"
+        "  • The article body must contain NO raw HTML, SVG, or XML tags whatsoever.\n"
+        "  • Only the shortcodes listed above are permitted.\n"
+        "  • The article must begin with text or a shortcode — never with a tag like <svg>, <text>, or <div>.\n\n"
         "Return ONLY the article content — no preamble, no meta-commentary about the task.");
 
     return prompt;
@@ -381,8 +389,28 @@ bool GenPageQueue::processContentAndMetadata(int              pageId,
     // Start with the full schema (all keys empty) and fill in what we have.
     QHash<QString, QString> data = _schema();
 
-    // 1_text: the article body from the content call.
-    data[QStringLiteral("1_text")] = articleText.trimmed();
+    // 1_text: the article body from the content call, sanitized.
+    // Strip any inline SVG blocks (<svg>…</svg>) that Claude may have embedded
+    // despite the prompt instruction, then trim leading XML/HTML tags so they
+    // don't corrupt the rendered article.
+    static const QRegularExpression reSvgBlock(
+        QStringLiteral("<svg\\b[^>]*>.*?</svg>"),
+        QRegularExpression::DotMatchesEverythingOption
+        | QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression reLeadingTag(
+        QStringLiteral("^\\s*<[^>]+>.*?(?=\\[|[A-Z]|[a-z])"),
+        QRegularExpression::DotMatchesEverythingOption);
+
+    QString cleanText = articleText.trimmed();
+    cleanText.remove(reSvgBlock);         // remove complete <svg>…</svg> blocks
+    cleanText.remove(reLeadingTag);       // strip any remaining leading XML fragment
+    cleanText = cleanText.trimmed();
+
+    if (cleanText.isEmpty()) {
+        return false;
+    }
+
+    data[QStringLiteral("1_text")] = cleanText;
 
     // Metadata fields: parsed from the metadata JSON call.
     if (!metadataJson.isEmpty()) {
@@ -398,6 +426,68 @@ bool GenPageQueue::processContentAndMetadata(int              pageId,
     pageRepo.saveData(pageId, data);
     pageRepo.setGeneratedAt(pageId, QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
     return true;
+}
+
+// ---- Image helpers ----------------------------------------------------------
+
+QList<GenPageQueue::ImgFixRef> GenPageQueue::parseImgFixRefs(const QString &articleText)
+{
+    QList<ImgFixRef> result;
+
+    static const QRegularExpression reTag(
+        QStringLiteral(R"(\[IMGFIX\b([^\]]*)\])"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression reAttr(
+        QStringLiteral("(\\w+)=\"([^\"]*)\""));
+
+    auto tagIt = reTag.globalMatch(articleText);
+    while (tagIt.hasNext()) {
+        const auto tagMatch = tagIt.next();
+        const QString attrs = tagMatch.captured(1);
+
+        ImgFixRef ref;
+        auto attrIt = reAttr.globalMatch(attrs);
+        while (attrIt.hasNext()) {
+            const auto attrMatch = attrIt.next();
+            const QString &key = attrMatch.captured(1);
+            const QString &val = attrMatch.captured(2);
+            if (key == QStringLiteral("id")) {
+                ref.id = val;
+            } else if (key == QStringLiteral("fileName")) {
+                ref.fileName = val;
+            } else if (key == QStringLiteral("alt")) {
+                ref.alt = val;
+            }
+        }
+
+        if (!ref.id.isEmpty() && !ref.fileName.isEmpty()) {
+            result.append(ref);
+        }
+    }
+    return result;
+}
+
+QString GenPageQueue::buildSvgPrompt(const ImgFixRef &ref,
+                                      const QString   &permalink,
+                                      const QString   &lang)
+{
+    return QStringLiteral(
+               "Create a standalone SVG image for a web article.\n\n"
+               "Article permalink : %1\n"
+               "Image id          : %2\n"
+               "Image filename    : %3\n"
+               "Image description : %4\n"
+               "Language          : %5\n\n"
+               "Requirements:\n"
+               "• Return ONLY the raw SVG — no preamble, no code fences, no explanation.\n"
+               "• The output must start with <svg and end with </svg>.\n"
+               "• Include a viewBox attribute; do NOT set a fixed pixel width/height on the root element.\n"
+               "• All text labels must be written in %5.\n"
+               "• Make the image informative, visually clean, and self-contained.\n"
+               "• Use only inline styles — no <style> blocks, no external CSS or fonts.\n"
+               "• Use only web-safe fonts (Arial, Helvetica, sans-serif).\n"
+               "• No JavaScript, no external references, no raster images embedded inside the SVG.")
+        .arg(permalink, ref.id, ref.fileName, ref.alt, lang);
 }
 
 // ---- Reply processing -------------------------------------------------------
