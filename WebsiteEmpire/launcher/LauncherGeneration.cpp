@@ -63,6 +63,30 @@ struct GenRunState {
 };
 
 // ---------------------------------------------------------------------------
+// Article pre-validation — mirrors processContentAndMetadata's checks without saving.
+// ---------------------------------------------------------------------------
+
+static bool isArticleValid(const QString &text)
+{
+    static const QRegularExpression reSvg(
+        QStringLiteral("<svg\\b[^>]*>.*?</svg>"),
+        QRegularExpression::DotMatchesEverythingOption
+        | QRegularExpression::CaseInsensitiveOption);
+    static const QString kTitle = QStringLiteral("[TITLE level=\"1\"]");
+
+    QString clean = text.trimmed();
+    clean.remove(reSvg);
+    clean = clean.trimmed();
+    if (!clean.startsWith(QLatin1Char('['))) {
+        const int pos = clean.indexOf(kTitle);
+        if (pos > 0) {
+            clean = clean.mid(pos);
+        }
+    }
+    return clean.startsWith(kTitle) && clean.size() >= 2000;
+}
+
+// ---------------------------------------------------------------------------
 // claude CLI helper — mirrors ClaudeRunner in WebsiteAspire; no API key needed
 // ---------------------------------------------------------------------------
 
@@ -91,12 +115,19 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt)
         f.write(prompt.toUtf8());
     }
 
+    // Claude's response is redirected to a file instead of a pipe.
+    // For large articles (50 000+ chars), the OS pipe buffer (≈64 KB) fills up
+    // before QProcess can drain it, causing the beginning of the output to be
+    // silently dropped.  Writing to a file bypasses this limitation entirely.
+    const QString outputPath = tempDir.path() + QStringLiteral("/output.txt");
+
     QProcess process;
     process.setWorkingDirectory(tempDir.path());
     process.setProgram(QStringLiteral("claude"));
     process.setArguments({QStringLiteral("-p"), QStringLiteral("-"),
                           QStringLiteral("--dangerously-skip-permissions")});
     process.setStandardInputFile(promptPath);
+    process.setStandardOutputFile(outputPath);
 
     // Exactly two co_awaits, nothing between them — mirrors ClaudeRunner.
     co_await qCoro(process).start();
@@ -106,10 +137,30 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt)
     if (process.error() == QProcess::FailedToStart) {
         result = QStringLiteral("__ERROR__: claude executable not found in PATH");
     } else if (process.exitCode() != 0) {
-        result = QStringLiteral("__ERROR__: ")
-                 + QString::fromUtf8(process.readAllStandardError()).trimmed();
+        const QString errMsg = QString::fromUtf8(process.readAllStandardError()).trimmed();
+        // Errors go to stderr; stdout (the output file) is not read on failure.
+        const QString detail = !errMsg.isEmpty() ? errMsg
+                             : QStringLiteral("exit code %1").arg(process.exitCode());
+        result = QStringLiteral("__ERROR__: ") + detail;
     } else {
-        result = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+        QFile f(outputPath);
+        if (f.open(QIODevice::ReadOnly)) {
+            result = QString::fromUtf8(f.readAll()).trimmed();
+        }
+        // Fallback: Claude sometimes uses its Write tool to save the SVG to a file
+        // in the working directory instead of printing it to stdout.  If stdout has
+        // no <svg element, scan the temp dir for any .svg file Claude may have created
+        // and return its content before QTemporaryDir deletes everything.
+        if (!result.contains(QStringLiteral("<svg"), Qt::CaseInsensitive)) {
+            const QStringList svgFiles = QDir(tempDir.path()).entryList(
+                QStringList() << QStringLiteral("*.svg"), QDir::Files);
+            if (!svgFiles.isEmpty()) {
+                QFile svgF(tempDir.path() + QLatin1Char('/') + svgFiles.first());
+                if (svgF.open(QIODevice::ReadOnly)) {
+                    result = QString::fromUtf8(svgF.readAll()).trimmed();
+                }
+            }
+        }
     }
     co_return result;
 }
@@ -152,27 +203,100 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
                              .arg(queue->pendingCount());
         state->out->flush();
 
-        // ---- Call 1: write article content as free-form text ----------------
+        // ---- Call 1: write article content (up to 3 attempts) ---------------
         *(state->out) << QStringLiteral("[S%1] Building prompt...\n").arg(sNum);
         state->out->flush();
 
         const QString contentPrompt = queue->buildContentPrompt(page, *engine, websiteIndex);
+        const QString lang   = engine->getLangCode(websiteIndex);
+        const QString domain = engine->data(
+            engine->index(websiteIndex, AbstractEngine::COL_DOMAIN)).toString();
 
-        *(state->out) << QStringLiteral("[S%1] Prompt ready (%2 chars) — launching Claude (1/2: content)...\n")
-                             .arg(sNum).arg(contentPrompt.size());
-        state->out->flush();
+        static const int kMaxContentAttempts = 3;
+        QString articleText;
+        bool contentValid = false;
 
-        const QString articleText = co_await runClaudePrompt(contentPrompt);
-
-        if (articleText.startsWith(QStringLiteral("__ERROR__"))) {
-            *(state->out) << QStringLiteral("[S%1] FAIL (content): %2 — %3\n")
-                                 .arg(sNum).arg(page.permalink, articleText);
+        for (int attempt = 1; attempt <= kMaxContentAttempts; ++attempt) {
+            *(state->out) << QStringLiteral("[S%1] Prompt ready (%2 chars) — launching Claude (content, attempt %3/%4)...\n")
+                                 .arg(sNum).arg(contentPrompt.size()).arg(attempt).arg(kMaxContentAttempts);
             state->out->flush();
-            continue;
+
+            // First attempt uses the original prompt.
+            // Retries show Claude exactly what was wrong and ask for a clean restart.
+            const QString prompt = (attempt == 1)
+                ? contentPrompt
+                : QStringLiteral(
+                      "Your previous response for this article was invalid.\n"
+                      "It started with: \"%1\"\n\n"
+                      "This is wrong: a valid article must start with "
+                      "[TITLE level=\"1\"]…[/TITLE] on the very first line.\n"
+                      "Either your output was truncated at the beginning, or you started "
+                      "mid-content by mistake.\n\n"
+                      "Please write the COMPLETE article from the very beginning. "
+                      "Do not continue from where you stopped — write the whole article fresh, "
+                      "starting with [TITLE level=\"1\"].\n\n")
+                  .arg(articleText.left(200))
+                  + contentPrompt;
+
+            const QString raw = co_await runClaudePrompt(prompt);
+
+            if (raw.startsWith(QStringLiteral("__ERROR__"))) {
+                *(state->out) << QStringLiteral("[S%1] FAIL (content attempt %2): %3\n")
+                                     .arg(sNum).arg(attempt).arg(raw);
+                state->out->flush();
+                break; // API/process error — no point retrying
+            }
+
+            articleText = raw;
+            if (isArticleValid(articleText)) {
+                contentValid = true;
+                break;
+            }
+
+            *(state->out) << QStringLiteral("[S%1] WARN (content attempt %2/%3): invalid structure — first 120 chars: %4\n")
+                                 .arg(sNum).arg(attempt).arg(kMaxContentAttempts)
+                                 .arg(articleText.left(120));
+            state->out->flush();
         }
 
-        *(state->out) << QStringLiteral("[S%1] Content done: %2 — launching Claude (2/2: metadata)...\n")
-                             .arg(sNum).arg(page.permalink);
+        if (!contentValid) {
+            *(state->out) << QStringLiteral("[S%1] FAIL (content): %2 — all %3 attempts invalid, skipping\n")
+                                 .arg(sNum).arg(page.permalink).arg(kMaxContentAttempts);
+            state->out->flush();
+            continue; // no page row was created — nothing to clean up
+        }
+
+        // ---- Call 1.5: inject missing SVG IMGFIX if the strategy needs one ---
+        if (queue->wantsSvgImage() && !GenPageQueue::hasSvgImgFix(articleText)) {
+            *(state->out) << QStringLiteral("[S%1] SVG IMGFIX missing — running repair (1.5/2: SVG ref)...\n")
+                                 .arg(sNum);
+            state->out->flush();
+
+            const QString repairPrompt =
+                queue->buildSvgRepairPrompt(page, articleText, lang);
+            const QString repairResponse = co_await runClaudePrompt(repairPrompt);
+
+            if (!repairResponse.startsWith(QStringLiteral("__ERROR__"))) {
+                static const QRegularExpression reImgFix(
+                    QStringLiteral("\\[IMGFIX\\b[^\\]]*\\][^\\[]*\\[/IMGFIX\\]"),
+                    QRegularExpression::CaseInsensitiveOption);
+                const auto m = reImgFix.match(repairResponse);
+                if (m.hasMatch()) {
+                    articleText = GenPageQueue::insertImgFix(articleText, m.captured(0));
+                    *(state->out) << QStringLiteral("[S%1] SVG IMGFIX injected.\n").arg(sNum);
+                } else {
+                    *(state->out) << QStringLiteral("[S%1] WARN (repair): no [IMGFIX] found in response.\n")
+                                         .arg(sNum);
+                }
+            } else {
+                *(state->out) << QStringLiteral("[S%1] WARN (repair): %2\n")
+                                     .arg(sNum).arg(repairResponse);
+            }
+            state->out->flush();
+        }
+
+        *(state->out) << QStringLiteral("[S%1] Content done: %2 (%3 chars) — launching Claude (2/2: metadata)...\n")
+                             .arg(sNum).arg(page.permalink).arg(articleText.size());
         state->out->flush();
 
         // ---- Call 2: metadata JSON from the article -------------------------
@@ -187,7 +311,9 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
         }
 
         // ---- For source-DB-backed pages (id == 0), create the row first -----
+        // Only reached when content is valid — no orphan rows on failure.
         int pageId = page.id;
+        const bool pageCreatedHere = (pageId == 0);
         if (pageId == 0) {
             pageId = pageRepo.create(page.typeId, page.permalink, page.lang);
             if (pageId <= 0) {
@@ -222,7 +348,7 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
                                      .arg(sNum).arg(ref.fileName);
                 state->out->flush();
 
-                const QString svgPrompt = GenPageQueue::buildSvgPrompt(ref, page.permalink, lang);
+                const QString svgPrompt = queue->buildSvgPrompt(ref, page.permalink, lang);
                 const QString svgResponse = co_await runClaudePrompt(svgPrompt);
 
                 if (svgResponse.startsWith(QStringLiteral("__ERROR__"))) {
@@ -232,11 +358,26 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
                     continue;
                 }
 
-                const int svgStart = svgResponse.indexOf(QStringLiteral("<svg"));
+                // Match <svg as a real XML element: must be followed by whitespace or '>'.
+                // A bare indexOf("<svg") would match text like `<svg` inside backtick
+                // explanations that Claude sometimes prepends before the actual SVG.
+                static const QRegularExpression reSvgOpen(
+                    QStringLiteral("<svg[\\s>]"),
+                    QRegularExpression::CaseInsensitiveOption);
+                const auto svgOpenMatch = reSvgOpen.match(svgResponse);
+                const int svgStart = svgOpenMatch.hasMatch() ? svgOpenMatch.capturedStart() : -1;
                 const int svgEnd   = svgResponse.lastIndexOf(QStringLiteral("</svg>"));
-                if (svgStart < 0 || svgEnd < svgStart) {
-                    *(state->out) << QStringLiteral("[S%1] WARN (SVG): %2 — no valid <svg> in response\n")
-                                         .arg(sNum).arg(ref.fileName);
+                if (svgStart < 0) {
+                    *(state->out) << QStringLiteral("[S%1] WARN (SVG): %2 — no <svg> element in response (%3 chars): %4\n")
+                                         .arg(sNum).arg(ref.fileName)
+                                         .arg(svgResponse.size())
+                                         .arg(svgResponse.left(120));
+                    state->out->flush();
+                    continue;
+                }
+                if (svgEnd < svgStart) {
+                    *(state->out) << QStringLiteral("[S%1] WARN (SVG): %2 — SVG truncated (no </svg>, %3 chars) — response likely hit output token limit\n")
+                                         .arg(sNum).arg(ref.fileName).arg(svgResponse.size());
                     state->out->flush();
                     continue;
                 }
@@ -248,8 +389,12 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
                 state->out->flush();
             }
         } else {
-            *(state->out) << QStringLiteral("[S%1] FAIL (empty content): %2\n")
+            *(state->out) << QStringLiteral("[S%1] FAIL (invalid content): %2 — check qWarning log\n")
                                  .arg(sNum).arg(page.permalink);
+            // Remove the page row we just created so no empty page is left behind.
+            if (pageCreatedHere) {
+                pageRepo.remove(pageId);
+            }
         }
         state->out->flush();
     }

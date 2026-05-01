@@ -343,7 +343,12 @@ QString GenPageQueue::buildContentPrompt(const PageRecord &page,
         "ABSOLUTE RULES (violations will corrupt the output):\n"
         "  • The article body must contain NO raw HTML, SVG, or XML tags whatsoever.\n"
         "  • Only the shortcodes listed above are permitted.\n"
-        "  • The article must begin with text or a shortcode — never with a tag like <svg>, <text>, or <div>.\n\n"
+        "  • The article must begin with [TITLE level=\"1\"]…[/TITLE] — the very first\n"
+        "    characters must be the opening bracket of this shortcode.\n"
+        "  • If the additional instructions above contain an SVG image section, insert\n"
+        "    ONE [IMGFIX id=\"slug\" fileName=\"name.svg\" alt=\"...\"][/IMGFIX] shortcode\n"
+        "    at the right location. Do NOT write any <svg>…</svg> code here — the SVG\n"
+        "    image is generated in a separate step.\n\n"
         "Return ONLY the article content — no preamble, no meta-commentary about the task.");
 
     return prompt;
@@ -390,23 +395,46 @@ bool GenPageQueue::processContentAndMetadata(int              pageId,
     QHash<QString, QString> data = _schema();
 
     // 1_text: the article body from the content call, sanitized.
-    // Strip any inline SVG blocks (<svg>…</svg>) that Claude may have embedded
-    // despite the prompt instruction, then trim leading XML/HTML tags so they
-    // don't corrupt the rendered article.
+    // Step 1: remove inline <svg>…</svg> blocks Claude may have embedded.
+    // Step 2: if the result doesn't start with a shortcode, skip forward to the
+    //         first [TITLE level="1"] (handles XML preambles and stray leading tags).
+    //         The old reLeadingTag regex (DotMatchesEverythingOption) was removed
+    //         because lazy .*? with that flag could silently consume the entire
+    //         first half of the article when Claude opened with a large SVG block.
     static const QRegularExpression reSvgBlock(
         QStringLiteral("<svg\\b[^>]*>.*?</svg>"),
         QRegularExpression::DotMatchesEverythingOption
         | QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression reLeadingTag(
-        QStringLiteral("^\\s*<[^>]+>.*?(?=\\[|[A-Z]|[a-z])"),
-        QRegularExpression::DotMatchesEverythingOption);
+
+    static const QString kExpectedStart = QStringLiteral("[TITLE level=\"1\"]");
 
     QString cleanText = articleText.trimmed();
-    cleanText.remove(reSvgBlock);         // remove complete <svg>…</svg> blocks
-    cleanText.remove(reLeadingTag);       // strip any remaining leading XML fragment
+    cleanText.remove(reSvgBlock);
     cleanText = cleanText.trimmed();
 
-    if (cleanText.isEmpty()) {
+    // If SVG removal left leading non-shortcode content, seek the article title.
+    if (!cleanText.startsWith(QLatin1Char('['))) {
+        const int titlePos = cleanText.indexOf(kExpectedStart);
+        if (titlePos > 0) {
+            cleanText = cleanText.mid(titlePos);
+        }
+    }
+    cleanText = cleanText.trimmed();
+
+    // Reject articles that don't start with the mandatory title shortcode — this
+    // catches both Claude disobeying the formatting rules and over-aggressive SVG
+    // removal that wiped out the entire beginning.
+    if (!cleanText.startsWith(kExpectedStart)) {
+        qWarning() << "processContentAndMetadata: rejected page" << pageId
+                   << "— does not start with [TITLE level=\"1\"]. First 200 chars:"
+                   << cleanText.left(200);
+        return false;
+    }
+
+    // Reject suspiciously short articles (likely truncated or empty strategies).
+    if (cleanText.size() < 2000) {
+        qWarning() << "processContentAndMetadata: rejected page" << pageId
+                   << "— article too short:" << cleanText.size() << "chars";
         return false;
     }
 
@@ -429,6 +457,62 @@ bool GenPageQueue::processContentAndMetadata(int              pageId,
 }
 
 // ---- Image helpers ----------------------------------------------------------
+
+bool GenPageQueue::hasSvgImgFix(const QString &articleText)
+{
+    static const QRegularExpression re(
+        QStringLiteral("\\[IMGFIX\\b[^\\]]*fileName=\"[^\"]+\\.svg\""),
+        QRegularExpression::CaseInsensitiveOption);
+    return re.match(articleText).hasMatch();
+}
+
+bool GenPageQueue::wantsSvgImage() const
+{
+    return m_customInstructions.contains(QStringLiteral("svg"), Qt::CaseInsensitive);
+}
+
+QString GenPageQueue::buildSvgRepairPrompt(const PageRecord &page,
+                                            const QString   &articleText,
+                                            const QString   &lang) const
+{
+    return QStringLiteral(
+               "The following article for the web page \"%1\" was generated correctly "
+               "but is missing a required SVG summary image.\n\n"
+               "=== Article ===\n"
+               "%2\n\n"
+               "=== Task ===\n"
+               "Generate ONLY the single [IMGFIX] shortcode for the missing SVG summary "
+               "table that belongs in this article. The shortcode must:\n"
+               "• Use this exact format: [IMGFIX id=\"slug\" fileName=\"name.svg\" "
+               "alt=\"description\"][/IMGFIX]\n"
+               "• Have a short, descriptive id (kebab-case)\n"
+               "• Have a fileName ending in .svg\n"
+               "• Have an alt that clearly describes the table content in %3\n\n"
+               "Return ONLY the [IMGFIX] shortcode — no preamble, no explanation, "
+               "no surrounding text.")
+        .arg(page.permalink, articleText, lang);
+}
+
+QString GenPageQueue::insertImgFix(const QString &articleText, const QString &imgFixCode)
+{
+    // Find the start of the last [TITLE level="2"] heading to use as the
+    // insertion point — the SVG summary sits naturally before the final section.
+    static const QRegularExpression reTitle(
+        QStringLiteral("\\[TITLE level=\"2\"\\]"));
+
+    int lastPos = -1;
+    auto it = reTitle.globalMatch(articleText);
+    while (it.hasNext()) {
+        lastPos = it.next().capturedStart();
+    }
+
+    if (lastPos < 0) {
+        return articleText + QStringLiteral("\n\n") + imgFixCode;
+    }
+    return articleText.left(lastPos)
+           + imgFixCode + QStringLiteral("\n\n")
+           + articleText.mid(lastPos);
+}
 
 QList<GenPageQueue::ImgFixRef> GenPageQueue::parseImgFixRefs(const QString &articleText)
 {
@@ -469,25 +553,54 @@ QList<GenPageQueue::ImgFixRef> GenPageQueue::parseImgFixRefs(const QString &arti
 
 QString GenPageQueue::buildSvgPrompt(const ImgFixRef &ref,
                                       const QString   &permalink,
-                                      const QString   &lang)
+                                      const QString   &lang) const
 {
-    return QStringLiteral(
-               "Create a standalone SVG image for a web article.\n\n"
-               "Article permalink : %1\n"
-               "Image id          : %2\n"
-               "Image filename    : %3\n"
-               "Image description : %4\n"
-               "Language          : %5\n\n"
-               "Requirements:\n"
-               "• Return ONLY the raw SVG — no preamble, no code fences, no explanation.\n"
-               "• The output must start with <svg and end with </svg>.\n"
-               "• Include a viewBox attribute; do NOT set a fixed pixel width/height on the root element.\n"
-               "• All text labels must be written in %5.\n"
-               "• Make the image informative, visually clean, and self-contained.\n"
-               "• Use only inline styles — no <style> blocks, no external CSS or fonts.\n"
-               "• Use only web-safe fonts (Arial, Helvetica, sans-serif).\n"
-               "• No JavaScript, no external references, no raster images embedded inside the SVG.")
-        .arg(permalink, ref.id, ref.fileName, ref.alt, lang);
+    // Extract the "## SVG…" section from the strategy's custom instructions.
+    QString svgSection;
+    if (!m_customInstructions.isEmpty()) {
+        static const QRegularExpression reSvgSection(
+            QStringLiteral("##\\s*SVG[^\\n]*\\n(.*?)(?=\\n##|\\z)"),
+            QRegularExpression::DotMatchesEverythingOption
+            | QRegularExpression::CaseInsensitiveOption);
+        const auto m = reSvgSection.match(m_customInstructions);
+        if (m.hasMatch()) {
+            svgSection = m.captured(1).trimmed();
+        }
+    }
+
+    QString prompt = QStringLiteral(
+                         "Create a standalone SVG image for a web article.\n\n"
+                         "Article permalink : %1\n"
+                         "Image id          : %2\n"
+                         "Image filename    : %3\n"
+                         "Image description : %4\n"
+                         "Language          : %5\n\n")
+                     .arg(permalink, ref.id, ref.fileName, ref.alt, lang);
+
+    if (!svgSection.isEmpty()) {
+        prompt += QStringLiteral("Strategy design requirements (follow these exactly):\n")
+                + svgSection
+                + QStringLiteral("\n\n");
+    }
+
+    prompt += QStringLiteral(
+        "Technical requirements:\n"
+        "• Output the SVG code directly as plain text — do NOT use any Write, Edit, or\n"
+        "  file-creation tools. The SVG must appear as your response text, not as a file.\n"
+        "• Return ONLY the raw SVG — no preamble, no code fences, no explanation.\n"
+        "• The output must start with <svg and end with </svg>.\n"
+        "• Include a viewBox attribute; do NOT set a fixed pixel width/height on the root element.\n"
+        "• All text labels must be written in %1.\n"
+        "• Make the image informative, visually clean, and self-contained.\n"
+        "• Use only inline styles — no <style> blocks, no external CSS or fonts.\n"
+        "• Use only web-safe fonts (Arial, Helvetica, sans-serif).\n"
+        "• No JavaScript, no external references, no raster images embedded inside the SVG.\n"
+        "• IMPORTANT: keep the total SVG under 5000 characters. If a table would have many\n"
+        "  rows, show only the 6–8 most important ones. Brevity is required — a truncated\n"
+        "  SVG is unusable.")
+        .arg(lang);
+
+    return prompt;
 }
 
 // ---- Reply processing -------------------------------------------------------

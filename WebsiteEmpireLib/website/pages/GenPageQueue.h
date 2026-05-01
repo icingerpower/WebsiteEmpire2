@@ -170,12 +170,43 @@ public:
     static QList<ImgFixRef> parseImgFixRefs(const QString &articleText);
 
     /**
+     * Returns true if articleText contains at least one [IMGFIX] whose fileName
+     * ends with ".svg" (case-insensitive).
+     */
+    static bool hasSvgImgFix(const QString &articleText);
+
+    /**
+     * Returns true if the strategy's custom instructions contain an SVG
+     * generation directive (case-insensitive "svg" keyword).
+     */
+    bool wantsSvgImage() const;
+
+    /**
+     * Builds a repair prompt that asks Claude to return ONLY the missing
+     * [IMGFIX ... fileName="*.svg" ...][/IMGFIX] shortcode that should be
+     * inserted into the article.  Used when wantsSvgImage() is true but
+     * hasSvgImgFix() returns false after the content call.
+     */
+    QString buildSvgRepairPrompt(const PageRecord &page,
+                                  const QString   &articleText,
+                                  const QString   &lang) const;
+
+    /**
+     * Inserts imgFixCode into articleText just before the last [TITLE level="2"]
+     * heading.  Falls back to appending at the end if no such heading is found.
+     */
+    static QString insertImgFix(const QString &articleText,
+                                 const QString &imgFixCode);
+
+    /**
      * Builds a Claude prompt that produces a standalone SVG for the given image
      * reference.  permalink and lang give the article context.
+     * Extracts any "## SVG" section from m_customInstructions and appends it as
+     * strategy-specific design requirements.
      */
-    static QString buildSvgPrompt(const ImgFixRef &ref,
-                                   const QString   &permalink,
-                                   const QString   &lang);
+    QString buildSvgPrompt(const ImgFixRef &ref,
+                            const QString   &permalink,
+                            const QString   &lang) const;
 
 private:
     // Returns the content schema for this page type: key → "" (all empty).
