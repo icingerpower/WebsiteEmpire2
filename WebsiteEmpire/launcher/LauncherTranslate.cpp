@@ -15,8 +15,13 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QSettings>
+#include <QStringList>
 
-const QString LauncherTranslate::OPTION_NAME = QStringLiteral("translate");
+#include <algorithm>
+
+const QString LauncherTranslate::OPTION_NAME     = QStringLiteral("translate");
+const QString LauncherTranslate::OPTION_LANGUAGE  = QStringLiteral("language");
+const QString LauncherTranslate::OPTION_LIMIT     = QStringLiteral("limit");
 
 DECLARE_LAUNCHER(LauncherTranslate)
 
@@ -25,6 +30,26 @@ bool    LauncherTranslate::isFlag()         const { return true; }
 
 void LauncherTranslate::run(const QString & /*value*/)
 {
+    // Parse optional sub-options from raw args.
+    const QStringList args = QCoreApplication::arguments();
+
+    // --language <code>: restrict to a single target language.
+    const int langIdx = args.indexOf(QStringLiteral("--") + OPTION_LANGUAGE);
+    const QString languageFilter = (langIdx >= 0 && langIdx + 1 < args.size())
+                                   ? args.at(langIdx + 1)
+                                   : QString();
+
+    // --limit <n>: cap the number of translation jobs for this run.
+    int limitOverride = -1;
+    const int limitIdx = args.indexOf(QStringLiteral("--") + OPTION_LIMIT);
+    if (limitIdx >= 0 && limitIdx + 1 < args.size()) {
+        bool ok = false;
+        const int n = args.at(limitIdx + 1).toInt(&ok);
+        if (ok && n >= 1) {
+            limitOverride = n;
+        }
+    }
+
     const QDir workingDir = WorkingDirectoryManager::instance()->workingDir();
 
     // -------------------------------------------------------------------------
@@ -68,18 +93,52 @@ void LauncherTranslate::run(const QString & /*value*/)
     auto *pageRepo = new PageRepositoryDb(*pageDb);
 
     // -------------------------------------------------------------------------
-    // Load translation settings and run assessment + scheduling
+    // Determine effective target languages:
+    //   1. From translation_settings.json when it exists.
+    //   2. Derived from the engine (all langs != editingLang) as a fallback so
+    //      the command works even without a settings file.
     // -------------------------------------------------------------------------
     const TranslationSettings translationSettings(workingDir);
 
+    QStringList effectiveTargetLangs;
     if (translationSettings.isConfigured()) {
-        const int assessed = PageAssessor::assess(*pageRepo, translationSettings.targetLangs);
-        if (assessed > 0) {
-            qDebug() << "[Translate] Assessed" << assessed << "new page(s).";
-        }
+        effectiveTargetLangs = translationSettings.targetLangs;
     } else {
-        qDebug() << "[Translate] No translation_settings.json found — skipping assessment.";
+        QSet<QString> seen;
+        for (int i = 0; i < engine->rowCount(); ++i) {
+            const QString lang = engine->getLangCode(i);
+            if (!lang.isEmpty() && lang != editingLang && !seen.contains(lang)) {
+                seen.insert(lang);
+                effectiveTargetLangs.append(lang);
+            }
+        }
+        if (effectiveTargetLangs.isEmpty()) {
+            qDebug() << "[Translate] No target languages found in engine — nothing to do.";
+            delete pageRepo;
+            delete pageDb;
+            holder->deleteLater();
+            QCoreApplication::quit();
+            return;
+        }
+        qDebug() << "[Translate] No translation_settings.json — "
+                    "using engine languages:" << effectiveTargetLangs;
     }
+
+    // -------------------------------------------------------------------------
+    // Assessment: stamp target languages onto any un-assessed source pages.
+    // -------------------------------------------------------------------------
+    const int assessed = PageAssessor::assess(*pageRepo, effectiveTargetLangs);
+    if (assessed > 0) {
+        qDebug() << "[Translate] Assessed" << assessed << "new page(s).";
+    }
+
+    // -------------------------------------------------------------------------
+    // Build effective settings for the scheduler (may be synthetic when no file)
+    // -------------------------------------------------------------------------
+    TranslationSettings effectiveSettings;
+    effectiveSettings.targetLangs       = effectiveTargetLangs;
+    effectiveSettings.limitPerRun       = translationSettings.limitPerRun;
+    effectiveSettings.priorityPageTypes = translationSettings.priorityPageTypes;
 
     auto *translator = new PageTranslator(*pageRepo, *categoryTable, workingDir, holder);
 
@@ -91,21 +150,31 @@ void LauncherTranslate::run(const QString & /*value*/)
                      [holder, pageRepo, pageDb](int translated, int errors) {
                          qDebug() << "[Translate] Done. Translated:" << translated
                                   << " Errors:" << errors;
-                         // Destroy repo before db (repo holds a reference to db).
                          delete pageRepo;
                          delete pageDb;
                          holder->deleteLater();
                          QCoreApplication::quit();
                      });
 
-    if (translationSettings.isConfigured()) {
-        const QList<PageTranslator::TranslationJob> jobs =
-            TranslationScheduler::buildJobs(*pageRepo, *categoryTable,
-                                            translationSettings, editingLang);
-        qDebug() << "[Translate] Scheduler queued" << jobs.size() << "job(s).";
-        translator->startWithJobs(jobs);
-    } else {
-        // No settings file — fall back to the legacy full scan.
-        translator->start(engine, editingLang);
+    QList<PageTranslator::TranslationJob> jobs =
+        TranslationScheduler::buildJobs(*pageRepo, *categoryTable,
+                                        effectiveSettings, editingLang);
+
+    if (!languageFilter.isEmpty()) {
+        jobs.erase(std::remove_if(jobs.begin(), jobs.end(),
+                       [&languageFilter](const PageTranslator::TranslationJob &j) {
+                           return j.targetLang != languageFilter;
+                       }),
+                   jobs.end());
+        qDebug() << "[Translate] Language filter:" << languageFilter
+                 << "→" << jobs.size() << "job(s).";
     }
+
+    if (limitOverride > 0 && jobs.size() > limitOverride) {
+        jobs.resize(limitOverride);
+        qDebug() << "[Translate] Limit override:" << limitOverride << "job(s).";
+    }
+
+    qDebug() << "[Translate] Scheduler queued" << jobs.size() << "job(s).";
+    translator->startWithJobs(jobs);
 }

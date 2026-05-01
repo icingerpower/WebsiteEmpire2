@@ -7,27 +7,21 @@
 #include "website/pages/PageRecord.h"
 #include "website/pages/PageTypeLegal.h"
 #include "website/pages/attributes/CategoryTable.h"
+#include "website/translation/TranslationProtocol.h"
 
 #include <algorithm>
 
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
-#include <QProcessEnvironment>
+#include <QMetaObject>
+#include <QProcess>
+#include <QRegularExpression>
+#include <QTemporaryDir>
 #include <QTextStream>
-#include <QUrl>
-
-static constexpr const char *CLAUDE_API_URL =
-    "https://api.anthropic.com/v1/messages";
-static constexpr const char *CLAUDE_MODEL   =
-    "claude-sonnet-4-6";
 
 // =============================================================================
 // Constructor / Destructor
@@ -42,8 +36,6 @@ PageTranslator::PageTranslator(IPageRepository &repo,
     , m_categoryTable(categoryTable)
     , m_workingDir(workingDir)
 {
-    m_apiKey = QProcessEnvironment::systemEnvironment().value(
-        QStringLiteral("ANTHROPIC_API_KEY"));
 }
 
 PageTranslator::~PageTranslator()
@@ -62,19 +54,14 @@ void PageTranslator::start(AbstractEngine *engine, const QString &editingLang)
 {
     _openLogFile();
 
-    if (m_apiKey.isEmpty()) {
-        _log(QStringLiteral("ERROR: ANTHROPIC_API_KEY environment variable is not set."), true);
-        emit finished(0, 1);
-        return;
-    }
     if (!engine) {
         _log(QStringLiteral("ERROR: No engine provided."), true);
-        emit finished(0, 1);
+        _emitFinished(0, 1);
         return;
     }
     if (editingLang.isEmpty()) {
         _log(QStringLiteral("ERROR: Editing language is not configured."), true);
-        emit finished(0, 1);
+        _emitFinished(0, 1);
         return;
     }
 
@@ -83,11 +70,10 @@ void PageTranslator::start(AbstractEngine *engine, const QString &editingLang)
 
     if (m_queue.isEmpty()) {
         _log(QStringLiteral("Nothing to translate. All pages are up to date."));
-        emit finished(0, 0);
+        _emitFinished(0, 0);
         return;
     }
 
-    m_nam = new QNetworkAccessManager(this);
     _processNextJob();
 }
 
@@ -99,22 +85,15 @@ void PageTranslator::startWithJobs(const QList<TranslationJob> &jobs)
 {
     _openLogFile();
 
-    if (m_apiKey.isEmpty()) {
-        _log(QStringLiteral("ERROR: ANTHROPIC_API_KEY environment variable is not set."), true);
-        emit finished(0, 1);
-        return;
-    }
-
     m_queue = jobs;
     _log(QStringLiteral("Translation started. %1 job(s) queued.").arg(m_queue.size()));
 
     if (m_queue.isEmpty()) {
         _log(QStringLiteral("Nothing to translate. All pages are up to date."));
-        emit finished(0, 0);
+        _emitFinished(0, 0);
         return;
     }
 
-    m_nam = new QNetworkAccessManager(this);
     _processNextJob();
 }
 
@@ -136,8 +115,6 @@ QString PageTranslator::buildPrompts(AbstractEngine *engine, const QString &edit
     QString out;
     QTextStream ts(&out);
     ts << tr("Pending translations: %1\n").arg(jobs.size());
-    ts << QStringLiteral("API endpoint : ") << QLatin1String(CLAUDE_API_URL) << QStringLiteral("\n");
-    ts << QStringLiteral("Model        : ") << QLatin1String(CLAUDE_MODEL)   << QStringLiteral("\n\n");
 
     int n = 1;
     for (const TranslationJob &job : std::as_const(jobs)) {
@@ -172,7 +149,7 @@ QString PageTranslator::buildPrompts(AbstractEngine *engine, const QString &edit
         }
 
         ts << QStringLiteral("User message to send to Claude:\n\n");
-        ts << _buildPrompt(fields, job.sourceLang, job.targetLang);
+        ts << TranslationProtocol::buildPrompt(fields, job.sourceLang, job.targetLang);
         ts << QStringLiteral("\n\n");
     }
 
@@ -188,7 +165,6 @@ PageTranslator::_buildJobQueue(AbstractEngine *engine, const QString &editingLan
 {
     QList<TranslationJob> queue;
 
-    // Source pages are those authored in editingLang.
     const QList<PageRecord> &sources = m_repo.findSourcePages(editingLang);
     _log(QStringLiteral("Source pages found: %1").arg(sources.size()));
 
@@ -200,10 +176,6 @@ PageTranslator::_buildJobQueue(AbstractEngine *engine, const QString &editingLan
         }
 
         for (const QString &targetLang : std::as_const(src.langCodesToTranslate)) {
-            // Queue all requested (page × lang) pairs.
-            // Completeness is checked cheaply in _processNextJob() before each
-            // API call so we skip already-translated fields without pre-loading
-            // every page's data during queue construction.
             TranslationJob job;
             job.pageId     = src.id;
             job.typeId     = src.typeId;
@@ -216,8 +188,6 @@ PageTranslator::_buildJobQueue(AbstractEngine *engine, const QString &editingLan
         }
     }
 
-    // Legal pages must always be translated first so they are available for
-    // review before any other content is published.
     std::stable_sort(queue.begin(), queue.end(),
                      [](const TranslationJob &a, const TranslationJob &b) {
                          const bool aLegal = (a.typeId == QLatin1String(PageTypeLegal::TYPE_ID));
@@ -225,6 +195,7 @@ PageTranslator::_buildJobQueue(AbstractEngine *engine, const QString &editingLan
                          return aLegal && !bLegal;
                      });
 
+    Q_UNUSED(engine)
     return queue;
 }
 
@@ -237,7 +208,7 @@ void PageTranslator::_processNextJob()
     if (m_queue.isEmpty()) {
         _log(QStringLiteral("All jobs done. Translated: %1  Errors: %2")
                  .arg(m_translated).arg(m_errors));
-        emit finished(m_translated, m_errors);
+        _emitFinished(m_translated, m_errors);
         return;
     }
 
@@ -247,7 +218,6 @@ void PageTranslator::_processNextJob()
              .arg(m_currentJob.targetLang)
              .arg(m_translated + m_errors + 1));
 
-    // Load and initialise the page type.
     m_currentPageType = AbstractPageType::createForTypeId(m_currentJob.typeId, m_categoryTable);
     if (!m_currentPageType) {
         _log(QStringLiteral("  Skipping: unknown page type '%1'.")
@@ -267,7 +237,6 @@ void PageTranslator::_processNextJob()
     m_currentPageType->load(m_currentPageData);
     m_currentPageType->setAuthorLang(m_currentJob.sourceLang);
 
-    // Skip the API call when the translation is already complete.
     if (m_currentPageType->isTranslationComplete(QStringView{}, m_currentJob.targetLang)) {
         _log(QStringLiteral("  Page %1 already fully translated into %2 — skipping")
                  .arg(m_currentJob.pageId).arg(m_currentJob.targetLang));
@@ -275,112 +244,206 @@ void PageTranslator::_processNextJob()
         return;
     }
 
-    // Collect only the fields that still need translation.
-    QList<TranslatableField> allFields;
-    m_currentPageType->collectTranslatables(QStringView{}, allFields);
+    QList<TranslatableField> fields;
+    m_currentPageType->collectTranslatables(QStringView{}, fields);
 
-    // Filter to untranslated fields only to minimise prompt size.
-    QList<TranslatableField> pendingFields;
-    for (const TranslatableField &f : std::as_const(allFields)) {
-        // A field needs translation when it has source text but no translation
-        // yet.  We query the page type: if removing just this field would make
-        // the translation incomplete, it is pending.  Instead of that complex
-        // check, we simply include all fields and let the AI re-confirm already-
-        // translated ones — the response is idempotent (applyTranslation
-        // overwrites existing values with equivalent text).
-        pendingFields.append(f);
-    }
-
-    if (pendingFields.isEmpty()) {
+    if (fields.isEmpty()) {
         _log(QStringLiteral("  Page %1 has no translatable content — skipping")
                  .arg(m_currentJob.pageId));
         _processNextJob();
         return;
     }
 
-    const QString &prompt = _buildPrompt(pendingFields,
-                                          m_currentJob.sourceLang,
-                                          m_currentJob.targetLang);
+    m_currentSingleFieldId = (fields.size() == 1) ? fields.first().id : QString{};
 
-    // Build Claude API request body.
-    QJsonObject msgObj;
-    msgObj[QStringLiteral("role")]    = QStringLiteral("user");
-    msgObj[QStringLiteral("content")] = prompt;
+    const QString prompt = TranslationProtocol::buildPrompt(fields, m_currentJob.sourceLang, m_currentJob.targetLang);
+    _log(QStringLiteral("  Sending %1 field(s) to claude, prompt size: %2 chars")
+             .arg(fields.size()).arg(prompt.size()));
 
-    QJsonObject body;
-    body[QStringLiteral("model")]      = QLatin1String(CLAUDE_MODEL);
-    body[QStringLiteral("max_tokens")] = 4096;
-    body[QStringLiteral("messages")]   = QJsonArray{msgObj};
+    // Write prompt to a temp file and launch the claude CLI.
+    m_tempDir = std::make_unique<QTemporaryDir>();
+    if (!m_tempDir->isValid()) {
+        _log(QStringLiteral("  Failed to create temp dir for page %1 → %2")
+                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
+        ++m_errors;
+        m_tempDir.reset();
+        _processNextJob();
+        return;
+    }
 
-    const QByteArray bodyBytes = QJsonDocument(body).toJson(QJsonDocument::Compact);
+    const QString promptPath = m_tempDir->path() + QStringLiteral("/prompt.txt");
+    {
+        QFile f(promptPath);
+        if (!f.open(QIODevice::WriteOnly)) {
+            _log(QStringLiteral("  Failed to write prompt file for page %1 → %2")
+                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
+            ++m_errors;
+            m_tempDir.reset();
+            _processNextJob();
+            return;
+        }
+        f.write(prompt.toUtf8());
+    }
 
-    QNetworkRequest req{QUrl(QLatin1String(CLAUDE_API_URL))};
-    req.setHeader(QNetworkRequest::ContentTypeHeader, QByteArrayLiteral("application/json"));
-    req.setRawHeader(QByteArrayLiteral("x-api-key"),           m_apiKey.toUtf8());
-    req.setRawHeader(QByteArrayLiteral("anthropic-version"),   QByteArrayLiteral("2023-06-01"));
+    m_processOutput.clear();
 
-    m_reply = m_nam->post(req, bodyBytes);
-    connect(m_reply, &QNetworkReply::finished, this, &PageTranslator::_onReplyFinished);
+    m_process = new QProcess(this);
+    m_process->setProgram(QStringLiteral("claude"));
+    m_process->setArguments({QStringLiteral("-p"), QStringLiteral("-"),
+                              QStringLiteral("--dangerously-skip-permissions"),
+                              QStringLiteral("--tools"), QStringLiteral(""),
+                              QStringLiteral("--output-format"), QStringLiteral("stream-json"),
+                              QStringLiteral("--verbose")});
+    m_process->setStandardInputFile(promptPath);
+
+    connect(m_process, &QProcess::readyReadStandardOutput,
+            this, &PageTranslator::_onProcessReadyRead);
+    connect(m_process,
+            QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, &PageTranslator::_onProcessFinished);
+
+    m_process->start();
 }
 
 // =============================================================================
-// Private: _onReplyFinished
+// Private: _onProcessFinished
 // =============================================================================
 
-void PageTranslator::_onReplyFinished()
+void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*status*/)
 {
-    const QByteArray raw = m_reply->readAll();
-    const QNetworkReply::NetworkError netErr = m_reply->error();
-    m_reply->deleteLater();
-    m_reply = nullptr;
+    QString translatedJson;
+    bool hasError = false;
 
-    if (netErr != QNetworkReply::NoError) {
-        _log(QStringLiteral("  Network error for page %1 → %2")
-                 .arg(m_currentJob.pageId)
-                 .arg(m_currentJob.targetLang),
-             true);
-        ++m_errors;
-        _processNextJob();
-        return;
-    }
-
-    // Parse API response: {"content": [{"type": "text", "text": "..."}], ...}
-    const QJsonDocument doc = QJsonDocument::fromJson(raw);
-    if (doc.isNull()) {
-        _log(QStringLiteral("  Invalid JSON response for page %1 → %2")
+    if (m_process->error() == QProcess::FailedToStart) {
+        _log(QStringLiteral("  claude executable not found in PATH for page %1 → %2")
                  .arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
-        ++m_errors;
-        _processNextJob();
-        return;
-    }
-
-    const QJsonArray content = doc.object()[QStringLiteral("content")].toArray();
-    if (content.isEmpty()) {
-        const QString apiErr = doc.object()[QStringLiteral("error")]
-                                    .toObject()[QStringLiteral("message")]
-                                    .toString();
-        _log(QStringLiteral("  API error for page %1 → %2: %3")
+        hasError = true;
+    } else if (exitCode != 0) {
+        const QString err = QString::fromUtf8(m_process->readAllStandardError()).trimmed();
+        _log(QStringLiteral("  claude error for page %1 → %2: %3")
                  .arg(m_currentJob.pageId).arg(m_currentJob.targetLang,
-                                                apiErr.isEmpty() ? QStringLiteral("(empty content)")
-                                                                  : apiErr),
+                      err.isEmpty() ? QStringLiteral("exit code %1").arg(exitCode) : err),
              true);
+        hasError = true;
+    } else {
+        // Drain any remaining bytes not yet delivered via readyReadStandardOutput.
+        m_processOutput += m_process->readAllStandardOutput();
+
+        // Save raw stream-json for one-time diagnosis of truncation issues.
+        {
+            const QString rawPath = m_workingDir.filePath(
+                QStringLiteral("translation_rawoutput_p%1_%2.bin")
+                    .arg(m_currentJob.pageId).arg(m_currentJob.targetLang));
+            QFile rf(rawPath);
+            if (rf.open(QIODevice::WriteOnly)) {
+                rf.write(m_processOutput);
+                _log(QStringLiteral("  Raw process output saved to: %1 (%2 bytes)")
+                         .arg(rawPath).arg(m_processOutput.size()));
+            }
+        }
+
+        // The output is stream-json (one JSON object per line).
+        // We collect text from two sources and use whichever is longer:
+        //   1. {"type":"result","result":"..."} — final compiled response (may be tail-truncated for large outputs)
+        //   2. {"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}} — full assistant turn
+        QString resultText;
+        QString assistantText;
+
+        for (const QByteArray &line : m_processOutput.split('\n')) {
+            const QByteArray trimmed = line.trimmed();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            const QJsonDocument doc = QJsonDocument::fromJson(trimmed);
+            if (!doc.isObject()) {
+                continue;
+            }
+            const QJsonObject obj = doc.object();
+            const QString type = obj.value(QStringLiteral("type")).toString();
+
+            if (type == QStringLiteral("result")) {
+                resultText = obj.value(QStringLiteral("result")).toString().trimmed();
+                break; // result is always the last line — no need to scan further
+            }
+
+            if (type == QStringLiteral("assistant")) {
+                const QJsonArray content = obj.value(QStringLiteral("message"))
+                                               .toObject()
+                                               .value(QStringLiteral("content"))
+                                               .toArray();
+                for (const QJsonValue &block : std::as_const(content)) {
+                    const QJsonObject blk = block.toObject();
+                    if (blk.value(QStringLiteral("type")).toString() == QStringLiteral("text")) {
+                        const QString t = blk.value(QStringLiteral("text")).toString().trimmed();
+                        if (t.size() > assistantText.size()) {
+                            assistantText = t;
+                        }
+                    }
+                }
+            }
+        }
+
+        _log(QStringLiteral("  result field: %1 chars  assistant content: %2 chars")
+                 .arg(resultText.size()).arg(assistantText.size()));
+        translatedJson = (assistantText.size() > resultText.size()) ? assistantText : resultText;
+    }
+
+    m_process->deleteLater();
+    m_process = nullptr;
+    m_tempDir.reset();
+
+    if (hasError) {
+        m_processOutput.clear();
         ++m_errors;
         _processNextJob();
         return;
     }
 
-    const QString translatedJson = content.at(0).toObject()[QStringLiteral("text")].toString();
-    const QHash<QString, QString> &translations = _parseResponse(translatedJson);
+    QHash<QString, QString> translations = TranslationProtocol::parseResponse(translatedJson);
+
+    // Single-field fallback: Claude sometimes omits the ===BEGIN header for very
+    // long responses. When only one field was sent and parsing finds nothing, strip
+    // any trailing ===END=== marker and treat the entire response as that field's
+    // translation.
+    if (translations.isEmpty() && !m_currentSingleFieldId.isEmpty() && !translatedJson.isEmpty()) {
+        static const QRegularExpression reStripEnd(
+            QStringLiteral(R"(\s*===END===\s*$)"),
+            QRegularExpression::DotMatchesEverythingOption);
+        QString cleaned = translatedJson;
+        cleaned.remove(reStripEnd);
+        cleaned = cleaned.trimmed();
+        if (!cleaned.isEmpty()) {
+            translations.insert(m_currentSingleFieldId, cleaned);
+            _log(QStringLiteral("  Page %1 → %2: ===BEGIN missing — using full response as single-field translation (%3 chars)")
+                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang).arg(cleaned.size()));
+        }
+    }
 
     if (translations.isEmpty()) {
-        _log(QStringLiteral("  Could not parse translation JSON for page %1 → %2")
-                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
+        const QString preview = translatedJson.left(300).replace(QLatin1Char('\n'), QStringLiteral("↵"));
+        _log(QStringLiteral("  Could not parse translation response for page %1 → %2. "
+                            "Response length: %3. First 300 chars: [%4]")
+                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang)
+                 .arg(translatedJson.size()).arg(preview), true);
+
+        // Save full raw response for diagnosis.
+        const QString dumpPath = m_workingDir.filePath(
+            QStringLiteral("translation_response_debug_p%1_%2.txt")
+                .arg(m_currentJob.pageId).arg(m_currentJob.targetLang));
+        {
+            QFile f(dumpPath);
+            if (f.open(QIODevice::WriteOnly)) {
+                f.write(translatedJson.toUtf8());
+                _log(QStringLiteral("  Raw response saved to: %1").arg(dumpPath));
+            }
+        }
+
+        m_processOutput.clear();
         ++m_errors;
         _processNextJob();
         return;
     }
 
-    // Apply each translated field to the in-memory page type.
     for (auto it = translations.cbegin(); it != translations.cend(); ++it) {
         m_currentPageType->applyTranslation(QStringView{},
                                              it.key(),
@@ -388,8 +451,6 @@ void PageTranslator::_onReplyFinished()
                                              it.value());
     }
 
-    // Persist: save() serialises bloc data + embedded translations.
-    // Re-inject internal (__-prefixed) keys that blocs do not own.
     QHash<QString, QString> finalData;
     m_currentPageType->save(finalData);
     for (auto it = m_currentPageData.cbegin(); it != m_currentPageData.cend(); ++it) {
@@ -399,6 +460,8 @@ void PageTranslator::_onReplyFinished()
     }
     m_repo.saveData(m_currentJob.pageId, finalData);
 
+    m_processOutput.clear();
+
     _log(QStringLiteral("  Page %1 → %2: done (%3 field(s) translated)")
              .arg(m_currentJob.pageId).arg(m_currentJob.targetLang).arg(translations.size()));
     ++m_translated;
@@ -407,64 +470,18 @@ void PageTranslator::_onReplyFinished()
     _processNextJob();
 }
 
-// =============================================================================
-// Private helpers
-// =============================================================================
-
-QString PageTranslator::_buildPrompt(const QList<TranslatableField> &fields,
-                                      const QString &sourceLang,
-                                      const QString &targetLang) const
+void PageTranslator::_onProcessReadyRead()
 {
-    // Serialise fields as a JSON array: [{id, source}, ...]
-    QJsonArray arr;
-    for (const TranslatableField &f : std::as_const(fields)) {
-        QJsonObject obj;
-        obj[QStringLiteral("id")]     = f.id;
-        obj[QStringLiteral("source")] = f.sourceText;
-        arr.append(obj);
+    if (m_process) {
+        m_processOutput += m_process->readAllStandardOutput();
     }
-    const QString fieldsJson = QString::fromUtf8(
-        QJsonDocument(arr).toJson(QJsonDocument::Indented));
-
-    return QStringLiteral(
-               "Translate the following page fields from %1 to %2.\n\n"
-               "Each field has an \"id\" (opaque key, never translate it) and "
-               "a \"source\" (the text to translate).\n\n"
-               "Rules:\n"
-               "- Return ONLY a valid JSON object mapping each \"id\" to its "
-               "translated text — no markdown fences, no explanation\n"
-               "- Preserve any HTML tags in the source; translate only the text content\n"
-               "- Keep proper nouns, brand names, and technical terms appropriate\n\n"
-               "Fields:\n%3\n\n"
-               "JSON output (example for two fields):\n"
-               "{\"0_text\": \"translated text\", \"1_title\": \"translated title\"}")
-        .arg(sourceLang, targetLang, fieldsJson);
 }
 
-QHash<QString, QString> PageTranslator::_parseResponse(const QString &jsonText) const
+void PageTranslator::_emitFinished(int translated, int errors)
 {
-    QHash<QString, QString> result;
-
-    // Strip a possible markdown code block wrapper (```json ... ```)
-    QString clean = jsonText.trimmed();
-    if (clean.startsWith(QStringLiteral("```"))) {
-        const int firstNewline = clean.indexOf(QLatin1Char('\n'));
-        const int lastFence    = clean.lastIndexOf(QStringLiteral("```"));
-        if (firstNewline > 0 && lastFence > firstNewline) {
-            clean = clean.mid(firstNewline + 1, lastFence - firstNewline - 1).trimmed();
-        }
-    }
-
-    const QJsonDocument doc = QJsonDocument::fromJson(clean.toUtf8());
-    if (!doc.isObject()) {
-        return result;
-    }
-
-    const QJsonObject obj = doc.object();
-    for (auto it = obj.begin(); it != obj.end(); ++it) {
-        result.insert(it.key(), it.value().toString());
-    }
-    return result;
+    QMetaObject::invokeMethod(this, [this, translated, errors]() {
+        emit finished(translated, errors);
+    }, Qt::QueuedConnection);
 }
 
 void PageTranslator::_log(const QString &msg, bool errorLevel)

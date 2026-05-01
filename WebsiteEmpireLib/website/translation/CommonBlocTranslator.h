@@ -10,11 +10,14 @@
 #include <QString>
 #include <QStringList>
 
+#include <memory>
+
+#include <QProcess>
+
 class AbstractCommonBloc;
 class AbstractTheme;
 class QFile;
-class QNetworkAccessManager;
-class QNetworkReply;
+class QTemporaryDir;
 
 /**
  * Translates common bloc fields (header, footer, cookies, …) to every target
@@ -25,7 +28,7 @@ class QNetworkReply;
  * 1. buildJobs() scans a list of blocs and produces one job per
  *    (bloc × targetLang) pair that has at least one untranslated field.
  *    Pairs where targetLang == sourceLang are skipped.
- * 2. startWithJobs() dispatches those jobs to the Claude API one at a time.
+ * 2. startWithJobs() dispatches those jobs to the claude CLI one at a time.
  *    For each job it:
  *      a) Finds the bloc by ID in the theme.
  *      b) Collects source texts via sourceTexts() and filters to fields
@@ -36,9 +39,12 @@ class QNetworkReply;
  * 3. Signals logMessage(), blocTranslated(), and finished() keep callers
  *    informed throughout.
  *
- * API key
- * -------
- * Read from the ANTHROPIC_API_KEY environment variable.
+ * Transport
+ * ---------
+ * Uses the claude CLI (must be on PATH) via QProcess with
+ * --dangerously-skip-permissions --tools "".
+ * --tools "" disables all tool use so Claude returns the translation inline.
+ * No ANTHROPIC_API_KEY is required.
  *
  * The class holds a non-owning reference to AbstractTheme; the theme must
  * outlive this object.
@@ -50,8 +56,8 @@ class CommonBlocTranslator : public QObject
 public:
     struct TranslationJob {
         QString blocId;      ///< stable ID matching AbstractCommonBloc::getId()
-        QString sourceLang;  ///< language the source texts are written in
-        QString targetLang;  ///< language to translate into
+        QString sourceLang;
+        QString targetLang;
     };
 
     explicit CommonBlocTranslator(AbstractTheme &theme,
@@ -63,7 +69,6 @@ public:
      * Returns one job per (bloc × targetLang) pair that has at least one
      * field returned by missingTranslations().  Pairs where
      * targetLang == sourceLang are skipped.
-     * The returned list is ready to pass to startWithJobs().
      */
     static QList<TranslationJob> buildJobs(const QList<AbstractCommonBloc *> &blocs,
                                             const QString                     &sourceLang,
@@ -81,26 +86,24 @@ signals:
     void finished(int translated, int errors);
 
 private slots:
-    void _onReplyFinished();
+    void _onProcessFinished(int exitCode, QProcess::ExitStatus status);
+    void _onProcessReadyRead();
 
 private:
     void    _processNextJob();
-    QString _buildPrompt(const QList<TranslatableField> &fields,
-                          const QString                  &sourceLang,
-                          const QString                  &targetLang) const;
-    QHash<QString, QString> _parseResponse(const QString &jsonText) const;
     void    _log(const QString &msg, bool errorLevel = false);
     void    _openLogFile();
+    void    _emitFinished(int translated, int errors);
 
     AbstractTheme            &m_theme;
     QDir                      m_workingDir;
-    QString                   m_apiKey;
 
-    QNetworkAccessManager    *m_nam         = nullptr;
-    QNetworkReply            *m_reply       = nullptr;
+    QProcess                 *m_process     = nullptr;
+    QByteArray                m_processOutput;
+    std::unique_ptr<QTemporaryDir> m_tempDir;
     QList<TranslationJob>     m_queue;
     TranslationJob            m_currentJob;
-    AbstractCommonBloc       *m_currentBloc = nullptr; ///< non-owning; valid during one API call
+    AbstractCommonBloc       *m_currentBloc = nullptr;
     int                       m_translated  = 0;
     int                       m_errors      = 0;
 

@@ -51,6 +51,14 @@ void TranslationStatusTable::reload()
     endResetModel();
 }
 
+int TranslationStatusTable::pageIdAt(int row) const
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return -1;
+    }
+    return m_rows.at(row).record.id;
+}
+
 QPair<int, int> TranslationStatusTable::progress() const
 {
     int done  = 0;

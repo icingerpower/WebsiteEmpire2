@@ -207,6 +207,30 @@ void PageRepositoryDb::remove(int id)
 }
 
 // =============================================================================
+// clearTranslationData / clearAllTranslationData
+// =============================================================================
+
+void PageRepositoryDb::clearTranslationData(int pageId, const QString &lang)
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "DELETE FROM page_data WHERE page_id = :id AND key LIKE :pat"));
+    q.bindValue(QStringLiteral(":id"),  pageId);
+    q.bindValue(QStringLiteral(":pat"),
+                QStringLiteral("%_tr:") + lang + QStringLiteral(":%"));
+    q.exec();
+}
+
+void PageRepositoryDb::clearAllTranslationData(int pageId)
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "DELETE FROM page_data WHERE page_id = :id AND key LIKE '%_tr:%'"));
+    q.bindValue(QStringLiteral(":id"), pageId);
+    q.exec();
+}
+
+// =============================================================================
 // updatePermalink / permalinkHistory / setHistoryRedirectType
 // =============================================================================
 

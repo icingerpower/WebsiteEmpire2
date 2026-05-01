@@ -11,12 +11,14 @@
 
 #include <memory>
 
+#include <QProcess>
+
 class AbstractEngine;
 class AbstractPageType;
 class CategoryTable;
 class IPageRepository;
-class QNetworkAccessManager;
-class QNetworkReply;
+class QFile;
+class QTemporaryDir;
 
 /**
  * Translates source pages to all target languages declared by their
@@ -27,10 +29,10 @@ class QNetworkReply;
  * 1. start() scans IPageRepository for source pages whose lang == editingLang.
  * 2. For each page, iterates page.langCodesToTranslate.  A job is queued for
  *    every (page × targetLang) pair.
- * 3. Jobs are dispatched to the Claude API one at a time.
+ * 3. Jobs are dispatched to the claude CLI one at a time via QProcess.
  *    In _processNextJob(), the page type is loaded and
  *    isTranslationComplete() is checked; already-complete pairs are skipped
- *    without an API call.
+ *    without a process call.
  *    collectTranslatables() gathers the fields that still need work; the AI
  *    receives a JSON list of {id, source} objects and must return a JSON map
  *    {fieldId: translatedText}.
@@ -49,9 +51,21 @@ class QNetworkReply;
  * Every log line is emitted via logMessage() and simultaneously appended to a
  * timestamped file under <workingDir>/translation_logs/.
  *
- * API key
- * -------
- * Read from the ANTHROPIC_API_KEY environment variable.
+ * Transport
+ * ---------
+ * Uses the claude CLI (must be on PATH) via QProcess with
+ * --dangerously-skip-permissions --tools "" --output-format stream-json --verbose.
+ *
+ * --tools "" prevents Claude from using file-writing tools that would cause
+ * claude -p to emit only the last AI turn rather than the full translation.
+ *
+ * --output-format stream-json --verbose makes the CLI emit a JSON object per
+ * line and include a final {"type":"result","result":"..."} line that holds
+ * the complete compiled response, avoiding the stdout truncation that affects
+ * the default text format for large (>~10 KB) responses.
+ *
+ * No ANTHROPIC_API_KEY is required; the Claude Code session credentials are
+ * used instead.
  *
  * The class holds non-owning references to IPageRepository and CategoryTable;
  * both must outlive this object.
@@ -76,8 +90,8 @@ public:
 
     /**
      * Starts async translation.  Returns immediately; progress is reported
-     * via signals.  A QNetworkAccessManager is created internally.
-     * engine provides the available lang codes; editingLang is the source lang.
+     * via signals.  engine provides the available lang codes; editingLang is
+     * the source lang.
      */
     void start(AbstractEngine *engine, const QString &editingLang);
 
@@ -92,8 +106,8 @@ public:
 
     /**
      * Returns all pending translation jobs as a human-readable string of
-     * Claude API prompts — one block per job — suitable for manual submission.
-     * Does not make any network calls.
+     * Claude prompts — one block per job — suitable for manual submission.
+     * Does not launch any process.
      */
     QString buildPrompts(AbstractEngine *engine, const QString &editingLang);
 
@@ -103,36 +117,35 @@ signals:
     void finished(int translated, int errors);        ///< all work complete
 
 private slots:
-    void _onReplyFinished();
+    void _onProcessFinished(int exitCode, QProcess::ExitStatus status);
+    void _onProcessReadyRead();
 
 private:
     QList<TranslationJob> _buildJobQueue(AbstractEngine *engine,
                                           const QString  &editingLang);
     void _processNextJob();
-    QString _buildPrompt(const QList<TranslatableField> &fields,
-                          const QString &sourceLang,
-                          const QString &targetLang) const;
-    QHash<QString, QString> _parseResponse(const QString &jsonText) const;
     void _log(const QString &msg, bool errorLevel = false);
     void _openLogFile();
+    // Always deferred via Qt::QueuedConnection so quit() fires after exec() starts.
+    void _emitFinished(int translated, int errors);
 
     IPageRepository &m_repo;
     CategoryTable   &m_categoryTable;
     QDir             m_workingDir;
 
-    QNetworkAccessManager *m_nam       = nullptr;
-    QNetworkReply         *m_reply     = nullptr;
-    QList<TranslationJob>  m_queue;
-    TranslationJob         m_currentJob;
-    int                    m_translated = 0;
-    int                    m_errors     = 0;
-    QString                m_apiKey;
+    QProcess                  *m_process   = nullptr;
+    QByteArray                 m_processOutput; // accumulated stdout from running process
+    std::unique_ptr<QTemporaryDir> m_tempDir;
+    QList<TranslationJob>      m_queue;
+    TranslationJob             m_currentJob;
+    int                        m_translated = 0;
+    int                        m_errors     = 0;
 
-    // State kept alive across the async API call.
+    // State kept alive across the async process call.
     std::unique_ptr<AbstractPageType> m_currentPageType;
-    QHash<QString, QString>           m_currentPageData; ///< loaded data for the current job
+    QHash<QString, QString>           m_currentPageData;
+    QString                           m_currentSingleFieldId; ///< set iff the current job has exactly one field
 
-    // Log file — opened lazily on first _log() call, appended throughout.
     QFile *m_logFile = nullptr;
 };
 

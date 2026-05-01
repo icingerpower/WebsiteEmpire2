@@ -60,6 +60,8 @@ public:
     QStringList strategyAttempts(int) const override { return {}; }
     QList<PageRecord> findGeneratedByTypeId(const QString &) const override { return {}; }
     void setLangCodesToTranslate(int, const QStringList &) override {}
+    void clearTranslationData(int, const QString &) override {}
+    void clearAllTranslationData(int) override {}
 
 private:
     QList<PageRecord>                    m_records;

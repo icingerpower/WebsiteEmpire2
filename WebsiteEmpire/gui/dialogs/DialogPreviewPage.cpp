@@ -32,8 +32,6 @@ DialogPreviewPage::DialogPreviewPage(IPageRepository &repo,
     , m_workingDir(workingDir)
 {
     ui->setupUi(this);
-
-    // Default splitter sizes: language list 150 px, browser takes the rest.
     ui->splitter->setSizes({150, 950});
 
     connect(ui->buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -41,29 +39,88 @@ DialogPreviewPage::DialogPreviewPage(IPageRepository &repo,
             this, &DialogPreviewPage::_onLanguageSelected);
 
     // -------------------------------------------------------------------------
-    // Build the list of pages to show (root + all translations).
+    // Resolve root page.
     // -------------------------------------------------------------------------
     const auto &startRec = repo.findById(pageId);
     if (!startRec) {
         ui->textBrowser->setPlainText(tr("Page not found."));
         return;
     }
-
-    // Resolve root page.
     const int rootId = (startRec->sourcePageId > 0) ? startRec->sourcePageId : pageId;
 
-    // Add root page.
     const auto &rootRec = repo.findById(rootId);
-    if (rootRec) {
-        m_pageIds.append(rootRec->id);
+    if (!rootRec) {
+        ui->textBrowser->setPlainText(tr("Page not found."));
+        return;
+    }
+
+    // -------------------------------------------------------------------------
+    // 1. Source language — always the first entry.
+    // -------------------------------------------------------------------------
+    {
+        PreviewEntry e;
+        e.pageIdToLoad = rootId;
+        e.lang         = rootRec->lang;
+        m_entries.append(e);
+
         auto *item = new QListWidgetItem(rootRec->lang, ui->listLanguages);
         item->setToolTip(rootRec->permalink);
     }
 
-    // Add translations.
+    // Track which languages are already listed to avoid duplicates.
+    QSet<QString> listedLangs;
+    listedLangs.insert(rootRec->lang);
+
+    // -------------------------------------------------------------------------
+    // 2. Inline translations — scan source page data for "tr:<lang>:" keys.
+    //    These are written by the new PageTranslator (stored in the source page).
+    // -------------------------------------------------------------------------
+    const QHash<QString, QString> &sourceData = repo.loadData(rootId);
+    {
+        // Keys look like "0_tr:fr:text" or "2_tr:de:title:hash".
+        static const QRegularExpression reTrKey(QStringLiteral("_tr:([^:]+):"));
+        QSet<QString> inlineLangs;
+        for (auto it = sourceData.cbegin(); it != sourceData.cend(); ++it) {
+            const auto m = reTrKey.match(it.key());
+            if (m.hasMatch()) {
+                inlineLangs.insert(m.captured(1));
+            }
+        }
+
+        // Add each discovered inline language in engine order (stable sort).
+        const int engineRows = engine.rowCount();
+        for (int i = 0; i < engineRows; ++i) {
+            const QString lang = engine.getLangCode(i);
+            if (lang.isEmpty() || listedLangs.contains(lang) || !inlineLangs.contains(lang)) {
+                continue;
+            }
+            listedLangs.insert(lang);
+
+            PreviewEntry e;
+            e.pageIdToLoad = rootId;   // load from source page
+            e.lang         = lang;
+            m_entries.append(e);
+
+            auto *item = new QListWidgetItem(lang, ui->listLanguages);
+            item->setToolTip(rootRec->permalink);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. Legacy translation page records (pre-inline system, sourcePageId != 0).
+    // -------------------------------------------------------------------------
     const QList<PageRecord> &translations = repo.findTranslations(rootId);
     for (const PageRecord &t : std::as_const(translations)) {
-        m_pageIds.append(t.id);
+        if (listedLangs.contains(t.lang)) {
+            continue; // already covered by inline entry
+        }
+        listedLangs.insert(t.lang);
+
+        PreviewEntry e;
+        e.pageIdToLoad = t.id;
+        e.lang         = t.lang;
+        m_entries.append(e);
+
         auto *item = new QListWidgetItem(t.lang, ui->listLanguages);
         item->setToolTip(t.permalink);
         if (t.translatedAt.isEmpty()) {
@@ -71,13 +128,18 @@ DialogPreviewPage::DialogPreviewPage(IPageRepository &repo,
         }
     }
 
+    // -------------------------------------------------------------------------
     // Select the row matching the originally requested pageId.
-    const int row = m_pageIds.indexOf(pageId);
-    if (row >= 0) {
-        ui->listLanguages->setCurrentRow(row);
-    } else if (!m_pageIds.isEmpty()) {
-        ui->listLanguages->setCurrentRow(0);
+    // -------------------------------------------------------------------------
+    int selectedRow = 0;
+    for (int i = 0; i < m_entries.size(); ++i) {
+        if (m_entries.at(i).pageIdToLoad == pageId
+            && m_entries.at(i).lang == startRec->lang) {
+            selectedRow = i;
+            break;
+        }
     }
+    ui->listLanguages->setCurrentRow(selectedRow);
 }
 
 DialogPreviewPage::~DialogPreviewPage()
@@ -87,15 +149,25 @@ DialogPreviewPage::~DialogPreviewPage()
 
 void DialogPreviewPage::_onLanguageSelected(int row)
 {
-    if (row < 0 || row >= m_pageIds.size()) {
+    if (row < 0 || row >= m_entries.size()) {
         return;
     }
-    _renderPage(m_pageIds.at(row));
+    _renderPage(m_entries.at(row));
 }
 
-void DialogPreviewPage::_renderPage(int pageId)
+int DialogPreviewPage::_engineIndexForLang(const QString &lang) const
 {
-    const auto &rec = m_repo.findById(pageId);
+    for (int i = 0; i < m_engine.rowCount(); ++i) {
+        if (m_engine.getLangCode(i) == lang) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+void DialogPreviewPage::_renderPage(const PreviewEntry &entry)
+{
+    const auto &rec = m_repo.findById(entry.pageIdToLoad);
     if (!rec) {
         ui->textBrowser->setPlainText(tr("Page not found."));
         return;
@@ -107,16 +179,24 @@ void DialogPreviewPage::_renderPage(int pageId)
         return;
     }
 
-    const QHash<QString, QString> &data = m_repo.loadData(pageId);
+    const QHash<QString, QString> &data = m_repo.loadData(entry.pageIdToLoad);
     type->load(data);
+
+    // For inline translations, the source lang must be set so the page type
+    // knows which fields are already in the source language vs translated.
+    type->setAuthorLang(rec->lang);
+
+    // Resolve the engine row for the requested language so addCode picks the
+    // correct tr:<lang>:* translation keys during rendering.
+    const int engineIdx = _engineIndexForLang(entry.lang);
 
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    type->addCode(QStringView{}, m_engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    type->addCode(QStringView{}, m_engine, engineIdx, html, css, js, cssDoneIds, jsDoneIds);
 
     _inlineSvgs(html);
 
-    setWindowTitle(tr("Preview — %1 [%2]").arg(rec->permalink, rec->lang));
+    setWindowTitle(tr("Preview — %1 [%2]").arg(rec->permalink, entry.lang));
     ui->textBrowser->setHtml(html);
 }
 
@@ -127,12 +207,10 @@ void DialogPreviewPage::_inlineSvgs(QString &html)
         return;
     }
 
-    // Match <img ... src="/file.svg" ...> — capture the bare filename (no slash).
     static const QRegularExpression reImg(
         QStringLiteral("<img\\b[^>]+src=\"/([^\"]+\\.svg)\"[^>]*>"),
         QRegularExpression::CaseInsensitiveOption);
 
-    // Collect unique filenames present in this HTML.
     QStringList filenames;
     {
         auto it = reImg.globalMatch(html);
@@ -147,7 +225,6 @@ void DialogPreviewPage::_inlineSvgs(QString &html)
         return;
     }
 
-    // Load blobs from images.db — one connection, scoped tightly.
     QHash<QString, QByteArray> blobs;
     const QString connName = QStringLiteral("preview_svg_")
                            + QString::number(reinterpret_cast<quintptr>(this));
@@ -174,7 +251,6 @@ void DialogPreviewPage::_inlineSvgs(QString &html)
         return;
     }
 
-    // Replace each matched <img> with a PNG data URI rendered from the SVG blob.
     QString result;
     result.reserve(html.size());
     int pos = 0;

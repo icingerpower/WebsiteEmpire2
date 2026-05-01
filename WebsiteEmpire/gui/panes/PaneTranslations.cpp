@@ -7,8 +7,12 @@
 #include "website/AbstractEngine.h"
 #include "website/commonblocs/AbstractCommonBloc.h"
 
+#include <QComboBox>
 #include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
 #include <QHeaderView>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSet>
@@ -26,8 +30,10 @@ PaneTranslations::PaneTranslations(QWidget *parent)
 {
     ui->setupUi(this);
     ui->labelConfigWarning->setVisible(false);
-    connect(ui->buttonReload,        &QPushButton::clicked, this, &PaneTranslations::_reload);
-    connect(ui->buttonViewCommands,  &QPushButton::clicked, this, &PaneTranslations::_viewCommands);
+    connect(ui->buttonReload,               &QPushButton::clicked, this, &PaneTranslations::_reload);
+    connect(ui->buttonViewCommands,         &QPushButton::clicked, this, &PaneTranslations::_viewCommands);
+    connect(ui->buttonRemoveOneTranslation, &QPushButton::clicked, this, &PaneTranslations::_removeOneTranslation);
+    connect(ui->buttonRemoveAllTranslations,&QPushButton::clicked, this, &PaneTranslations::_removeAllTranslations);
 }
 
 PaneTranslations::~PaneTranslations()
@@ -103,6 +109,10 @@ void PaneTranslations::_initModels()
     ui->tableViewStatus->horizontalHeader()->setSectionResizeMode(
         TranslationStatusTable::COL_PERMALINK, QHeaderView::Stretch);
     ui->tableViewStatus->resizeColumnsToContents();
+    connect(ui->tableViewStatus->selectionModel(),
+            &QItemSelectionModel::selectionChanged,
+            this, &PaneTranslations::_updateRemoveButtons);
+    _updateRemoveButtons();
 
     QList<AbstractCommonBloc *> blocs;
     if (m_theme) {
@@ -146,24 +156,52 @@ void PaneTranslations::_initModels()
 void PaneTranslations::_viewCommands()
 {
     const QString workingPath = m_workingDir.absolutePath();
+    const QString prefix = QStringLiteral("WebsiteEmpire --%1 \"%2\"")
+        .arg(AbstractLauncher::OPTION_WORKING_DIR, workingPath);
 
-    const QString cmd1 = QStringLiteral("WebsiteEmpire --%1 \"%2\" --%3")
-        .arg(AbstractLauncher::OPTION_WORKING_DIR,
-             workingPath,
-             LauncherTranslate::OPTION_NAME);
+    // Pick a sensible example language for the --language option: second unique
+    // lang code in the engine (first is the editing/source language).
+    QString exampleLang = QStringLiteral("fr");
+    if (m_engine) {
+        QSet<QString> seen;
+        QStringList langs;
+        const int count = m_engine->rowCount();
+        for (int i = 0; i < count; ++i) {
+            const QString lang = m_engine->getLangCode(i);
+            if (!lang.isEmpty() && !seen.contains(lang)) {
+                seen.insert(lang);
+                langs.append(lang);
+            }
+        }
+        if (langs.size() >= 2) {
+            exampleLang = langs.at(1);
+        }
+    }
 
-    const QString cmd2 = QStringLiteral("WebsiteEmpire --%1 \"%2\" --%3")
-        .arg(AbstractLauncher::OPTION_WORKING_DIR,
-             workingPath,
-             LauncherTranslateCommon::OPTION_NAME);
+    const QString cmdTranslateMin = prefix
+        + QStringLiteral(" --") + LauncherTranslate::OPTION_NAME;
 
-    const QString text = tr("# Translate pages:\n%1\n\n# Translate common blocs (header, footer, …):\n%2")
-        .arg(cmd1, cmd2);
+    const QString cmdTranslateFull = prefix
+        + QStringLiteral(" --") + LauncherTranslate::OPTION_NAME
+        + QStringLiteral(" --") + LauncherTranslate::OPTION_LANGUAGE + QStringLiteral(" ") + exampleLang
+        + QStringLiteral(" --") + LauncherTranslate::OPTION_LIMIT + QStringLiteral(" 1");
+
+    const QString cmdCommon = prefix
+        + QStringLiteral(" --") + LauncherTranslateCommon::OPTION_NAME;
+
+    const QString text = tr(
+        "# Translate pages (all languages):\n"
+        "%1\n\n"
+        "# Translate pages (all optional args — replace '%2' and '1' as needed):\n"
+        "%3\n\n"
+        "# Translate common blocs (header, footer, …):\n"
+        "%4"
+    ).arg(cmdTranslateMin, exampleLang, cmdTranslateFull, cmdCommon);
 
     auto *dlg  = new QDialog(this);
     dlg->setWindowTitle(tr("Translation Commands"));
     dlg->setAttribute(Qt::WA_DeleteOnClose);
-    dlg->resize(700, 260);
+    dlg->resize(800, 320);
 
     auto *edit = new QPlainTextEdit(text, dlg);
     edit->setReadOnly(true);
@@ -176,6 +214,96 @@ void PaneTranslations::_viewCommands()
     layout->addWidget(btn);
 
     dlg->exec();
+}
+
+void PaneTranslations::_removeOneTranslation()
+{
+    if (!m_statusModel || !m_pageRepo) {
+        return;
+    }
+
+    const QModelIndexList sel = ui->tableViewStatus->selectionModel()->selectedRows();
+    if (sel.isEmpty()) {
+        return;
+    }
+
+    const int pageId = m_statusModel->pageIdAt(sel.first().row());
+    if (pageId < 0) {
+        return;
+    }
+
+    const QStringList &langs = m_statusModel->targetLangs();
+    if (langs.isEmpty()) {
+        return;
+    }
+
+    auto *dlg    = new QDialog(this);
+    dlg->setWindowTitle(tr("Remove one translation"));
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+
+    auto *combo  = new QComboBox(dlg);
+    for (const QString &lang : std::as_const(langs)) {
+        combo->addItem(lang);
+    }
+
+    auto *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dlg);
+    connect(buttons, &QDialogButtonBox::accepted, dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
+
+    auto *layout = new QFormLayout(dlg);
+    layout->addRow(tr("Language:"), combo);
+    layout->addRow(buttons);
+
+    if (dlg->exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const QString lang = combo->currentText();
+    m_pageRepo->clearTranslationData(pageId, lang);
+    m_statusModel->reload();
+    _updateProgressLabels();
+}
+
+void PaneTranslations::_removeAllTranslations()
+{
+    if (!m_statusModel || !m_pageRepo) {
+        return;
+    }
+
+    const QModelIndexList sel = ui->tableViewStatus->selectionModel()->selectedRows();
+    if (sel.isEmpty()) {
+        return;
+    }
+
+    const int pageId = m_statusModel->pageIdAt(sel.first().row());
+    if (pageId < 0) {
+        return;
+    }
+
+    const auto answer = QMessageBox::question(
+        this,
+        tr("Remove all translations"),
+        tr("Remove all translations for page %1?\n\nThis cannot be undone.").arg(pageId),
+        QMessageBox::Yes | QMessageBox::Cancel,
+        QMessageBox::Cancel);
+
+    if (answer != QMessageBox::Yes) {
+        return;
+    }
+
+    m_pageRepo->clearAllTranslationData(pageId);
+    m_statusModel->reload();
+    _updateProgressLabels();
+}
+
+void PaneTranslations::_updateRemoveButtons()
+{
+    const bool hasSelection =
+        ui->tableViewStatus->selectionModel() &&
+        ui->tableViewStatus->selectionModel()->hasSelection();
+    ui->buttonRemoveOneTranslation->setEnabled(hasSelection);
+    ui->buttonRemoveAllTranslations->setEnabled(hasSelection);
 }
 
 void PaneTranslations::_updateProgressLabels()

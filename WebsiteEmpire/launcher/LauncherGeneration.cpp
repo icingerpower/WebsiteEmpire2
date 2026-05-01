@@ -217,6 +217,10 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
         bool contentValid = false;
 
         for (int attempt = 1; attempt <= kMaxContentAttempts; ++attempt) {
+            if (g_stopRequested) {
+                break;
+            }
+
             *(state->out) << QStringLiteral("[S%1] Prompt ready (%2 chars) — launching Claude (content, attempt %3/%4)...\n")
                                  .arg(sNum).arg(contentPrompt.size()).arg(attempt).arg(kMaxContentAttempts);
             state->out->flush();
@@ -267,7 +271,7 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
         }
 
         // ---- Call 1.5: inject missing SVG IMGFIX if the strategy needs one ---
-        if (queue->wantsSvgImage() && !GenPageQueue::hasSvgImgFix(articleText)) {
+        if (!g_stopRequested && queue->wantsSvgImage() && !GenPageQueue::hasSvgImgFix(articleText)) {
             *(state->out) << QStringLiteral("[S%1] SVG IMGFIX missing — running repair (1.5/2: SVG ref)...\n")
                                  .arg(sNum);
             state->out->flush();
@@ -300,14 +304,18 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
         state->out->flush();
 
         // ---- Call 2: metadata JSON from the article -------------------------
-        const QString metadataPrompt = queue->buildMetadataPrompt(page, articleText);
-        const QString metadataJson = co_await runClaudePrompt(metadataPrompt);
-        // Metadata failures are tolerated: processContentAndMetadata() falls back
-        // to saving 1_text only if metadataJson is empty or unparseable.
-        if (metadataJson.startsWith(QStringLiteral("__ERROR__"))) {
-            *(state->out) << QStringLiteral("[S%1] WARN (metadata): %2 — %3 — saving content only\n")
-                                 .arg(sNum).arg(page.permalink, metadataJson);
-            state->out->flush();
+        // Skip the metadata call (save content only) if the user pressed Ctrl+C.
+        QString metadataJson;
+        if (!g_stopRequested) {
+            const QString metadataPrompt = queue->buildMetadataPrompt(page, articleText);
+            metadataJson = co_await runClaudePrompt(metadataPrompt);
+            // Metadata failures are tolerated: processContentAndMetadata() falls back
+            // to saving 1_text only if metadataJson is empty or unparseable.
+            if (metadataJson.startsWith(QStringLiteral("__ERROR__"))) {
+                *(state->out) << QStringLiteral("[S%1] WARN (metadata): %2 — %3 — saving content only\n")
+                                     .arg(sNum).arg(page.permalink, metadataJson);
+                state->out->flush();
+            }
         }
 
         // ---- For source-DB-backed pages (id == 0), create the row first -----
@@ -341,6 +349,9 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
                 engine->index(websiteIndex, AbstractEngine::COL_DOMAIN)).toString();
             const QString lang = engine->getLangCode(websiteIndex);
             for (const auto &ref : std::as_const(imgRefs)) {
+                if (g_stopRequested) {
+                    break;
+                }
                 if (!ref.fileName.endsWith(QStringLiteral(".svg"), Qt::CaseInsensitive)) {
                     continue;
                 }

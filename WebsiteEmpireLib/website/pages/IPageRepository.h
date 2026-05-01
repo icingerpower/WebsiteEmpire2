@@ -182,6 +182,25 @@ public:
      * Called exclusively by the assessment step.
      */
     virtual void setLangCodesToTranslate(int id, const QStringList &langs) = 0;
+
+    // -------------------------------------------------------------------------
+    // Translation data removal
+    // -------------------------------------------------------------------------
+
+    /**
+     * Removes all translation data for page id and the given language code.
+     * Deletes every page_data row whose key matches the pattern
+     * "%_tr:<lang>:%" (e.g. "1_tr:fr:text", "1_tr:fr:text:hash").
+     * No-op when no such rows exist.
+     */
+    virtual void clearTranslationData(int pageId, const QString &lang) = 0;
+
+    /**
+     * Removes all translation data for page id across every language.
+     * Deletes every page_data row whose key contains "_tr:" (all languages).
+     * No-op when no translation data exists for the page.
+     */
+    virtual void clearAllTranslationData(int pageId) = 0;
 };
 
 #endif // IPAGEREPOSITORY_H

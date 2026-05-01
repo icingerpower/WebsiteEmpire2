@@ -86,6 +86,26 @@ private:
      */
     void _viewCommands();
 
+    /**
+     * Prompts for a language via a combobox dialog, then deletes all
+     * translation data for the selected page / chosen language.
+     * Connected to the "Remove one translation" button.
+     */
+    void _removeOneTranslation();
+
+    /**
+     * Shows a confirmation dialog, then deletes all translation data for the
+     * selected page across every language.
+     * Connected to the "Remove all translations" button.
+     */
+    void _removeAllTranslations();
+
+    /**
+     * Enables or disables the remove buttons based on whether a row is
+     * currently selected in tableViewStatus.  Called on selection changes.
+     */
+    void _updateRemoveButtons();
+
     /** Refreshes the progress labels from the current model state. */
     void _updateProgressLabels();
 

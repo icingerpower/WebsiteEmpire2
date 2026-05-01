@@ -43,6 +43,7 @@ add_empire_test(Test_Translation_PageAssessor        test_translation_page_asses
 add_empire_test(Test_Translation_Scheduler           test_translation_scheduler.cpp)
 add_empire_test(Test_Translation_StatusTable         test_translation_status_table.cpp)
 add_empire_test(Test_Translation_FieldTable          test_translation_field_table.cpp)
+add_empire_test(Test_Translation_Protocol            test_translation_protocol.cpp)
 add_empire_test(Test_Website_GenerationWorkflow      test_generation_workflow.cpp)
 add_empire_test(Test_Website_GenerationCoroutine     test_generation_coroutine.cpp)
 

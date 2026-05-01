@@ -29,6 +29,36 @@
       </spacer>
      </item>
      <item>
+      <widget class="QPushButton" name="buttonRemoveOneTranslation">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="text">
+        <string>Remove one translation</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="buttonRemoveAllTranslations">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="text">
+        <string>Remove all translations</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QFrame" name="lineTopBar">
+       <property name="frameShape">
+        <enum>QFrame::VLine</enum>
+       </property>
+       <property name="frameShadow">
+        <enum>QFrame::Sunken</enum>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QPushButton" name="buttonViewCommands">
        <property name="text">
         <string>View commands</string>

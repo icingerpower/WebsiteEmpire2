@@ -48,6 +48,12 @@ public:
     /** Reload all rows from the repository (calls beginResetModel / endResetModel). */
     void reload();
 
+    /** Returns the page id for the given model row, or -1 if out of range. */
+    int pageIdAt(int row) const;
+
+    /** Returns the ordered list of target language codes. */
+    const QStringList &targetLangs() const { return m_targetLangs; }
+
     /**
      * Returns {done, total} where total = rows × target languages and
      * done = number of (page, lang) pairs where isTranslationComplete is true.
