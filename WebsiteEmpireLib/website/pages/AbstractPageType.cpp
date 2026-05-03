@@ -76,6 +76,35 @@ void AbstractPageType::setAuthorLang(const QString &lang)
 }
 
 // =============================================================================
+// collectAiKeyClues
+// =============================================================================
+
+QHash<QString, QString> AbstractPageType::collectAiKeyClues() const
+{
+    QHash<QString, QString> result;
+    const auto &blocs = getPageBlocs();
+    for (int i = 0; i < blocs.size(); ++i) {
+        const QString prefix = QString::number(i) + QStringLiteral("_");
+        const auto clues = blocs.at(i)->getAiKeyClues();
+        for (auto it = clues.cbegin(); it != clues.cend(); ++it) {
+            result.insert(prefix + it.key(), it.value());
+        }
+    }
+    return result;
+}
+
+// =============================================================================
+// bindGenerationContext
+// =============================================================================
+
+void AbstractPageType::bindGenerationContext(IPageRepository & /*repo*/,
+                                              const QDir      & /*workingDir*/)
+{
+    // Default: no-op. Override in page types that need repo/stats access during
+    // addCode() (e.g. PageTypeCategory).
+}
+
+// =============================================================================
 // load / save
 // =============================================================================
 

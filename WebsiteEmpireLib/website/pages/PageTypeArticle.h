@@ -3,6 +3,7 @@
 
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/blocs/PageBlocAutoLink.h"
+#include "website/pages/blocs/PageBlocCategoryLinks.h"
 #include "website/pages/blocs/PageBlocSocial.h"
 #include "website/pages/blocs/PageBlocText.h"
 
@@ -12,11 +13,12 @@ class CategoryTable;
 class PageBlocCategory;
 
 /**
- * A page type composed of four blocs (in order):
- *   0 — PageBlocCategory   : category selection
- *   1 — PageBlocText        : main article body
- *   2 — PageBlocSocial      : Open Graph / social-media meta tags
- *   3 — PageBlocAutoLink    : keywords that auto-link to this page
+ * A page type composed of five blocs (in order):
+ *   0 — PageBlocCategory      : primary breadcrumb category
+ *   1 — PageBlocText           : main article body
+ *   2 — PageBlocSocial         : Open Graph / social-media meta tags
+ *   3 — PageBlocAutoLink       : keywords that auto-link to this page
+ *   4 — PageBlocCategoryLinks  : cross-reference category links (body parts, etc.)
  *
  * Registered in the AbstractPageType registry under TYPE_ID = "article".
  *
@@ -63,6 +65,7 @@ private:
     PageBlocText                     m_textBloc;
     PageBlocSocial                   m_socialBloc;
     PageBlocAutoLink                 m_autoLinkBloc;
+    PageBlocCategoryLinks            m_categoryLinksBloc;
     QList<const AbstractPageBloc *>  m_blocs;
 };
 

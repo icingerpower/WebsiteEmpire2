@@ -51,6 +51,24 @@ public:
     virtual AbstractPageBlockWidget *createEditWidget() = 0;
 
     /**
+     * Returns per-key hints that the AI generation pipeline injects into the
+     * JSON schema prompt so Claude knows how to fill each metadata field.
+     *
+     * Keys must be in the same un-prefixed namespace as save() — the caller
+     * (AbstractPageType::collectAiKeyClues) adds the bloc-index prefix.
+     *
+     * Blocs whose fields are determined by the editor (not the AI) should
+     * return an empty hash.  The default implementation does exactly that.
+     *
+     * Example for PageBlocCategory:
+     *   { "categories", "Comma-separated IDs. Choose ONLY from: 1=Knee, 2=Shoulder" }
+     *
+     * The hint replaces the empty-string placeholder in the schema JSON, so
+     * Claude sees the guidance inline with the field it must fill.
+     */
+    virtual QHash<QString, QString> getAiKeyClues() const;
+
+    /**
      * Returns the semantic attributes this bloc exposes for indexing and
      * faceted search (categories, properties, qualities).
      *

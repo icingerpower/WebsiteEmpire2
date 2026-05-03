@@ -15,6 +15,8 @@ class AbstractEngine;
 class AbstractPageBloc;
 class AbstractAttribute;
 class CategoryTable;
+class IPageRepository;
+class QDir;
 
 /**
  * Base class for a page type.
@@ -117,6 +119,22 @@ public:
      */
     bool isTranslationComplete(QStringView   origContent,
                                const QString &lang) const override;
+
+    /**
+     * Called by PageGenerator after createForTypeId() + load() + setAuthorLang().
+     * Page types that need repository access during addCode() (e.g. PageTypeCategory
+     * reading stats for article sorting) override this to receive the repo and dir.
+     * Default: no-op.
+     */
+    virtual void bindGenerationContext(IPageRepository &repo, const QDir &workingDir);
+
+    /**
+     * Aggregates each bloc's getAiKeyClues() into a single flat map, prefixing
+     * every key with "<blocIndex>_" to match the save()/load() namespace.
+     * Used by GenPageQueue to replace empty-string placeholders in the JSON schema
+     * prompt with per-field hints so Claude knows how to fill each metadata field.
+     */
+    QHash<QString, QString> collectAiKeyClues() const;
 
     /**
      * Returns the union of attributes from all blocs.

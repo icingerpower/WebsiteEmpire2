@@ -13,6 +13,32 @@ QString PageBlocSocial::getName() const
 }
 
 // =============================================================================
+// getAiKeyClues
+// =============================================================================
+
+QHash<QString, QString> PageBlocSocial::getAiKeyClues() const
+{
+    return {
+        {QLatin1String(KEY_FB_TITLE),
+         QCoreApplication::translate("PageBlocSocial", "Facebook title, max 60 chars")},
+        {QLatin1String(KEY_FB_DESC),
+         QCoreApplication::translate("PageBlocSocial", "Facebook description, max 160 chars")},
+        {QLatin1String(KEY_TW_TITLE),
+         QCoreApplication::translate("PageBlocSocial", "Twitter/X title, max 70 chars")},
+        {QLatin1String(KEY_TW_DESC),
+         QCoreApplication::translate("PageBlocSocial", "Twitter/X description, max 200 chars")},
+        {QLatin1String(KEY_PT_TITLE),
+         QCoreApplication::translate("PageBlocSocial", "Pinterest title, max 100 chars")},
+        {QLatin1String(KEY_PT_DESC),
+         QCoreApplication::translate("PageBlocSocial", "Pinterest description, max 500 chars")},
+        {QLatin1String(KEY_LI_TITLE),
+         QCoreApplication::translate("PageBlocSocial", "LinkedIn title, max 150 chars")},
+        {QLatin1String(KEY_LI_DESC),
+         QCoreApplication::translate("PageBlocSocial", "LinkedIn description, max 300 chars")},
+    };
+}
+
+// =============================================================================
 // load / save
 // =============================================================================
 

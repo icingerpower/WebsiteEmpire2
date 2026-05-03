@@ -7,6 +7,8 @@ set(BLOCS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocText.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategory.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategory.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategoryLinks.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategoryLinks.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocImageLinks.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocImageLinks.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategoryArticles.h
@@ -17,5 +19,7 @@ set(BLOCS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocSocial.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocAutoLink.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocAutoLink.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocHubGrid.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocHubGrid.cpp
     ${BLOCS_WIDGETS_FILES}
 )

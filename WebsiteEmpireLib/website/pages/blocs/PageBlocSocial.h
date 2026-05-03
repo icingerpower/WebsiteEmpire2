@@ -36,6 +36,7 @@ public:
     ~PageBlocSocial() override = default;
 
     QString getName() const override;
+    QHash<QString, QString> getAiKeyClues() const override;
     void load(const QHash<QString, QString> &values) override;
     void save(QHash<QString, QString> &values) const override;
 

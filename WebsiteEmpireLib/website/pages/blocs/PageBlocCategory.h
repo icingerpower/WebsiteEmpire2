@@ -43,6 +43,12 @@ public:
     void setContent(const QString &content);
 
     /**
+     * Returns a hint for the "categories" key listing every available category
+     * id=name pair from the live CategoryTable.  Empty when no categories exist.
+     */
+    QHash<QString, QString> getAiKeyClues() const override;
+
+    /**
      * Reads KEY_CATEGORIES (comma-separated integer ids) from values.
      * Delegates to setContent(). Unknown keys are silently ignored.
      */
@@ -56,9 +62,13 @@ public:
      */
     void save(QHash<QString, QString> &values) const override;
 
-    // WebCodeAdder interface.
-    // Renders selected categories as <ul class="categories"><li>…</li></ul>.
-    // The CSS block is emitted once per page via cssDoneIds.
+    /**
+     * Renders a breadcrumb trail for the deepest selected category, e.g.
+     * "Health › Bone Conditions".  Each step links to its hub page when
+     * engine.isPageAvailable() confirms the page exists; otherwise plain text.
+     * Hub permalink convention: /<lowercased-hyphenated-name>.html.
+     * The CSS block is emitted once per page via cssDoneIds.
+     */
     void addCode(QStringView     origContent,
                  AbstractEngine &engine,
                  int             websiteIndex,

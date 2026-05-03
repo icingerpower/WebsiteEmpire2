@@ -13,6 +13,8 @@ set(PAGES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/LinksManager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeArticle.h
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeArticle.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageTypeCategory.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageTypeCategory.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeJsApp.h
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeJsApp.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeHome.h

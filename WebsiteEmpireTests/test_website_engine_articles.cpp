@@ -273,12 +273,13 @@ void Test_EngineArticles::test_enginearticles_get_page_types_valid_after_reinit(
 
 void Test_EngineArticles::test_enginearticles_page_type_has_two_blocs()
 {
+    // PageTypeArticle has five blocs: Category, Text, Social, AutoLink, CategoryLinks.
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     HostTable hostTable(QDir(dir.path()));
     EngineArticles engine;
     engine.init(QDir(dir.path()), hostTable);
-    QCOMPARE(engine.getPageTypes().first()->getPageBlocs().size(), 4);
+    QCOMPARE(engine.getPageTypes().first()->getPageBlocs().size(), 5);
 }
 
 void Test_EngineArticles::test_enginearticles_first_bloc_is_category_bloc()
@@ -345,8 +346,8 @@ void Test_EngineArticles::test_enginearticles_category_bloc_renders_ul_tag()
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
     bloc->addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
-    QVERIFY(html.contains(QStringLiteral("<ul")));
-    QVERIFY(html.contains(QStringLiteral("</ul>")));
+    QVERIFY(html.contains(QStringLiteral("<ol")));
+    QVERIFY(html.contains(QStringLiteral("</ol>")));
 }
 
 void Test_EngineArticles::test_enginearticles_category_bloc_empty_content_produces_no_html()
@@ -427,39 +428,43 @@ void Test_EngineArticles::test_enginearticles_category_bloc_css_not_duplicated()
 
 void Test_EngineArticles::test_enginearticles_category_bloc_multiple_categories_all_rendered()
 {
+    // A parent-child hierarchy causes both ancestor names to appear in the
+    // breadcrumb trail rendered by addCode().
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     HostTable hostTable(QDir(dir.path()));
     EngineArticles engine;
     engine.init(QDir(dir.path()), hostTable);
 
-    const int idA = engine.categoryTable().addCategory(QStringLiteral("Alpha"));
-    const int idB = engine.categoryTable().addCategory(QStringLiteral("Beta"));
+    const int parentId = engine.categoryTable().addCategory(QStringLiteral("Health"));
+    const int childId  = engine.categoryTable().addCategory(QStringLiteral("Bones"), parentId);
     const AbstractPageBloc *bloc = firstCategoryBloc(engine);
+    // Load only the child — its ancestor chain includes both Health and Bones.
     const_cast<AbstractPageBloc *>(bloc)->load(
-        {{QLatin1String(PageBlocCategory::KEY_CATEGORIES),
-          QStringLiteral("%1,%2").arg(QString::number(idA), QString::number(idB))}});
+        {{QLatin1String(PageBlocCategory::KEY_CATEGORIES), QString::number(childId)}});
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
     bloc->addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
-    QVERIFY(html.contains(QStringLiteral("Alpha")));
-    QVERIFY(html.contains(QStringLiteral("Beta")));
+    QVERIFY(html.contains(QStringLiteral("Health")));
+    QVERIFY(html.contains(QStringLiteral("Bones")));
 }
 
 void Test_EngineArticles::test_enginearticles_category_bloc_category_order_preserved()
 {
+    // In a parent-child hierarchy the parent (root) must appear before the child
+    // in the breadcrumb trail rendered root → leaf.
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     HostTable hostTable(QDir(dir.path()));
     EngineArticles engine;
     engine.init(QDir(dir.path()), hostTable);
 
-    const int idA = engine.categoryTable().addCategory(QStringLiteral("First"));
-    const int idB = engine.categoryTable().addCategory(QStringLiteral("Second"));
+    const int parentId = engine.categoryTable().addCategory(QStringLiteral("First"));
+    const int childId  = engine.categoryTable().addCategory(QStringLiteral("Second"), parentId);
     const AbstractPageBloc *bloc = firstCategoryBloc(engine);
+    // Load the child; the breadcrumb chain is [parent, child] = [First, Second].
     const_cast<AbstractPageBloc *>(bloc)->load(
-        {{QLatin1String(PageBlocCategory::KEY_CATEGORIES),
-          QStringLiteral("%1,%2").arg(QString::number(idA), QString::number(idB))}});
+        {{QLatin1String(PageBlocCategory::KEY_CATEGORIES), QString::number(childId)}});
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
     bloc->addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);

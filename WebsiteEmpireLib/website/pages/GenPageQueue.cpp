@@ -110,10 +110,11 @@ QString GenPageQueue::buildStep1Prompt(const PageRecord &page,
 QString GenPageQueue::buildStep2Prompt() const
 {
     const QHash<QString, QString> &schema = _schema();
+    const QHash<QString, QString> &clues  = _aiKeyClues();
 
     QJsonObject skeleton;
     for (auto it = schema.cbegin(); it != schema.cend(); ++it) {
-        skeleton[it.key()] = it.value();
+        skeleton[it.key()] = clues.value(it.key(), it.value());
     }
     const QString schemaJson = QString::fromUtf8(
         QJsonDocument(skeleton).toJson(QJsonDocument::Indented));
@@ -215,10 +216,11 @@ QString GenPageQueue::buildCombinedPrompt(const PageRecord &page,
     //      buildStep2Prompt with rephrased intro lines) ------------------------
 
     const QHash<QString, QString> &schema = _schema();
+    const QHash<QString, QString> &clues  = _aiKeyClues();
 
     QJsonObject skeleton;
     for (auto it = schema.cbegin(); it != schema.cend(); ++it) {
-        skeleton[it.key()] = it.value();
+        skeleton[it.key()] = clues.value(it.key(), it.value());
     }
     const QString schemaJson = QString::fromUtf8(
         QJsonDocument(skeleton).toJson(QJsonDocument::Indented));
@@ -358,12 +360,15 @@ QString GenPageQueue::buildMetadataPrompt(const PageRecord &page,
                                            const QString   &articleText) const
 {
     const QHash<QString, QString> &schema = _schema();
+    const QHash<QString, QString> &clues  = _aiKeyClues();
 
-    // Build metadata-only schema: exclude all keys starting with "1_"
+    // Build metadata-only schema: exclude all keys starting with "1_".
+    // Substitute the AI hint as the value where one is available so Claude sees
+    // field guidance inline (e.g. "Comma-separated IDs. Choose ONLY from: 1=X, 2=Y").
     QJsonObject metaSkeleton;
     for (auto it = schema.cbegin(); it != schema.cend(); ++it) {
         if (!it.key().startsWith(QStringLiteral("1_"))) {
-            metaSkeleton[it.key()] = it.value();
+            metaSkeleton[it.key()] = clues.value(it.key(), it.value());
         }
     }
     const QString schemaJson = QString::fromUtf8(
@@ -636,12 +641,25 @@ const QHash<QString, QString> &GenPageQueue::_schema() const
     }
 
     // Create a fresh page type instance and call save() to discover all keys.
+    // Populate AI hints from the same instance to avoid creating it twice.
     auto type = AbstractPageType::createForTypeId(m_pageTypeId, m_categoryTable);
     if (type) {
         type->save(m_schema);
+        m_aiKeyClues       = type->collectAiKeyClues();
+        m_aiKeyCluesCached = true;
     }
     m_schemaCached = true;
     return m_schema;
+}
+
+const QHash<QString, QString> &GenPageQueue::_aiKeyClues() const
+{
+    if (m_aiKeyCluesCached) {
+        return m_aiKeyClues;
+    }
+    // _schema() populates both caches; call it now if not yet cached.
+    _schema();
+    return m_aiKeyClues;
 }
 
 QHash<QString, QString> GenPageQueue::_parseJson(const QString &text)

@@ -4,6 +4,34 @@
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/blocs/widgets/CategoryEditorWidget.h"
 
+#include <QCoreApplication>
+#include <QRegularExpression>
+
+// =============================================================================
+// getAiKeyClues
+// =============================================================================
+
+QHash<QString, QString> PageBlocCategory::getAiKeyClues() const
+{
+    const auto &rows = m_table.categories();
+    if (rows.isEmpty()) {
+        return {};
+    }
+    QStringList vocab;
+    vocab.reserve(rows.size());
+    for (const auto &row : std::as_const(rows)) {
+        vocab.append(QString::number(row.id) + QStringLiteral("=") + row.name);
+    }
+    return {{QLatin1String(KEY_CATEGORIES),
+             QCoreApplication::translate("PageBlocCategory",
+                 "Comma-separated category IDs. Choose ONLY from: %1")
+                 .arg(vocab.join(QStringLiteral(", ")))}};
+}
+
+// =============================================================================
+// getName
+// =============================================================================
+
 QString PageBlocCategory::getName() const
 {
     return tr("Categories");
@@ -44,6 +72,22 @@ void PageBlocCategory::save(QHash<QString, QString> &values) const
 
 // ---- WebCodeAdder -----------------------------------------------------------
 
+// Converts a category name to a page permalink slug, e.g.
+// "Bone Conditions" → "/bone-conditions.html".
+// Returns an empty string if the name produces an empty slug.
+static QString _categoryPermalink(const QString &name)
+{
+    static const QRegularExpression s_nonAlnum(QStringLiteral("[^a-z0-9]+"));
+    QString slug = name.toLower();
+    slug.replace(s_nonAlnum, QStringLiteral("-"));
+    while (slug.startsWith(QLatin1Char('-'))) { slug.remove(0, 1); }
+    while (slug.endsWith(QLatin1Char('-'))) { slug.chop(1); }
+    if (slug.isEmpty()) {
+        return {};
+    }
+    return QStringLiteral("/") + slug + QStringLiteral(".html");
+}
+
 void PageBlocCategory::addCode(QStringView     /*origContent*/,
                                AbstractEngine &engine,
                                int             websiteIndex,
@@ -53,46 +97,89 @@ void PageBlocCategory::addCode(QStringView     /*origContent*/,
                                QSet<QString>  &cssDoneIds,
                                QSet<QString>  &jsDoneIds) const
 {
-    Q_UNUSED(engine)
-    Q_UNUSED(websiteIndex)
     Q_UNUSED(js)
     Q_UNUSED(jsDoneIds)
 
-    // Use the state loaded via load() / setContent().
     if (m_selectedIds.isEmpty()) {
         return;
     }
 
-    // Resolve names first — skip the whole block if every id is unknown.
-    QStringList names;
-    names.reserve(m_selectedIds.size());
+    // Pick the selected category with the longest ancestor chain (most specific).
+    // This becomes the leaf of the breadcrumb trail.
+    int primaryId = m_selectedIds.first();
+    int maxDepth  = -1;
     for (const int id : std::as_const(m_selectedIds)) {
-        const CategoryTable::CategoryRow *row = m_table.categoryById(id);
-        if (row) {
-            names.append(row->name);
+        int depth = 0;
+        int cur   = id;
+        while (cur != 0) {
+            const CategoryTable::CategoryRow *r = m_table.categoryById(cur);
+            if (!r || r->parentId == cur) { break; }
+            cur = r->parentId;
+            ++depth;
+        }
+        if (depth > maxDepth) {
+            maxDepth  = depth;
+            primaryId = id;
         }
     }
-    if (names.isEmpty()) {
+
+    // Build ancestor chain root → leaf.
+    QList<int> chain;
+    {
+        int cur = primaryId;
+        while (cur != 0) {
+            chain.prepend(cur);
+            const CategoryTable::CategoryRow *r = m_table.categoryById(cur);
+            if (!r || r->parentId == cur) { break; }
+            cur = r->parentId;
+        }
+    }
+    if (chain.isEmpty()) {
         return;
     }
 
-    static const QString CSS_ID = QStringLiteral("page-bloc-category");
+    // Build inner list items first; bail out if every id in the chain is unknown.
+    const QString langCode = engine.getLangCode(websiteIndex);
+    QString inner;
+    for (const int id : std::as_const(chain)) {
+        const CategoryTable::CategoryRow *row = m_table.categoryById(id);
+        if (!row) { continue; }
+
+        const QString name = langCode.isEmpty()
+            ? row->name
+            : m_table.translationFor(id, langCode);
+        const QString permalink = _categoryPermalink(name);
+
+        inner += QStringLiteral("<li>");
+        if (!permalink.isEmpty() && engine.isPageAvailable(permalink, websiteIndex)) {
+            inner += QStringLiteral("<a href=\"");
+            inner += permalink;
+            inner += QStringLiteral("\">");
+            inner += name;
+            inner += QStringLiteral("</a>");
+        } else {
+            inner += name;
+        }
+        inner += QStringLiteral("</li>");
+    }
+    if (inner.isEmpty()) {
+        return;
+    }
+
+    static const QString CSS_ID = QStringLiteral("page-bloc-breadcrumb");
     if (!cssDoneIds.contains(CSS_ID)) {
         cssDoneIds.insert(CSS_ID);
         css += QStringLiteral(
-            ".categories{display:flex;flex-wrap:wrap;gap:0.5em;"
-            "list-style:none;padding:0;margin:0}"
-            ".categories .category{background:#eee;padding:0.2em 0.6em;"
-            "border-radius:1em;font-size:0.875em}");
+            ".breadcrumb{display:flex;flex-wrap:wrap;gap:0.25em;align-items:center;"
+            "list-style:none;padding:0;margin:0 0 0.75em}"
+            ".breadcrumb li+li::before{content:\"›\";margin-right:0.25em;color:#999}"
+            ".breadcrumb a{color:inherit;text-decoration:none}"
+            ".breadcrumb a:hover{text-decoration:underline}");
     }
 
-    html += QStringLiteral("<ul class=\"categories\">");
-    for (const QString &name : std::as_const(names)) {
-        html += QStringLiteral("<li class=\"category\">");
-        html += name;
-        html += QStringLiteral("</li>");
-    }
-    html += QStringLiteral("</ul>");
+    html += QStringLiteral("<nav aria-label=\"breadcrumb\"><ol class=\"breadcrumb\">");
+    html += inner;
+    html += QStringLiteral("</ol></nav>");
 }
 
 AbstractPageBlockWidget *PageBlocCategory::createEditWidget()

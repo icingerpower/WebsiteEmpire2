@@ -213,6 +213,10 @@ private:
     // Built lazily and cached; requires CategoryTable for type instantiation.
     const QHash<QString, QString> &_schema() const;
 
+    // Returns per-key AI hints aggregated from all blocs via collectAiKeyClues().
+    // Built lazily and cached alongside _schema().
+    const QHash<QString, QString> &_aiKeyClues() const;
+
     static QHash<QString, QString> _parseJson(const QString &text);
 
     QString          m_pageTypeId;
@@ -224,6 +228,8 @@ private:
 
     mutable QHash<QString, QString> m_schema;
     mutable bool                    m_schemaCached = false;
+    mutable QHash<QString, QString> m_aiKeyClues;
+    mutable bool                    m_aiKeyCluesCached = false;
 };
 
 #endif // GENPAGEQUEUE_H

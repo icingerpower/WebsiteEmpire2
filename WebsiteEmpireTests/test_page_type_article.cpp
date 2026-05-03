@@ -126,9 +126,9 @@ private slots:
 
 void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_returns_four_blocs()
 {
-    // PageTypeArticle has four blocs: Category, Text, Social, AutoLink.
+    // PageTypeArticle has five blocs: Category, Text, Social, AutoLink, CategoryLinks.
     ArticleFixture f;
-    QCOMPARE(f.article.getPageBlocs().size(), 4);   // 1
+    QCOMPARE(f.article.getPageBlocs().size(), 5);   // 1
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_all_non_null()
@@ -299,7 +299,7 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_css_inlined_in_style_tag
     f.article.addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
 
     QVERIFY(html.contains(QStringLiteral("<style>")));        // 22
-    QVERIFY(html.contains(QStringLiteral(".categories")));    // 23
+    QVERIFY(html.contains(QStringLiteral(".breadcrumb")));    // 23
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_style_tag_in_head_before_body()

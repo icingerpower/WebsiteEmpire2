@@ -4,11 +4,13 @@
 
 PageTypeArticle::PageTypeArticle(CategoryTable &categoryTable)
     : m_categoryBloc(new PageBlocCategory(categoryTable))
+    , m_categoryLinksBloc(categoryTable)
 {
     m_blocs.append(m_categoryBloc.data());
     m_blocs.append(&m_textBloc);
     m_blocs.append(&m_socialBloc);
     m_blocs.append(&m_autoLinkBloc);
+    m_blocs.append(&m_categoryLinksBloc);
 }
 
 PageTypeArticle::~PageTypeArticle() = default;

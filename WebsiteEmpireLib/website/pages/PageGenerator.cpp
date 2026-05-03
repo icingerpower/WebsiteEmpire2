@@ -166,6 +166,7 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         const QHash<QString, QString> &data = m_pageRepo.loadData(record.id);
         type->load(data);
         type->setAuthorLang(record.lang);
+        type->bindGenerationContext(m_pageRepo, workingDir);
 
         // Guard: only when translation was explicitly requested for this language
         // and is incomplete.  An incomplete translation is a workflow bug — raise
