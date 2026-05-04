@@ -419,7 +419,9 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
         *(state->out) << QStringLiteral("Generation complete. %1 page(s) generated.\n")
                              .arg(state->jobsCompleted.load());
         state->out->flush();
-        QCoreApplication::quit();
+        QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                  &QCoreApplication::quit,
+                                  Qt::QueuedConnection);
     }
     co_return;
 }
@@ -470,7 +472,9 @@ void LauncherGeneration::run(const QString & /*value*/)
     if (!proto) {
         *out << QStringLiteral("ERROR: no engine configured (engineId = %1).\n").arg(engineId);
         out->flush();
-        QCoreApplication::quit();
+        QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                  &QCoreApplication::quit,
+                                  Qt::QueuedConnection);
         return;
     }
 
@@ -690,7 +694,9 @@ void LauncherGeneration::run(const QString & /*value*/)
         *out << QStringLiteral("Nothing to generate. All pages are up to date.\n");
         out->flush();
         holder->deleteLater();
-        QCoreApplication::quit();
+        QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                  &QCoreApplication::quit,
+                                  Qt::QueuedConnection);
         return;
     }
 

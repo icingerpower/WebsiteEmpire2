@@ -28,7 +28,8 @@ class BlocTranslations
 public:
     /**
      * Register or update source text for a field.
-     * Purges stale translations whose stored hash no longer matches.
+     * Existing translations are kept even if stale — they continue to be served
+     * until the translation pipeline explicitly replaces them.
      */
     void setSource(const QString &fieldId, const QString &source);
 
@@ -47,13 +48,15 @@ public:
                         const QString &translatedText);
 
     /**
-     * True iff every registered field that has non-empty source text
-     * has a translation for langCode.
+     * True iff every registered field that has non-empty source text has a
+     * fresh (hash-matching) translation for langCode.  A stale translation
+     * (source changed since last translation) counts as missing.
      */
     bool isComplete(const QString &langCode) const;
 
     /**
-     * Field IDs that have non-empty source but no translation for langCode.
+     * Field IDs that have non-empty source but either no translation for
+     * langCode, or a stale one (hash mismatch).
      */
     QStringList missingFields(const QString &langCode) const;
 
@@ -76,8 +79,8 @@ public:
 
     /**
      * Restore from QSettings.  Caller must have called settings.beginGroup(blocId)
-     * already.  Only restores translations whose stored hash matches the current
-     * source's SHA1 (stale translations are discarded).
+     * already.  Loads all translations regardless of hash — stale ones are
+     * preserved for serving until re-translated.
      */
     void loadFromSettings(QSettings &settings);
 
@@ -92,8 +95,8 @@ public:
 
     /**
      * Restore translations from a flat key→value map produced by saveToMap().
-     * Only loads entries whose stored source hash still matches the current
-     * source (stale translations are silently discarded).
+     * Loads all entries regardless of hash — stale ones are preserved for
+     * serving until the translation pipeline replaces them.
      * Must be called after setSource() has been called for each known field.
      */
     void loadFromMap(const QHash<QString, QString> &map);

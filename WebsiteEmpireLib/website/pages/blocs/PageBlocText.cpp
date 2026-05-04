@@ -7,6 +7,20 @@
 #include <QRegularExpression>
 
 // =============================================================================
+// getAiUpdateSpec
+// =============================================================================
+
+std::optional<AbstractPageBloc::AiUpdateSpec> PageBlocText::getAiUpdateSpec() const
+{
+    AiUpdateSpec spec;
+    spec.dataKey      = QLatin1String(KEY_TEXT);
+    spec.displayName  = QCoreApplication::translate("PageBlocText", "Article text");
+    spec.formatPrompt = {};
+    spec.validator    = AiUpdateSpec::Validator::ArticleFormat;
+    return spec;
+}
+
+// =============================================================================
 // getName
 // =============================================================================
 

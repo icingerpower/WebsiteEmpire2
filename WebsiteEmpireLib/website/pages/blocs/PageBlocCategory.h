@@ -49,6 +49,12 @@ public:
     QHash<QString, QString> getAiKeyClues() const override;
 
     /**
+     * Declares this bloc as AI-updatable with CommaSeparatedInts validator.
+     * The launcher uses a two-call flow: analysis → category selection.
+     */
+    std::optional<AiUpdateSpec> getAiUpdateSpec() const override;
+
+    /**
      * Reads KEY_CATEGORIES (comma-separated integer ids) from values.
      * Delegates to setContent(). Unknown keys are silently ignored.
      */

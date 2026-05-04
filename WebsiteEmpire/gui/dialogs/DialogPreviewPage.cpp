@@ -196,8 +196,17 @@ void DialogPreviewPage::_renderPage(const PreviewEntry &entry)
 
     _inlineSvgs(html);
 
+    QString fullHtml;
+    fullHtml.reserve(css.size() + html.size() + 64);
+    if (!css.isEmpty()) {
+        fullHtml += QStringLiteral("<style>");
+        fullHtml += css;
+        fullHtml += QStringLiteral("</style>");
+    }
+    fullHtml += html;
+
     setWindowTitle(tr("Preview — %1 [%2]").arg(rec->permalink, entry.lang));
-    ui->textBrowser->setHtml(html);
+    ui->textBrowser->setHtml(fullHtml);
 }
 
 void DialogPreviewPage::_inlineSvgs(QString &html)

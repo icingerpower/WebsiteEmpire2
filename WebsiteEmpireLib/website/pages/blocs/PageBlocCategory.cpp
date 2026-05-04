@@ -24,8 +24,25 @@ QHash<QString, QString> PageBlocCategory::getAiKeyClues() const
     }
     return {{QLatin1String(KEY_CATEGORIES),
              QCoreApplication::translate("PageBlocCategory",
-                 "Comma-separated category IDs. Choose ONLY from: %1")
+                 "Comma-separated category IDs, no more than 3. Choose ONLY from: %1")
                  .arg(vocab.join(QStringLiteral(", ")))}};
+}
+
+// =============================================================================
+// getAiUpdateSpec
+// =============================================================================
+
+std::optional<AbstractPageBloc::AiUpdateSpec> PageBlocCategory::getAiUpdateSpec() const
+{
+    AiUpdateSpec spec;
+    spec.dataKey     = QLatin1String(KEY_CATEGORIES);
+    spec.displayName = QCoreApplication::translate("PageBlocCategory", "Categories");
+    spec.formatPrompt = QCoreApplication::translate("PageBlocCategory",
+        "Based on the analysis above, output ONLY comma-separated category IDs "
+        "(e.g. \"14,23\"). Choose 1-3 IDs from the vocabulary. "
+        "No explanation, no other text.");
+    spec.validator   = AiUpdateSpec::Validator::CommaSeparatedInts;
+    return spec;
 }
 
 // =============================================================================
@@ -104,82 +121,109 @@ void PageBlocCategory::addCode(QStringView     /*origContent*/,
         return;
     }
 
-    // Pick the selected category with the longest ancestor chain (most specific).
-    // This becomes the leaf of the breadcrumb trail.
-    int primaryId = m_selectedIds.first();
-    int maxDepth  = -1;
+    // Group selected IDs by root ancestor; keep the deepest (most specific) leaf per
+    // root. Insertion order follows m_selectedIds so the first-seen root comes first.
+    struct RootGroup { int leafId = 0; int depth = -1; };
+    QList<int>           rootOrder;
+    QMap<int, RootGroup> byRoot;
+
     for (const int id : std::as_const(m_selectedIds)) {
+        int root  = id;
         int depth = 0;
         int cur   = id;
         while (cur != 0) {
             const CategoryTable::CategoryRow *r = m_table.categoryById(cur);
-            if (!r || r->parentId == cur) { break; }
-            cur = r->parentId;
+            if (!r || r->parentId == cur) { root = cur; break; }
+            root = cur;
+            cur  = r->parentId;
             ++depth;
         }
-        if (depth > maxDepth) {
-            maxDepth  = depth;
-            primaryId = id;
+
+        if (!byRoot.contains(root)) {
+            rootOrder.append(root);
+        }
+        RootGroup &g = byRoot[root];
+        if (depth > g.depth) {
+            g.depth  = depth;
+            g.leafId = id;
         }
     }
 
-    // Build ancestor chain root → leaf.
-    QList<int> chain;
-    {
-        int cur = primaryId;
+    if (rootOrder.size() > 3) {
+        rootOrder.resize(3);
+    }
+
+    // Build one trail per root branch.
+    const QString langCode = engine.getLangCode(websiteIndex);
+    QStringList trails;
+
+    for (const int root : std::as_const(rootOrder)) {
+        const int leafId = byRoot.value(root).leafId;
+
+        QList<int> chain;
+        int cur = leafId;
         while (cur != 0) {
             chain.prepend(cur);
             const CategoryTable::CategoryRow *r = m_table.categoryById(cur);
             if (!r || r->parentId == cur) { break; }
             cur = r->parentId;
         }
-    }
-    if (chain.isEmpty()) {
-        return;
-    }
+        if (chain.isEmpty()) { continue; }
 
-    // Build inner list items first; bail out if every id in the chain is unknown.
-    const QString langCode = engine.getLangCode(websiteIndex);
-    QString inner;
-    for (const int id : std::as_const(chain)) {
-        const CategoryTable::CategoryRow *row = m_table.categoryById(id);
-        if (!row) { continue; }
+        QStringList items;
+        for (const int id : std::as_const(chain)) {
+            const CategoryTable::CategoryRow *row = m_table.categoryById(id);
+            if (!row) { continue; }
 
-        const QString name = langCode.isEmpty()
-            ? row->name
-            : m_table.translationFor(id, langCode);
-        const QString permalink = _categoryPermalink(name);
+            const QString name = langCode.isEmpty()
+                ? row->name
+                : m_table.translationFor(id, langCode);
+            const QString permalink = _categoryPermalink(name);
 
-        inner += QStringLiteral("<li>");
-        if (!permalink.isEmpty() && engine.isPageAvailable(permalink, websiteIndex)) {
-            inner += QStringLiteral("<a href=\"");
-            inner += permalink;
-            inner += QStringLiteral("\">");
-            inner += name;
-            inner += QStringLiteral("</a>");
-        } else {
-            inner += name;
+            QString item;
+            if (!permalink.isEmpty() && engine.isPageAvailable(permalink, websiteIndex)) {
+                item += QStringLiteral("<a href=\"");
+                item += permalink;
+                item += QStringLiteral("\" style=\"color:#666;text-decoration:none\">");
+                item += name;
+                item += QStringLiteral("</a>");
+            } else {
+                item += name;
+            }
+            items.append(item);
         }
-        inner += QStringLiteral("</li>");
+        if (items.isEmpty()) { continue; }
+
+        QStringList parts;
+        for (int i = 0; i < items.size(); ++i) {
+            if (i > 0) {
+                parts.append(QStringLiteral(" › "));
+            }
+            parts.append(items.at(i));
+        }
+        trails.append(parts.join(QString()));
     }
-    if (inner.isEmpty()) {
+
+    if (trails.isEmpty()) {
         return;
     }
 
-    static const QString CSS_ID = QStringLiteral("page-bloc-breadcrumb");
-    if (!cssDoneIds.contains(CSS_ID)) {
-        cssDoneIds.insert(CSS_ID);
-        css += QStringLiteral(
-            ".breadcrumb{display:flex;flex-wrap:wrap;gap:0.25em;align-items:center;"
-            "list-style:none;padding:0;margin:0 0 0.75em}"
-            ".breadcrumb li+li::before{content:\"›\";margin-right:0.25em;color:#999}"
-            ".breadcrumb a{color:inherit;text-decoration:none}"
-            ".breadcrumb a:hover{text-decoration:underline}");
-    }
+    // <p> with inline <a> children is the only structure QTextBrowser renders
+    // on one line reliably (white-space:nowrap is not in Qt's CSS subset).
+    // The same HTML renders correctly in all real browsers too.
+    Q_UNUSED(css)
+    Q_UNUSED(cssDoneIds)
 
-    html += QStringLiteral("<nav aria-label=\"breadcrumb\"><ol class=\"breadcrumb\">");
-    html += inner;
-    html += QStringLiteral("</ol></nav>");
+    html += QStringLiteral(
+        "<p style=\"font-size:0.8em;color:#aaa;margin:0 0 0.75em;"
+        "padding-bottom:0.35em;border-bottom:1px solid #eee\">");
+    for (int i = 0; i < trails.size(); ++i) {
+        if (i > 0) {
+            html += QStringLiteral(" &nbsp;/&nbsp; ");
+        }
+        html += trails.at(i);
+    }
+    html += QStringLiteral("</p>");
 }
 
 AbstractPageBlockWidget *PageBlocCategory::createEditWidget()

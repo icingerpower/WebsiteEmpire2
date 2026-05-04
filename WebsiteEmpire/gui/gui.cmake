@@ -13,6 +13,11 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneGeneration.ui
     ${CMAKE_CURRENT_LIST_DIR}/panes/GenStrategyTable.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/GenStrategyTable.h
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneUpdate.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneUpdate.h
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneUpdate.ui
+    ${CMAKE_CURRENT_LIST_DIR}/panes/UpdateStrategyTree.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/UpdateStrategyTree.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.ui
@@ -34,6 +39,15 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddGeneration.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddGeneration.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddGeneration.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddUpdateStrategy.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddUpdateStrategy.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddUpdateStrategy.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddUpdatePrompt.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddUpdatePrompt.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddUpdatePrompt.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogShowCommand.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogShowCommand.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogShowCommand.ui
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.ui

@@ -3,6 +3,7 @@
 
 #include "GenStrategyTable.h"
 #include "../dialogs/DialogAddGeneration.h"
+#include "../dialogs/DialogShowCommand.h"
 #include "launcher/LauncherGeneration.h"
 #include "website/AbstractEngine.h"
 #include "website/WebsiteSettingsTable.h"
@@ -203,12 +204,10 @@ void PaneGeneration::viewGenCommand()
                                  strategyId,
                                  LauncherGeneration::OPTION_LIMIT);
 
-    QMessageBox msgBox(this);
-    msgBox.setWindowTitle(tr("Generation command"));
-    msgBox.setText(tr("Run this command in a terminal to generate one page for the selected strategy:"));
-    msgBox.setDetailedText(cmd);
-    msgBox.setStandardButtons(QMessageBox::Ok);
-    msgBox.exec();
+    DialogShowCommand dlg(tr("Generation command"),
+                          tr("Run this command in a terminal to generate one page for the selected strategy:"),
+                          cmd, this);
+    dlg.exec();
 }
 
 void PaneGeneration::computeRemainingToDo()

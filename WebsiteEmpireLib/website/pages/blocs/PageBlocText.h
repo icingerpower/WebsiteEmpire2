@@ -27,6 +27,12 @@ public:
     ~PageBlocText() override = default;
 
     /**
+     * Declares this bloc as AI-updatable with ArticleFormat validator.
+     * The launcher uses a single call (article rewrite flow).
+     */
+    std::optional<AiUpdateSpec> getAiUpdateSpec() const override;
+
+    /**
      * Reads KEY_TEXT from values into m_text.
      * Unknown keys are silently ignored.
      */

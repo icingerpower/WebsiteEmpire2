@@ -1,6 +1,5 @@
 #include "AbstractPageType.h"
 #include "website/AbstractEngine.h"
-#include "website/pages/blocs/AbstractPageBloc.h"
 #include "website/theme/AbstractTheme.h"
 
 #include <QHash>
@@ -89,6 +88,32 @@ QHash<QString, QString> AbstractPageType::collectAiKeyClues() const
         for (auto it = clues.cbegin(); it != clues.cend(); ++it) {
             result.insert(prefix + it.key(), it.value());
         }
+    }
+    return result;
+}
+
+// =============================================================================
+// aiUpdateTargets
+// =============================================================================
+
+QList<AbstractPageType::AiUpdateTarget> AbstractPageType::aiUpdateTargets() const
+{
+    QList<AiUpdateTarget> result;
+    const auto &blocs = getPageBlocs();
+    for (int i = 0; i < blocs.size(); ++i) {
+        const auto spec = blocs.at(i)->getAiUpdateSpec();
+        if (!spec) {
+            continue;
+        }
+        const QString prefix = QString::number(i) + QStringLiteral("_");
+        const auto clues = blocs.at(i)->getAiKeyClues();
+        AiUpdateTarget t;
+        t.displayName  = spec->displayName;
+        t.prefixedKey  = prefix + spec->dataKey;
+        t.formatPrompt = spec->formatPrompt;
+        t.aiKeyClue    = clues.value(spec->dataKey);
+        t.validator    = spec->validator;
+        result.append(t);
     }
     return result;
 }

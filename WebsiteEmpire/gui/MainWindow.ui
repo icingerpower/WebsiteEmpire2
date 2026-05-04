@@ -45,6 +45,11 @@
         <string>Generation</string>
        </attribute>
       </widget>
+      <widget class="PaneUpdate" name="tabUpdate">
+       <attribute name="title">
+        <string>Update</string>
+       </attribute>
+      </widget>
       <widget class="PaneTranslations" name="tabTranslations">
        <attribute name="title">
         <string>Translations</string>
@@ -105,6 +110,12 @@
    <class>PaneGeneration</class>
    <extends>QWidget</extends>
    <header>gui/panes/PaneGeneration.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>PaneUpdate</class>
+   <extends>QWidget</extends>
+   <header>gui/panes/PaneUpdate.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>

@@ -2,6 +2,7 @@
 #define ABSTRACTPAGETYPE_H
 
 #include "website/WebCodeAdder.h"
+#include "website/pages/blocs/AbstractPageBloc.h"
 
 #include <QHash>
 #include <QList>
@@ -12,7 +13,6 @@
 #include <memory>
 
 class AbstractEngine;
-class AbstractPageBloc;
 class AbstractAttribute;
 class CategoryTable;
 class IPageRepository;
@@ -135,6 +135,22 @@ public:
      * prompt with per-field hints so Claude knows how to fill each metadata field.
      */
     QHash<QString, QString> collectAiKeyClues() const;
+
+    /**
+     * Returns one entry for every bloc that exposes an AiUpdateSpec.
+     * Each entry carries the prefixed key (e.g. "0_categories"), the format
+     * prompt, the vocabulary hint from getAiKeyClues(), and the validator.
+     * Used by PaneUpdate to populate the target dropdown and by LauncherUpdate
+     * to drive the two-call AI flow.
+     */
+    struct AiUpdateTarget {
+        QString displayName;  ///< e.g. "Categories"
+        QString prefixedKey;  ///< e.g. "0_categories"
+        QString formatPrompt; ///< second-call instructions
+        QString aiKeyClue;    ///< vocabulary hint (from getAiKeyClues())
+        AbstractPageBloc::AiUpdateSpec::Validator validator;
+    };
+    QList<AiUpdateTarget> aiUpdateTargets() const;
 
     /**
      * Returns the union of attributes from all blocs.

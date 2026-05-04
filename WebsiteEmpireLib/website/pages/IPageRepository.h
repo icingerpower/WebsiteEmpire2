@@ -172,6 +172,35 @@ public:
     virtual QList<PageRecord> findGeneratedByTypeId(const QString &typeId) const = 0;
 
     // -------------------------------------------------------------------------
+    // AI content update tracking
+    // -------------------------------------------------------------------------
+
+    /**
+     * Records that promptId was used to update the content of page pageId.
+     * Multiple calls append entries; order is chronological.
+     */
+    virtual void recordUpdateAttempt(int pageId, const QString &promptId) = 0;
+
+    /**
+     * Returns the most recent updated_at ISO timestamp for (pageId, promptId),
+     * or an empty string if this prompt has never been applied to this page.
+     */
+    virtual QString lastUpdateAttemptAt(int pageId, const QString &promptId) const = 0;
+
+    /**
+     * Returns source pages of typeId that have been generated (generated_at IS NOT NULL),
+     * ordered so that pages least recently updated by promptId come first
+     * (pages never updated by this prompt come before all others).
+     * limit <= 0 means unlimited.
+     * When skipIfDataKey is non-empty, pages whose page_data already contains
+     * that key with a non-empty value are excluded from the results entirely.
+     */
+    virtual QList<PageRecord> findPagesForUpdate(const QString &typeId,
+                                                  const QString &promptId,
+                                                  int            limit,
+                                                  const QString &skipIfDataKey = {}) const = 0;
+
+    // -------------------------------------------------------------------------
     // Translation scope management
     // -------------------------------------------------------------------------
 

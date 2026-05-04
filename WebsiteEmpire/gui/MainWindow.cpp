@@ -4,6 +4,7 @@
 #include "dialogs/DialogPickEngine.h"
 #include "panes/PaneDomains.h"
 #include "panes/PaneGeneration.h"
+#include "panes/PaneUpdate.h"
 #include "panes/PanePages.h"
 #include "panes/PaneSettings.h"
 #include "panes/PaneTheme.h"
@@ -61,6 +62,7 @@ void MainWindow::_init()
 
     ui->tabPages->setup(workingDir, m_engine.data(), m_settingsTable.data());
     ui->tabGeneration->setup(workingDir, m_engine.data(), m_settingsTable.data());
+    ui->tabUpdate->setup(workingDir, m_engine.data(), m_settingsTable.data());
     ui->tabTheme->setTheme(m_theme.data());
     ui->tabTranslations->setup(workingDir, m_engine.data(), m_theme.data());
 

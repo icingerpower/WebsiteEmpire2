@@ -99,6 +99,14 @@ void PageDb::createSchema()
         "  attempted_at TEXT    NOT NULL"
         ")"));
 
+    q.exec(QStringLiteral(
+        "CREATE TABLE IF NOT EXISTS update_attempts ("
+        "  id          INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  page_id     INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,"
+        "  prompt_id   TEXT    NOT NULL,"
+        "  updated_at  TEXT    NOT NULL"
+        ")"));
+
     // ---- Schema migrations (non-destructive ALTER TABLE ADD COLUMN) --------
 
     // pages.translated_at — ISO 8601 UTC; NULL until AI translation completes

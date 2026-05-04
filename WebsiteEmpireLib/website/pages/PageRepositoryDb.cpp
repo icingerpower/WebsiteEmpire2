@@ -444,6 +444,93 @@ QList<PageRecord> PageRepositoryDb::findGeneratedByTypeId(const QString &typeId)
 }
 
 // =============================================================================
+// AI content update tracking
+// =============================================================================
+
+void PageRepositoryDb::recordUpdateAttempt(int pageId, const QString &promptId)
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "INSERT INTO update_attempts (page_id, prompt_id, updated_at)"
+        " VALUES (:page_id, :prompt_id, :at)"));
+    q.bindValue(QStringLiteral(":page_id"),   pageId);
+    q.bindValue(QStringLiteral(":prompt_id"), promptId);
+    q.bindValue(QStringLiteral(":at"),        currentUtc());
+    q.exec();
+}
+
+QString PageRepositoryDb::lastUpdateAttemptAt(int pageId, const QString &promptId) const
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "SELECT MAX(updated_at) FROM update_attempts"
+        " WHERE page_id = :page_id AND prompt_id = :prompt_id"));
+    q.bindValue(QStringLiteral(":page_id"),   pageId);
+    q.bindValue(QStringLiteral(":prompt_id"), promptId);
+    q.exec();
+    if (q.next() && !q.value(0).isNull()) {
+        return q.value(0).toString();
+    }
+    return {};
+}
+
+QList<PageRecord> PageRepositoryDb::findPagesForUpdate(const QString &typeId,
+                                                        const QString &promptId,
+                                                        int            limit,
+                                                        const QString &skipIfDataKey) const
+{
+    QList<PageRecord> result;
+    QSqlQuery q(m_db.database());
+
+    // When skipIfDataKey is set, exclude pages that already have that key
+    // in page_data with a non-empty value — they are already up to date.
+    const QString skipClause = skipIfDataKey.isEmpty()
+        ? QStringLiteral("")
+        : QStringLiteral(
+              "   AND NOT EXISTS ("
+              "     SELECT 1 FROM page_data pd"
+              "     WHERE pd.page_id = p.id"
+              "       AND pd.key = :skipKey"
+              "       AND pd.value != ''"
+              "   )");
+
+    q.prepare(QStringLiteral(
+        "SELECT p.id, p.type_id, p.permalink, p.lang,"
+        "       p.created_at, p.updated_at, p.translated_at,"
+        "       p.source_page_id, p.generated_at, p.langs_to_translate"
+        " FROM pages p"
+        " LEFT JOIN ("
+        "   SELECT page_id, MAX(updated_at) AS last_updated"
+        "   FROM update_attempts"
+        "   WHERE prompt_id = :promptId"
+        "   GROUP BY page_id"
+        " ) ua ON ua.page_id = p.id"
+        " WHERE p.type_id = :typeId"
+        "   AND p.source_page_id IS NULL"
+        "   AND EXISTS ("
+        "     SELECT 1 FROM page_data pd_content"
+        "     WHERE pd_content.page_id = p.id"
+        "       AND pd_content.key = '1_text'"
+        "       AND pd_content.value != '')")
+        + skipClause
+        + QStringLiteral(
+        " ORDER BY ua.last_updated ASC NULLS FIRST, p.id ASC"
+        " LIMIT :limit"));
+
+    q.bindValue(QStringLiteral(":promptId"), promptId);
+    q.bindValue(QStringLiteral(":typeId"),   typeId);
+    q.bindValue(QStringLiteral(":limit"),    limit <= 0 ? -1 : limit);
+    if (!skipIfDataKey.isEmpty()) {
+        q.bindValue(QStringLiteral(":skipKey"), skipIfDataKey);
+    }
+    q.exec();
+    while (q.next()) {
+        result.append(rowToRecord(q));
+    }
+    return result;
+}
+
+// =============================================================================
 // setLangCodesToTranslate
 // =============================================================================
 

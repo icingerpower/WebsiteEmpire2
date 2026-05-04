@@ -59,6 +59,9 @@ public:
     void recordStrategyAttempt(int, const QString &) override {}
     QStringList strategyAttempts(int) const override { return {}; }
     QList<PageRecord> findGeneratedByTypeId(const QString &) const override { return {}; }
+    void recordUpdateAttempt(int, const QString &) override {}
+    QString lastUpdateAttemptAt(int, const QString &) const override { return {}; }
+    QList<PageRecord> findPagesForUpdate(const QString &, const QString &, int, const QString &) const override { return {}; }
     void setLangCodesToTranslate(int, const QStringList &) override {}
     void clearTranslationData(int, const QString &) override {}
     void clearAllTranslationData(int) override {}

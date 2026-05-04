@@ -11,9 +11,6 @@ void BlocTranslations::setSource(const QString &fieldId, const QString &source)
         m_fieldOrder.append(fieldId);
     }
     m_sources.insert(fieldId, source);
-
-    const QString newHash = _sha1(source);
-    _purgeStaleFor(fieldId, newHash);
 }
 
 const QString &BlocTranslations::source(const QString &fieldId) const
@@ -44,14 +41,18 @@ bool BlocTranslations::isComplete(const QString &langCode) const
     for (const auto &fieldId : std::as_const(m_fieldOrder)) {
         const auto &src = m_sources.value(fieldId);
         if (src.isEmpty()) {
-            continue; // empty source does not require translation
+            continue;
         }
         const auto fieldIt = m_entries.constFind(fieldId);
         if (fieldIt == m_entries.constEnd()) {
             return false;
         }
-        if (!fieldIt.value().contains(langCode)) {
+        const auto langIt = fieldIt.value().constFind(langCode);
+        if (langIt == fieldIt.value().constEnd()) {
             return false;
+        }
+        if (langIt.value().sourceHash != _sha1(src)) {
+            return false; // stale — needs retranslation
         }
     }
     return true;
@@ -66,8 +67,17 @@ QStringList BlocTranslations::missingFields(const QString &langCode) const
             continue;
         }
         const auto fieldIt = m_entries.constFind(fieldId);
-        if (fieldIt == m_entries.constEnd() || !fieldIt.value().contains(langCode)) {
+        if (fieldIt == m_entries.constEnd()) {
             result.append(fieldId);
+            continue;
+        }
+        const auto langIt = fieldIt.value().constFind(langCode);
+        if (langIt == fieldIt.value().constEnd()) {
+            result.append(fieldId);
+            continue;
+        }
+        if (langIt.value().sourceHash != _sha1(src)) {
+            result.append(fieldId); // stale — needs retranslation
         }
     }
     return result;
@@ -136,16 +146,10 @@ void BlocTranslations::loadFromSettings(QSettings &settings)
             if (!settings.contains(fieldId)) {
                 continue;
             }
-            const QString storedHash = settings.value(fieldId + QStringLiteral("_hash")).toString();
-            const QString currentHash = _sha1(m_sources.value(fieldId));
-
-            if (storedHash == currentHash) {
-                Entry entry;
-                entry.text = settings.value(fieldId).toString();
-                entry.sourceHash = storedHash;
-                m_entries[fieldId][langCode] = entry;
-            }
-            // else: stale translation — do not restore
+            Entry entry;
+            entry.text       = settings.value(fieldId).toString();
+            entry.sourceHash = settings.value(fieldId + QStringLiteral("_hash")).toString();
+            m_entries[fieldId][langCode] = entry;
         }
 
         settings.endGroup();
@@ -204,16 +208,10 @@ void BlocTranslations::loadFromMap(const QHash<QString, QString> &map)
             continue; // unknown field — skip
         }
 
-        const QString storedHash  = map.value(key + QStringLiteral(":hash"));
-        const QString currentHash = _sha1(m_sources.value(fieldId));
-
-        if (storedHash == currentHash) {
-            Entry entry;
-            entry.text       = it.value();
-            entry.sourceHash = storedHash;
-            m_entries[fieldId][lang] = entry;
-        }
-        // else: stale translation — discard
+        Entry entry;
+        entry.text       = it.value();
+        entry.sourceHash = map.value(key + QStringLiteral(":hash"));
+        m_entries[fieldId][lang] = entry;
     }
 }
 
@@ -221,24 +219,8 @@ void BlocTranslations::loadFromMap(const QHash<QString, QString> &map)
 // _purgeStaleFor
 // =============================================================================
 
-void BlocTranslations::_purgeStaleFor(const QString &fieldId, const QString &newHash)
+void BlocTranslations::_purgeStaleFor(const QString & /*fieldId*/, const QString & /*newHash*/)
 {
-    auto fieldIt = m_entries.find(fieldId);
-    if (fieldIt == m_entries.end()) {
-        return;
-    }
-
-    auto &langMap = fieldIt.value();
-    auto langIt = langMap.begin();
-    while (langIt != langMap.end()) {
-        if (langIt.value().sourceHash != newHash) {
-            langIt = langMap.erase(langIt);
-        } else {
-            ++langIt;
-        }
-    }
-
-    if (langMap.isEmpty()) {
-        m_entries.erase(fieldIt);
-    }
+    // Stale translations are preserved for serving until the translation
+    // pipeline explicitly replaces them with fresh ones.
 }

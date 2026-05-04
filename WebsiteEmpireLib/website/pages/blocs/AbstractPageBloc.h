@@ -7,6 +7,8 @@
 #include <QList>
 #include <QString>
 
+#include <optional>
+
 class AbstractPageBlockWidget;
 class AbstractAttribute;
 
@@ -67,6 +69,25 @@ public:
      * Claude sees the guidance inline with the field it must fill.
      */
     virtual QHash<QString, QString> getAiKeyClues() const;
+
+    /**
+     * Describes this bloc's optional AI-update capability.
+     * Returns an engaged optional when this bloc can have its content rewritten
+     * or populated by the AI update pipeline (LauncherUpdate).
+     * Blocs that are not AI-updatable return std::nullopt (the default).
+     */
+    struct AiUpdateSpec {
+        enum class Validator {
+            ArticleFormat,       ///< must start with [TITLE level="1"], >= 2000 chars
+            CommaSeparatedInts,  ///< one or more comma-separated positive integers
+            NonEmpty             ///< any non-empty trimmed string
+        };
+        QString   dataKey;      ///< un-prefixed save/load key (e.g. "text", "categories")
+        QString   displayName;  ///< human-readable label for the UI dropdown
+        QString   formatPrompt; ///< Call-2 instructions combined with aiKeyClue by the launcher
+        Validator validator = Validator::NonEmpty;
+    };
+    virtual std::optional<AiUpdateSpec> getAiUpdateSpec() const;
 
     /**
      * Returns the semantic attributes this bloc exposes for indexing and
