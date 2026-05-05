@@ -10,6 +10,7 @@
 
 #include <QLabel>
 #include <QPushButton>
+#include <QToolBox>
 #include <QVBoxLayout>
 
 // =============================================================================
@@ -90,7 +91,7 @@ PageEditorDialog::PageEditorDialog(IPageRepository &repo,
                         QStringLiteral("QLabel { color: #8b0000; background: #fff0f0;"
                                        " padding: 6px; border-radius: 3px; }"));
                     ui->lblTranslationStatus->setVisible(true);
-                    ui->scrollArea->setEnabled(false);
+                    ui->toolBoxBlocs->setEnabled(false);
                     if (auto *okBtn = ui->buttonBox->button(QDialogButtonBox::Ok)) {
                         okBtn->setEnabled(false);
                     }
@@ -127,13 +128,10 @@ PageEditorDialog::~PageEditorDialog()
 
 void PageEditorDialog::_clearBlocs()
 {
-    QLayout *lay = ui->scrollContents->layout();
-    while (lay->count() > 1) {
-        QLayoutItem *item = lay->takeAt(0);
-        if (item->widget()) {
-            item->widget()->deleteLater();
-        }
-        delete item;
+    while (ui->toolBoxBlocs->count() > 0) {
+        QWidget *w = ui->toolBoxBlocs->widget(0);
+        ui->toolBoxBlocs->removeItem(0);
+        delete w;
     }
     m_blocWidgets.clear();
     m_pageType.reset();
@@ -147,20 +145,18 @@ void PageEditorDialog::_loadBlocs(const QString &typeId)
         return;
     }
 
-    QLayout *lay = ui->scrollContents->layout();
     const auto &blocs = m_pageType->getPageBlocs();
-    for (int i = 0; i < blocs.size(); ++i) {
-        AbstractPageBloc *bloc = const_cast<AbstractPageBloc *>(blocs.at(i));
+    for (const AbstractPageBloc *cbloc : blocs) {
+        AbstractPageBloc *bloc = const_cast<AbstractPageBloc *>(cbloc);
         AbstractPageBlockWidget *w = bloc->createEditWidget();
 
-        auto *container = new QWidget(ui->scrollContents);
+        auto *container = new QWidget;
         auto *containerLayout = new QVBoxLayout(container);
         containerLayout->setContentsMargins(0, 0, 0, 0);
-        containerLayout->addWidget(new QLabel(bloc->getName(), container));
         w->setParent(container);
         containerLayout->addWidget(w);
 
-        static_cast<QVBoxLayout *>(lay)->insertWidget(i, container);
+        ui->toolBoxBlocs->addItem(container, bloc->getName());
         m_blocWidgets.append(w);
     }
 }
