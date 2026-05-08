@@ -484,14 +484,21 @@ QList<PageRecord> PageRepositoryDb::findPagesForUpdate(const QString &typeId,
 
     // When skipIfDataKey is set, exclude pages that already have that key
     // in page_data with a non-empty value — they are already up to date.
+    // Skip a page only when THIS prompt has already run on it AND saved a non-empty
+    // value to the key.  Checking the data key alone (without the prompt guard)
+    // would cause a page processed by prompt A to be silently skipped by prompt B
+    // when both share the same saveKey.
     const QString skipClause = skipIfDataKey.isEmpty()
         ? QStringLiteral("")
         : QStringLiteral(
-              "   AND NOT EXISTS ("
-              "     SELECT 1 FROM page_data pd"
-              "     WHERE pd.page_id = p.id"
-              "       AND pd.key = :skipKey"
-              "       AND pd.value != ''"
+              "   AND ("
+              "     ua.last_updated IS NULL"
+              "     OR NOT EXISTS ("
+              "       SELECT 1 FROM page_data pd"
+              "       WHERE pd.page_id = p.id"
+              "         AND pd.key = :skipKey"
+              "         AND pd.value != ''"
+              "     )"
               "   )");
 
     q.prepare(QStringLiteral(

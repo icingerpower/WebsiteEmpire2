@@ -16,6 +16,13 @@ struct Fixture {
     PageRepositoryDb repo;
 
     Fixture() : db(QDir(dir.path())), repo(db) {}
+
+    // Creates a source page with non-empty 1_text — makes it eligible for findPagesForUpdate.
+    int createWithContent(const QString &typeId, const QString &permalink) {
+        const int id = repo.create(typeId, permalink, QStringLiteral("en"));
+        repo.saveData(id, {{QStringLiteral("1_text"), QStringLiteral("body text")}});
+        return id;
+    }
 };
 } // namespace
 
@@ -47,13 +54,13 @@ private slots:
 
     // --- saveData / loadData ---
     void test_pagerepo_savedata_loaddata_roundtrip();
-    void test_pagerepo_savedata_replaces_previous_data();
+    void test_pagerepo_savedata_replaces_previous();
     void test_pagerepo_loaddata_unknown_id_returns_empty();
     void test_pagerepo_savedata_updates_updated_at();
 
     // --- remove ---
     void test_pagerepo_remove_deletes_page();
-    void test_pagerepo_remove_deletes_page_data();
+    void test_pagerepo_remove_deletes_page_rows();
     void test_pagerepo_remove_unknown_id_is_noop();
 
     // --- updatePermalink ---
@@ -79,6 +86,24 @@ private slots:
     void test_pagerepo_findgeneratedbytypeid_returns_generated_pages();
     void test_pagerepo_findgeneratedbytypeid_excludes_ungenerated();
     void test_pagerepo_findgeneratedbytypeid_filters_by_type_id();
+
+    // --- recordUpdateAttempt ---
+    void test_pagerepo_record_update_attempt_scoped_to_page();
+    void test_pagerepo_record_update_attempt_cascade_delete();
+
+    // --- findPagesForUpdate ---
+    void test_pagerepo_findpagesforupdate_empty_without_1_text();
+    void test_pagerepo_findpagesforupdate_finds_page_with_1_text();
+    void test_pagerepo_findpagesforupdate_filters_by_type_id();
+    void test_pagerepo_findpagesforupdate_excludes_translation_pages();
+    void test_pagerepo_findpagesforupdate_limit_caps_results();
+    void test_pagerepo_findpagesforupdate_unattempted_pages_come_first();
+    void test_pagerepo_findpagesforupdate_order_is_per_prompt_not_global();
+    void test_pagerepo_findpagesforupdate_skip_key_excludes_pages();
+    void test_pagerepo_findpagesforupdate_skip_key_allows_empty_value();
+    void test_pagerepo_findpagesforupdate_no_skip_key_returns_all_with_content();
+    void test_pagerepo_findpagesforupdate_skipkey_not_skipped_before_this_prompt_ran();
+    void test_pagerepo_findpagesforupdate_skipkey_skipped_after_this_prompt_ran();
 };
 
 // ---------------------------------------------------------------------------
@@ -190,7 +215,7 @@ void Test_PageRepository::test_pagerepo_savedata_loaddata_roundtrip()
     QCOMPARE(f.repo.loadData(id), data);
 }
 
-void Test_PageRepository::test_pagerepo_savedata_replaces_previous_data()
+void Test_PageRepository::test_pagerepo_savedata_replaces_previous()
 {
     Fixture f;
     const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/p.html"), QStringLiteral("en"));
@@ -233,7 +258,7 @@ void Test_PageRepository::test_pagerepo_remove_deletes_page()
     QVERIFY(!f.repo.findById(id).has_value());
 }
 
-void Test_PageRepository::test_pagerepo_remove_deletes_page_data()
+void Test_PageRepository::test_pagerepo_remove_deletes_page_rows()
 {
     Fixture f;
     const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/p.html"), QStringLiteral("en"));
@@ -412,6 +437,195 @@ void Test_PageRepository::test_pagerepo_findgeneratedbytypeid_filters_by_type_id
     const QList<PageRecord> products = f.repo.findGeneratedByTypeId(QStringLiteral("product"));
     QCOMPARE(products.size(), 1);
     QCOMPARE(products.at(0).id, id2);
+}
+
+// ---------------------------------------------------------------------------
+// recordUpdateAttempt
+// ---------------------------------------------------------------------------
+
+void Test_PageRepository::test_pagerepo_record_update_attempt_scoped_to_page()
+{
+    Fixture f;
+    const int id1 = f.repo.create(QStringLiteral("article"), QStringLiteral("/a.html"), QStringLiteral("en"));
+    const int id2 = f.repo.create(QStringLiteral("article"), QStringLiteral("/b.html"), QStringLiteral("en"));
+    f.repo.recordUpdateAttempt(id1, QStringLiteral("prompt-1"));
+    // id2 must have no recorded attempt
+    QVERIFY(f.repo.lastUpdateAttemptAt(id2, QStringLiteral("prompt-1")).isEmpty());
+    QVERIFY(!f.repo.lastUpdateAttemptAt(id1, QStringLiteral("prompt-1")).isEmpty());
+}
+
+void Test_PageRepository::test_pagerepo_record_update_attempt_cascade_delete()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/p.html"), QStringLiteral("en"));
+    f.repo.recordUpdateAttempt(id, QStringLiteral("prompt-1"));
+    f.repo.remove(id);
+    QVERIFY(f.repo.lastUpdateAttemptAt(id, QStringLiteral("prompt-1")).isEmpty());
+}
+
+// ---------------------------------------------------------------------------
+// findPagesForUpdate
+// ---------------------------------------------------------------------------
+
+void Test_PageRepository::test_pagerepo_findpagesforupdate_empty_without_1_text()
+{
+    Fixture f;
+    f.repo.create(QStringLiteral("article"), QStringLiteral("/p.html"), QStringLiteral("en"));
+    // No 1_text saved — must not be returned
+    QVERIFY(f.repo.findPagesForUpdate(QStringLiteral("article"), QStringLiteral("prompt-1"), -1, {}).isEmpty());
+}
+
+void Test_PageRepository::test_pagerepo_findpagesforupdate_finds_page_with_1_text()
+{
+    Fixture f;
+    const int id = f.createWithContent(QStringLiteral("article"), QStringLiteral("/p.html"));
+    const auto pages = f.repo.findPagesForUpdate(QStringLiteral("article"), QStringLiteral("prompt-1"), -1, {});
+    QCOMPARE(pages.size(), 1);
+    QCOMPARE(pages.at(0).id, id);
+}
+
+void Test_PageRepository::test_pagerepo_findpagesforupdate_filters_by_type_id()
+{
+    Fixture f;
+    const int articleId = f.createWithContent(QStringLiteral("article"), QStringLiteral("/a.html"));
+    f.createWithContent(QStringLiteral("product"), QStringLiteral("/b.html"));
+    const auto pages = f.repo.findPagesForUpdate(QStringLiteral("article"), QStringLiteral("prompt-1"), -1, {});
+    QCOMPARE(pages.size(), 1);
+    QCOMPARE(pages.at(0).id, articleId);
+}
+
+void Test_PageRepository::test_pagerepo_findpagesforupdate_excludes_translation_pages()
+{
+    Fixture f;
+    const int srcId = f.createWithContent(QStringLiteral("article"), QStringLiteral("/en/p.html"));
+    // Create a translation (source_page_id set)
+    const int trId = f.repo.createTranslation(srcId, QStringLiteral("article"), QStringLiteral("/fr/p.html"), QStringLiteral("fr"));
+    f.repo.saveData(trId, {{QStringLiteral("1_text"), QStringLiteral("translated content")}});
+    const auto pages = f.repo.findPagesForUpdate(QStringLiteral("article"), QStringLiteral("prompt-1"), -1, {});
+    QCOMPARE(pages.size(), 1);
+    QCOMPARE(pages.at(0).id, srcId);
+}
+
+void Test_PageRepository::test_pagerepo_findpagesforupdate_limit_caps_results()
+{
+    Fixture f;
+    f.createWithContent(QStringLiteral("article"), QStringLiteral("/a.html"));
+    f.createWithContent(QStringLiteral("article"), QStringLiteral("/b.html"));
+    f.createWithContent(QStringLiteral("article"), QStringLiteral("/c.html"));
+    const auto pages = f.repo.findPagesForUpdate(QStringLiteral("article"), QStringLiteral("prompt-1"), 2, {});
+    QCOMPARE(pages.size(), 2);
+}
+
+void Test_PageRepository::test_pagerepo_findpagesforupdate_unattempted_pages_come_first()
+{
+    Fixture f;
+    const int id1 = f.createWithContent(QStringLiteral("article"), QStringLiteral("/a.html"));
+    const int id2 = f.createWithContent(QStringLiteral("article"), QStringLiteral("/b.html"));
+    // Record an attempt for id1 — id2 (unattempted) must appear first
+    f.repo.recordUpdateAttempt(id1, QStringLiteral("prompt-1"));
+    const auto pages = f.repo.findPagesForUpdate(QStringLiteral("article"), QStringLiteral("prompt-1"), -1, {});
+    QCOMPARE(pages.size(), 2);
+    QCOMPARE(pages.at(0).id, id2);
+    QCOMPARE(pages.at(1).id, id1);
+}
+
+void Test_PageRepository::test_pagerepo_findpagesforupdate_order_is_per_prompt_not_global()
+{
+    Fixture f;
+    const int id1 = f.createWithContent(QStringLiteral("article"), QStringLiteral("/a.html"));
+    const int id2 = f.createWithContent(QStringLiteral("article"), QStringLiteral("/b.html"));
+    // Record attempt for id1 under prompt-A only
+    f.repo.recordUpdateAttempt(id1, QStringLiteral("prompt-A"));
+    // For prompt-B: neither page has been attempted → ordered by id → id1 first
+    const auto pagesB = f.repo.findPagesForUpdate(QStringLiteral("article"), QStringLiteral("prompt-B"), -1, {});
+    QCOMPARE(pagesB.size(), 2);
+    QCOMPARE(pagesB.at(0).id, id1);
+    // For prompt-A: id1 was attempted → id2 (unattempted) comes first
+    const auto pagesA = f.repo.findPagesForUpdate(QStringLiteral("article"), QStringLiteral("prompt-A"), -1, {});
+    QCOMPARE(pagesA.size(), 2);
+    QCOMPARE(pagesA.at(0).id, id2);
+}
+
+void Test_PageRepository::test_pagerepo_findpagesforupdate_skip_key_excludes_pages()
+{
+    Fixture f;
+    const int id1 = f.createWithContent(QStringLiteral("article"), QStringLiteral("/a.html"));
+    const int id2 = f.createWithContent(QStringLiteral("article"), QStringLiteral("/b.html"));
+    // Set the skip key on id1 only AND record that prompt-1 already ran on id1
+    f.repo.saveData(id1, {
+        {QStringLiteral("1_text"),       QStringLiteral("body text")},
+        {QStringLiteral("0_categories"), QStringLiteral("1,2")},
+    });
+    f.repo.recordUpdateAttempt(id1, QStringLiteral("prompt-1"));
+    const auto pages = f.repo.findPagesForUpdate(
+        QStringLiteral("article"), QStringLiteral("prompt-1"), -1, QStringLiteral("0_categories"));
+    QCOMPARE(pages.size(), 1);
+    QCOMPARE(pages.at(0).id, id2);
+}
+
+void Test_PageRepository::test_pagerepo_findpagesforupdate_skip_key_allows_empty_value()
+{
+    Fixture f;
+    const int id = f.createWithContent(QStringLiteral("article"), QStringLiteral("/a.html"));
+    // Save the skip key with an empty value — must NOT be excluded
+    f.repo.saveData(id, {
+        {QStringLiteral("1_text"),      QStringLiteral("body text")},
+        {QStringLiteral("0_categories"), QStringLiteral("")},
+    });
+    const auto pages = f.repo.findPagesForUpdate(
+        QStringLiteral("article"), QStringLiteral("prompt-1"), -1, QStringLiteral("0_categories"));
+    QCOMPARE(pages.size(), 1);
+    QCOMPARE(pages.at(0).id, id);
+}
+
+void Test_PageRepository::test_pagerepo_findpagesforupdate_no_skip_key_returns_all_with_content()
+{
+    Fixture f;
+    const int id1 = f.createWithContent(QStringLiteral("article"), QStringLiteral("/a.html"));
+    const int id2 = f.createWithContent(QStringLiteral("article"), QStringLiteral("/b.html"));
+    // Even if some key is set, no skip filter means both pages returned
+    f.repo.saveData(id1, {
+        {QStringLiteral("1_text"),      QStringLiteral("body text")},
+        {QStringLiteral("0_categories"), QStringLiteral("1,2")},
+    });
+    const auto pages = f.repo.findPagesForUpdate(QStringLiteral("article"), QStringLiteral("prompt-1"), -1, {});
+    QCOMPARE(pages.size(), 2);
+    // Both ids present
+    const QList<int> ids = {pages.at(0).id, pages.at(1).id};
+    QVERIFY(ids.contains(id1));
+    QVERIFY(ids.contains(id2));
+}
+
+void Test_PageRepository::test_pagerepo_findpagesforupdate_skipkey_not_skipped_before_this_prompt_ran()
+{
+    // Key set by a DIFFERENT prompt must not cause this prompt to skip the page.
+    Fixture f;
+    const int id = f.createWithContent(QStringLiteral("article"), QStringLiteral("/a.html"));
+    f.repo.saveData(id, {
+        {QStringLiteral("1_text"),       QStringLiteral("body text")},
+        {QStringLiteral("0_categories"), QStringLiteral("1,2")},
+    });
+    f.repo.recordUpdateAttempt(id, QStringLiteral("prompt-1")); // prompt-1 set the key
+    // prompt-2 has never run — must still see the page even though 0_categories is non-empty
+    const auto pages = f.repo.findPagesForUpdate(
+        QStringLiteral("article"), QStringLiteral("prompt-2"), -1, QStringLiteral("0_categories"));
+    QCOMPARE(pages.size(), 1);
+    QCOMPARE(pages.at(0).id, id);
+}
+
+void Test_PageRepository::test_pagerepo_findpagesforupdate_skipkey_skipped_after_this_prompt_ran()
+{
+    // Once THIS prompt has run AND the key is non-empty, the page must be skipped.
+    Fixture f;
+    const int id = f.createWithContent(QStringLiteral("article"), QStringLiteral("/a.html"));
+    f.repo.saveData(id, {
+        {QStringLiteral("1_text"),       QStringLiteral("body text")},
+        {QStringLiteral("0_categories"), QStringLiteral("1,2")},
+    });
+    f.repo.recordUpdateAttempt(id, QStringLiteral("prompt-2")); // this prompt ran
+    const auto pages = f.repo.findPagesForUpdate(
+        QStringLiteral("article"), QStringLiteral("prompt-2"), -1, QStringLiteral("0_categories"));
+    QCOMPARE(pages.size(), 0);
 }
 
 QTEST_MAIN(Test_PageRepository)

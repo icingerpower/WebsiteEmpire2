@@ -205,7 +205,11 @@ static void runUpdateSession(const QString                          &pageTypeId,
 
         QHash<QString, QString> data = pageRepo.loadData(page.id);
 
-        if (skipIfSet && !data.value(effectiveSaveKey).trimmed().isEmpty()) {
+        const bool alreadyProcessedByThisPrompt =
+            !pageRepo.lastUpdateAttemptAt(page.id, promptId).isEmpty();
+        if (skipIfSet
+                && alreadyProcessedByThisPrompt
+                && !data.value(effectiveSaveKey).trimmed().isEmpty()) {
             *(state->out) << QStringLiteral("SKIP %1: %2 already set.\n")
                                  .arg(page.permalink, effectiveSaveKey);
             state->out->flush();
