@@ -22,6 +22,7 @@
 const QString LauncherTranslate::OPTION_NAME     = QStringLiteral("translate");
 const QString LauncherTranslate::OPTION_LANGUAGE  = QStringLiteral("language");
 const QString LauncherTranslate::OPTION_LIMIT     = QStringLiteral("limit");
+const QString LauncherTranslate::OPTION_SVG       = QStringLiteral("svg");
 
 DECLARE_LAUNCHER(LauncherTranslate)
 
@@ -49,6 +50,9 @@ void LauncherTranslate::run(const QString & /*value*/)
             limitOverride = n;
         }
     }
+
+    // --svg: run SVG-only jobs (back-fill translated SVGs for already-translated pages).
+    const bool svgOnly = args.contains(QStringLiteral("--") + OPTION_SVG);
 
     const QDir workingDir = WorkingDirectoryManager::instance()->workingDir();
 
@@ -156,25 +160,30 @@ void LauncherTranslate::run(const QString & /*value*/)
                          QCoreApplication::quit();
                      });
 
-    QList<PageTranslator::TranslationJob> jobs =
-        TranslationScheduler::buildJobs(*pageRepo, *categoryTable,
-                                        effectiveSettings, editingLang);
+    if (svgOnly) {
+        qDebug() << "[Translate] SVG-only mode — back-filling untranslated SVG images.";
+        translator->startSvgJobs(editingLang);
+    } else {
+        QList<PageTranslator::TranslationJob> jobs =
+            TranslationScheduler::buildJobs(*pageRepo, *categoryTable,
+                                            effectiveSettings, editingLang);
 
-    if (!languageFilter.isEmpty()) {
-        jobs.erase(std::remove_if(jobs.begin(), jobs.end(),
-                       [&languageFilter](const PageTranslator::TranslationJob &j) {
-                           return j.targetLang != languageFilter;
-                       }),
-                   jobs.end());
-        qDebug() << "[Translate] Language filter:" << languageFilter
-                 << "→" << jobs.size() << "job(s).";
+        if (!languageFilter.isEmpty()) {
+            jobs.erase(std::remove_if(jobs.begin(), jobs.end(),
+                           [&languageFilter](const PageTranslator::TranslationJob &j) {
+                               return j.targetLang != languageFilter;
+                           }),
+                       jobs.end());
+            qDebug() << "[Translate] Language filter:" << languageFilter
+                     << "→" << jobs.size() << "job(s).";
+        }
+
+        if (limitOverride > 0 && jobs.size() > limitOverride) {
+            jobs.resize(limitOverride);
+            qDebug() << "[Translate] Limit override:" << limitOverride << "job(s).";
+        }
+
+        qDebug() << "[Translate] Scheduler queued" << jobs.size() << "job(s).";
+        translator->startWithJobs(jobs);
     }
-
-    if (limitOverride > 0 && jobs.size() > limitOverride) {
-        jobs.resize(limitOverride);
-        qDebug() << "[Translate] Limit override:" << limitOverride << "job(s).";
-    }
-
-    qDebug() << "[Translate] Scheduler queued" << jobs.size() << "job(s).";
-    translator->startWithJobs(jobs);
 }

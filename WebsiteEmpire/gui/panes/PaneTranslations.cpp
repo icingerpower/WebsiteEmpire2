@@ -189,14 +189,20 @@ void PaneTranslations::_viewCommands()
     const QString cmdCommon = prefix
         + QStringLiteral(" --") + LauncherTranslateCommon::OPTION_NAME;
 
+    const QString cmdSvg = prefix
+        + QStringLiteral(" --") + LauncherTranslate::OPTION_NAME
+        + QStringLiteral(" --") + LauncherTranslate::OPTION_SVG;
+
     const QString text = tr(
         "# Translate pages (all languages):\n"
         "%1\n\n"
         "# Translate pages (all optional args — replace '%2' and '1' as needed):\n"
         "%3\n\n"
+        "# Back-fill SVG translations for already-translated pages:\n"
+        "%4\n\n"
         "# Translate common blocs (header, footer, …):\n"
-        "%4"
-    ).arg(cmdTranslateMin, exampleLang, cmdTranslateFull, cmdCommon);
+        "%5"
+    ).arg(cmdTranslateMin, exampleLang, cmdTranslateFull, cmdSvg, cmdCommon);
 
     auto *dlg  = new QDialog(this);
     dlg->setWindowTitle(tr("Translation Commands"));

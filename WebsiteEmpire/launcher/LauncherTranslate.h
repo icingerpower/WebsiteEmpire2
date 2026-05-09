@@ -30,6 +30,8 @@ public:
     static const QString OPTION_NAME;
     static const QString OPTION_LANGUAGE;
     static const QString OPTION_LIMIT;
+    // When present, only SVG translation jobs are run (back-fill for already-translated pages).
+    static const QString OPTION_SVG;
 
     QString getOptionName() const override;
 

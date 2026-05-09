@@ -106,6 +106,16 @@ public:
     void startWithJobs(const QList<TranslationJob> &jobs);
 
     /**
+     * Scans all source pages for SVG images (via [IMGFIX *.svg] shortcodes in
+     * 1_text) that do not yet have a translated blob in images.db and queues
+     * SVG-only translation jobs for them.  Pages whose text translation is
+     * already complete are included — this is the way to back-fill SVG
+     * translations for articles translated before SVG translation was added.
+     * Returns immediately; progress is reported via the same signals as start().
+     */
+    void startSvgJobs(const QString &editingLang);
+
+    /**
      * Returns all pending translation jobs as a human-readable string of
      * Claude prompts — one block per job — suitable for manual submission.
      * Does not launch any process.

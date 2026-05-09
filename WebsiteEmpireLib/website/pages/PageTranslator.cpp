@@ -101,6 +101,104 @@ void PageTranslator::startWithJobs(const QList<TranslationJob> &jobs)
 }
 
 // =============================================================================
+// startSvgJobs
+// =============================================================================
+
+void PageTranslator::startSvgJobs(const QString &editingLang)
+{
+    _openLogFile();
+
+    if (editingLang.isEmpty()) {
+        _log(QStringLiteral("ERROR: Editing language is not configured."), true);
+        _emitFinished(0, 1);
+        return;
+    }
+
+    // Load the set of (domain, filename) pairs already in images.db so we can
+    // skip SVGs that are already translated.
+    QSet<QString> translatedPairs; // encoded as "lang\nfilename"
+    const QString dbPath = m_workingDir.filePath(QStringLiteral("images.db"));
+    if (QFile::exists(dbPath)) {
+        const QString connName = QStringLiteral("svgjobs_check_%1")
+                                     .arg(reinterpret_cast<quintptr>(this));
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+            db.setDatabaseName(dbPath);
+            if (db.open()) {
+                QSqlQuery q(db);
+                if (q.exec(QStringLiteral(
+                        "SELECT domain, filename FROM image_names WHERE domain != ''"))) {
+                    while (q.next()) {
+                        translatedPairs.insert(
+                            q.value(0).toString()
+                            + QLatin1Char('\n')
+                            + q.value(1).toString());
+                    }
+                }
+            }
+        }
+        QSqlDatabase::removeDatabase(connName);
+    }
+
+    static const QRegularExpression reImgFix(
+        QStringLiteral("\\[IMGFIX\\b[^\\]]*fileName=\"([^\"]+\\.svg)\""),
+        QRegularExpression::CaseInsensitiveOption);
+
+    const QList<PageRecord> &sources = m_repo.findSourcePages(editingLang);
+    _log(QStringLiteral("SVG jobs: scanning %1 source page(s)…").arg(sources.size()));
+
+    for (const PageRecord &src : std::as_const(sources)) {
+        if (src.langCodesToTranslate.isEmpty()) {
+            continue;
+        }
+        const QHash<QString, QString> &data = m_repo.loadData(src.id);
+        const QString &text1 = data.value(QStringLiteral("1_text"));
+        if (text1.isEmpty()) {
+            continue;
+        }
+
+        QStringList svgFns;
+        {
+            auto it = reImgFix.globalMatch(text1);
+            while (it.hasNext()) {
+                const QString fn = it.next().captured(1);
+                if (!svgFns.contains(fn)) {
+                    svgFns.append(fn);
+                }
+            }
+        }
+        if (svgFns.isEmpty()) {
+            continue;
+        }
+
+        for (const QString &fn : std::as_const(svgFns)) {
+            for (const QString &targetLang : std::as_const(src.langCodesToTranslate)) {
+                if (translatedPairs.contains(targetLang + QLatin1Char('\n') + fn)) {
+                    continue;
+                }
+                TranslationJob job;
+                job.pageId      = src.id;
+                job.typeId      = src.typeId;
+                job.sourceLang  = editingLang;
+                job.targetLang  = targetLang;
+                job.svgFilename = fn;
+                m_queue.append(job);
+            }
+        }
+    }
+
+    _log(QStringLiteral("SVG jobs queued: %1").arg(m_queue.size()));
+
+    if (m_queue.isEmpty()) {
+        _log(QStringLiteral("All SVG images are already translated."));
+        _emitFinished(0, 0);
+        return;
+    }
+
+    _processNextJob();
+}
+
+// =============================================================================
 // buildPrompts (view without executing)
 // =============================================================================
 
