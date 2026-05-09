@@ -14,6 +14,9 @@
 #include <QFile>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTextStream>
 
@@ -244,77 +247,196 @@ static void runUpdateSession(const QString                          &pageTypeId,
         bool valid = false;
 
         if (prompt.updateSvg) {
-            // SVG-only path: ask Claude to output just the <svg>…</svg> block,
-            // then splice it back into the original article (preserving all text).
-            static const QRegularExpression reSvgExtract(
-                QStringLiteral("<svg\\b[^>]*>.*?</svg>"),
-                QRegularExpression::DotMatchesEverythingOption
-                | QRegularExpression::CaseInsensitiveOption);
+            // SVG path: find [IMGFIX fileName="*.svg"] shortcodes, load the blob
+            // from images.db, ask Claude to regenerate, save back to images.db.
+            // Does NOT touch 1_text.
+            static const QRegularExpression reImgFix(
+                QStringLiteral("\\[IMGFIX\\b[^\\]]*fileName=\"([^\"]+\\.svg)\""),
+                QRegularExpression::CaseInsensitiveOption);
             static const QRegularExpression reSvgStart(
                 QStringLiteral("\\A\\s*<svg\\b"),
                 QRegularExpression::CaseInsensitiveOption);
 
-            const QString svgPrompt =
-                (page.permalink.isEmpty()
-                    ? QString{}
-                    : QStringLiteral("Page permalink: ") + page.permalink + QStringLiteral("\n\n"))
-                + QStringLiteral("Here is the current version of a web article:\n\n<article>\n")
-                + existingText
-                + QStringLiteral("\n</article>\n\n")
-                + instructions
-                + QStringLiteral(
-                    "\n\nOutput ONLY the complete updated SVG element, starting with <svg and "
-                    "ending with </svg>. Do not include any explanation, preamble, or commentary.");
+            QStringList svgFilenames;
+            {
+                auto it = reImgFix.globalMatch(existingText);
+                while (it.hasNext()) {
+                    const QString fn = it.next().captured(1);
+                    if (!svgFilenames.contains(fn)) {
+                        svgFilenames.append(fn);
+                    }
+                }
+            }
 
-            *(state->out) << QStringLiteral("  SVG prompt ready (%1 chars) — calling Claude...\n")
-                                 .arg(svgPrompt.size());
-            state->out->flush();
+            if (svgFilenames.isEmpty()) {
+                *(state->out) << QStringLiteral("SKIP %1: no [IMGFIX] SVG shortcode found.\n")
+                                     .arg(page.permalink);
+                state->out->flush();
+                continue;
+            }
 
-            for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
+            const QString imgDbPath = workDir.filePath(QStringLiteral("images.db"));
+            bool allValid = true;
+
+            for (const QString &svgFilename : std::as_const(svgFilenames)) {
                 if (g_updateStopRequested) {
+                    allValid = false;
                     break;
                 }
-                const QString attemptPrompt = (attempt == 1)
-                    ? svgPrompt
-                    : QStringLiteral(
-                          "Your previous response was invalid. "
-                          "It must start with <svg and end with </svg>.\n"
-                          "Previous response started with: \"%1\"\n\nPlease try again.\n\n")
-                          .arg(result.left(200))
-                      + svgPrompt;
 
-                const QString raw = runUpdateClaudePrompt(attemptPrompt);
-                if (raw.startsWith(QStringLiteral("__ERROR__"))) {
-                    *(state->out) << QStringLiteral("  FAIL (attempt %1): %2\n")
-                                         .arg(attempt).arg(raw);
+                // Load existing SVG blob from images.db.
+                QString existingSvg;
+                int imageId = -1;
+                const QString readConn = QStringLiteral("svg_read_") + svgFilename;
+                {
+                    QSqlDatabase imgDb = QSqlDatabase::addDatabase(
+                        QStringLiteral("QSQLITE"), readConn);
+                    imgDb.setDatabaseName(imgDbPath);
+                    if (imgDb.open()) {
+                        QSqlQuery q(imgDb);
+                        q.prepare(QStringLiteral(
+                            "SELECT b.id, b.blob FROM images b"
+                            " JOIN image_names n ON n.image_id = b.id"
+                            " WHERE n.filename = :fn LIMIT 1"));
+                        q.bindValue(QStringLiteral(":fn"), svgFilename);
+                        if (q.exec() && q.next()) {
+                            imageId     = q.value(0).toInt();
+                            existingSvg = QString::fromUtf8(q.value(1).toByteArray());
+                        }
+                    }
+                }
+                QSqlDatabase::removeDatabase(readConn);
+
+                // Build prompt: full article + current SVG (if any) + user instructions.
+                const QString svgPrompt =
+                    (page.permalink.isEmpty()
+                        ? QString{}
+                        : QStringLiteral("Page permalink: ") + page.permalink + QStringLiteral("\n\n"))
+                    + QStringLiteral("Here is the current version of a web article:\n\n<article>\n")
+                    + existingText
+                    + QStringLiteral("\n</article>\n\n")
+                    + (existingSvg.isEmpty()
+                        ? QString{}
+                        : QStringLiteral("Here is the current SVG image (filename: ") + svgFilename
+                          + QStringLiteral("):\n\n<current_svg>\n") + existingSvg
+                          + QStringLiteral("\n</current_svg>\n\n"))
+                    + instructions
+                    + QStringLiteral(
+                        "\n\nOutput ONLY the complete updated SVG element, starting with <svg "
+                        "and ending with </svg>. Do not include any explanation or commentary.");
+
+                *(state->out) << QStringLiteral("  SVG prompt ready (%1 chars) for %2 — calling Claude...\n")
+                                     .arg(svgPrompt.size()).arg(svgFilename);
+                state->out->flush();
+
+                QString svgResult;
+                bool svgValid = false;
+
+                for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
+                    if (g_updateStopRequested) {
+                        break;
+                    }
+                    const QString attemptPrompt = (attempt == 1)
+                        ? svgPrompt
+                        : QStringLiteral(
+                              "Your previous response was invalid. "
+                              "It must start with <svg and end with </svg>.\n"
+                              "Previous response started with: \"%1\"\n\nPlease try again.\n\n")
+                              .arg(svgResult.left(200))
+                          + svgPrompt;
+
+                    const QString raw = runUpdateClaudePrompt(attemptPrompt);
+                    if (raw.startsWith(QStringLiteral("__ERROR__"))) {
+                        *(state->out) << QStringLiteral("  FAIL (attempt %1): %2\n")
+                                             .arg(attempt).arg(raw);
+                        state->out->flush();
+                        break;
+                    }
+
+                    svgResult = raw.trimmed();
+                    if (reSvgStart.match(svgResult).hasMatch()
+                            && svgResult.endsWith(QStringLiteral("</svg>"),
+                                                   Qt::CaseInsensitive)) {
+                        svgValid = true;
+                        break;
+                    }
+
+                    *(state->out) << QStringLiteral(
+                                         "  WARN (attempt %1/%2): not a valid SVG — starts with: %3\n")
+                                         .arg(attempt).arg(kMaxAttempts).arg(svgResult.left(120));
                     state->out->flush();
+                }
+
+                if (!svgValid) {
+                    allValid = false;
                     break;
                 }
 
-                result = raw.trimmed();
-                if (reSvgStart.match(result).hasMatch()
-                        && result.endsWith(QStringLiteral("</svg>"), Qt::CaseInsensitive)) {
-                    valid = true;
+                // Save updated SVG blob to images.db.
+                bool saved = false;
+                const QString writeConn = QStringLiteral("svg_write_") + svgFilename;
+                {
+                    QSqlDatabase imgDb = QSqlDatabase::addDatabase(
+                        QStringLiteral("QSQLITE"), writeConn);
+                    imgDb.setDatabaseName(imgDbPath);
+                    if (imgDb.open()) {
+                        QSqlQuery q(imgDb);
+                        if (imageId >= 0) {
+                            q.prepare(QStringLiteral(
+                                "UPDATE images SET blob = :blob WHERE id = :id"));
+                            q.bindValue(QStringLiteral(":blob"), svgResult.toUtf8());
+                            q.bindValue(QStringLiteral(":id"),   imageId);
+                            saved = q.exec();
+                        } else {
+                            q.prepare(QStringLiteral(
+                                "INSERT INTO images (blob) VALUES (:blob)"));
+                            q.bindValue(QStringLiteral(":blob"), svgResult.toUtf8());
+                            if (q.exec()) {
+                                const int newId = q.lastInsertId().toInt();
+                                QSqlQuery q2(imgDb);
+                                q2.prepare(QStringLiteral(
+                                    "INSERT INTO image_names (image_id, filename)"
+                                    " VALUES (:id, :fn)"));
+                                q2.bindValue(QStringLiteral(":id"), newId);
+                                q2.bindValue(QStringLiteral(":fn"), svgFilename);
+                                saved = q2.exec();
+                            }
+                        }
+                        if (!saved) {
+                            *(state->out) << QStringLiteral("  FAIL SVG save: %1\n")
+                                                 .arg(q.lastError().text());
+                            state->out->flush();
+                        }
+                    } else {
+                        *(state->out) << QStringLiteral("  FAIL SVG save: cannot open images.db\n");
+                        state->out->flush();
+                    }
+                }
+                QSqlDatabase::removeDatabase(writeConn);
+
+                if (!saved) {
+                    allValid = false;
                     break;
                 }
 
-                *(state->out) << QStringLiteral("  WARN (attempt %1/%2): not a valid SVG — starts with: %3\n")
-                                     .arg(attempt).arg(kMaxAttempts).arg(result.left(120));
+                *(state->out) << QStringLiteral("  SVG saved: %1 (%2 chars)\n")
+                                     .arg(svgFilename).arg(svgResult.size());
                 state->out->flush();
             }
 
-            if (valid) {
-                // Splice the new SVG into the article, replacing any existing SVG.
-                // If no SVG is present yet, append it after the article text.
-                const auto m = reSvgExtract.match(existingText);
-                if (m.hasMatch()) {
-                    QString merged = existingText;
-                    merged.replace(m.capturedStart(), m.capturedLength(), result);
-                    result = merged;
-                } else {
-                    result = existingText + QStringLiteral("\n") + result;
-                }
+            if (!allValid) {
+                *(state->out) << QStringLiteral("FAIL %1: SVG update failed.\n")
+                                     .arg(page.permalink);
+                state->out->flush();
+                continue;
             }
+
+            // Record the attempt without touching 1_text.
+            pageRepo.recordUpdateAttempt(page.id, promptId);
+            ++state->jobsCompleted;
+            *(state->out) << QStringLiteral("OK: %1\n").arg(page.permalink);
+            state->out->flush();
+            continue;
         } else if (isTwoCall) {
             // --- Call 1: analysis ---
             QString call1Prompt;
@@ -460,33 +582,6 @@ static void runUpdateSession(const QString                          &pageTypeId,
                                  .arg(page.permalink).arg(kMaxAttempts);
             state->out->flush();
             continue;
-        }
-
-        if (prompt.updateSvg) {
-            static const QRegularExpression reSvgDiag(
-                QStringLiteral("<svg\\b[^>]*>.*?</svg>"),
-                QRegularExpression::DotMatchesEverythingOption
-                | QRegularExpression::CaseInsensitiveOption);
-            const auto mBefore = reSvgDiag.match(existingText);
-            const auto mAfter  = reSvgDiag.match(result);
-            const QString svgBefore = mBefore.hasMatch() ? mBefore.captured(0) : QString{};
-            const QString svgAfter  = mAfter.hasMatch()  ? mAfter.captured(0)  : QString{};
-            if (svgBefore.isEmpty() && svgAfter.isEmpty()) {
-                *(state->out) << QStringLiteral("  SVG diagnostic: no SVG found in original or result.\n");
-            } else if (svgBefore.isEmpty()) {
-                *(state->out) << QStringLiteral("  SVG diagnostic: no SVG in original; result has %1 chars.\n")
-                                     .arg(svgAfter.size());
-            } else if (svgAfter.isEmpty()) {
-                *(state->out) << QStringLiteral("  SVG diagnostic: SVG REMOVED by Claude (original was %1 chars).\n")
-                                     .arg(svgBefore.size());
-            } else if (svgBefore == svgAfter) {
-                *(state->out) << QStringLiteral("  SVG diagnostic: UNCHANGED (%1 chars). Claude did not modify the SVG.\n")
-                                     .arg(svgBefore.size());
-            } else {
-                *(state->out) << QStringLiteral("  SVG diagnostic: changed %1 → %2 chars.\n")
-                                     .arg(svgBefore.size()).arg(svgAfter.size());
-            }
-            state->out->flush();
         }
 
         data.insert(effectiveSaveKey, result);
