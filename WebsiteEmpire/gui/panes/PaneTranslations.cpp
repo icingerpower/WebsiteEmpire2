@@ -194,11 +194,18 @@ void PaneTranslations::_viewCommands()
         + QStringLiteral(" --") + LauncherTranslate::OPTION_SVG;
 
     const QString text = tr(
-        "# Translate pages (all languages):\n"
+        "# Translate pages — text + SVG images (all languages):\n"
+        "#   Translates untranslated pages.  After each page's text is done,\n"
+        "#   its SVG images are translated automatically in the same run.\n"
         "%1\n\n"
-        "# Translate pages (all optional args — replace '%2' and '1' as needed):\n"
+        "# Same with optional filters (replace '%2' and '1' as needed):\n"
+        "#   --language  restrict to one target language\n"
+        "#   --limit     stop after N jobs\n"
         "%3\n\n"
-        "# Back-fill SVG translations for already-translated pages:\n"
+        "# Translate SVG images only — skip text:\n"
+        "#   Use this to back-fill SVG translations for pages whose text is\n"
+        "#   already translated (e.g. articles translated before SVG support\n"
+        "#   was added).  Text fields are never touched.\n"
         "%4\n\n"
         "# Translate common blocs (header, footer, …):\n"
         "%5"
@@ -207,7 +214,7 @@ void PaneTranslations::_viewCommands()
     auto *dlg  = new QDialog(this);
     dlg->setWindowTitle(tr("Translation Commands"));
     dlg->setAttribute(Qt::WA_DeleteOnClose);
-    dlg->resize(800, 320);
+    dlg->resize(860, 420);
 
     auto *edit = new QPlainTextEdit(text, dlg);
     edit->setReadOnly(true);
