@@ -146,9 +146,24 @@ static void runUpdateSession(const QString                          &pageTypeId,
     PageDb           pageDb(workDir);
     PageRepositoryDb pageRepo(pageDb);
 
-    const QString &promptId      = prompt.id;
-    const QString &instructions  = prompt.instructions;
-    const QString &saveKey       = prompt.saveKey;
+    const QString &promptId     = prompt.id;
+    const QString &saveKey      = prompt.saveKey;
+
+    // Prepend mode-specific constraints when the prompt targets SVG or images only.
+    QString instructions = prompt.instructions;
+    if (prompt.updateSvg) {
+        instructions.prepend(QStringLiteral(
+            "Your sole task is to improve the SVG images embedded in this article. "
+            "Every part of the article outside <svg>…</svg> blocks — text, headings, "
+            "paragraphs, shortcodes — must remain byte-for-byte identical. "
+            "Only modify content inside <svg>…</svg> elements.\n\n"));
+    }
+    if (prompt.updateImages) {
+        instructions.prepend(QStringLiteral(
+            "Your sole task is to improve the non-SVG images referenced in this article. "
+            "Every part of the article other than image references or descriptions must "
+            "remain byte-for-byte identical. Do not touch any text, headings, or SVG content.\n\n"));
+    }
     const bool     skipIfSet     = prompt.skipIfKeyNonEmpty;
 
     const QString effectiveSaveKey = saveKey.isEmpty()
@@ -228,7 +243,79 @@ static void runUpdateSession(const QString                          &pageTypeId,
         QString result;
         bool valid = false;
 
-        if (isTwoCall) {
+        if (prompt.updateSvg) {
+            // SVG-only path: ask Claude to output just the <svg>…</svg> block,
+            // then splice it back into the original article (preserving all text).
+            static const QRegularExpression reSvgExtract(
+                QStringLiteral("<svg\\b[^>]*>.*?</svg>"),
+                QRegularExpression::DotMatchesEverythingOption
+                | QRegularExpression::CaseInsensitiveOption);
+            static const QRegularExpression reSvgStart(
+                QStringLiteral("\\A\\s*<svg\\b"),
+                QRegularExpression::CaseInsensitiveOption);
+
+            const QString svgPrompt =
+                (page.permalink.isEmpty()
+                    ? QString{}
+                    : QStringLiteral("Page permalink: ") + page.permalink + QStringLiteral("\n\n"))
+                + QStringLiteral("Here is the current version of a web article:\n\n<article>\n")
+                + existingText
+                + QStringLiteral("\n</article>\n\n")
+                + instructions
+                + QStringLiteral(
+                    "\n\nOutput ONLY the complete updated SVG element, starting with <svg and "
+                    "ending with </svg>. Do not include any explanation, preamble, or commentary.");
+
+            *(state->out) << QStringLiteral("  SVG prompt ready (%1 chars) — calling Claude...\n")
+                                 .arg(svgPrompt.size());
+            state->out->flush();
+
+            for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
+                if (g_updateStopRequested) {
+                    break;
+                }
+                const QString attemptPrompt = (attempt == 1)
+                    ? svgPrompt
+                    : QStringLiteral(
+                          "Your previous response was invalid. "
+                          "It must start with <svg and end with </svg>.\n"
+                          "Previous response started with: \"%1\"\n\nPlease try again.\n\n")
+                          .arg(result.left(200))
+                      + svgPrompt;
+
+                const QString raw = runUpdateClaudePrompt(attemptPrompt);
+                if (raw.startsWith(QStringLiteral("__ERROR__"))) {
+                    *(state->out) << QStringLiteral("  FAIL (attempt %1): %2\n")
+                                         .arg(attempt).arg(raw);
+                    state->out->flush();
+                    break;
+                }
+
+                result = raw.trimmed();
+                if (reSvgStart.match(result).hasMatch()
+                        && result.endsWith(QStringLiteral("</svg>"), Qt::CaseInsensitive)) {
+                    valid = true;
+                    break;
+                }
+
+                *(state->out) << QStringLiteral("  WARN (attempt %1/%2): not a valid SVG — starts with: %3\n")
+                                     .arg(attempt).arg(kMaxAttempts).arg(result.left(120));
+                state->out->flush();
+            }
+
+            if (valid) {
+                // Splice the new SVG into the article, replacing any existing SVG.
+                // If no SVG is present yet, append it after the article text.
+                const auto m = reSvgExtract.match(existingText);
+                if (m.hasMatch()) {
+                    QString merged = existingText;
+                    merged.replace(m.capturedStart(), m.capturedLength(), result);
+                    result = merged;
+                } else {
+                    result = existingText + QStringLiteral("\n") + result;
+                }
+            }
+        } else if (isTwoCall) {
             // --- Call 1: analysis ---
             QString call1Prompt;
             if (!page.permalink.isEmpty()) {
@@ -373,6 +460,33 @@ static void runUpdateSession(const QString                          &pageTypeId,
                                  .arg(page.permalink).arg(kMaxAttempts);
             state->out->flush();
             continue;
+        }
+
+        if (prompt.updateSvg) {
+            static const QRegularExpression reSvgDiag(
+                QStringLiteral("<svg\\b[^>]*>.*?</svg>"),
+                QRegularExpression::DotMatchesEverythingOption
+                | QRegularExpression::CaseInsensitiveOption);
+            const auto mBefore = reSvgDiag.match(existingText);
+            const auto mAfter  = reSvgDiag.match(result);
+            const QString svgBefore = mBefore.hasMatch() ? mBefore.captured(0) : QString{};
+            const QString svgAfter  = mAfter.hasMatch()  ? mAfter.captured(0)  : QString{};
+            if (svgBefore.isEmpty() && svgAfter.isEmpty()) {
+                *(state->out) << QStringLiteral("  SVG diagnostic: no SVG found in original or result.\n");
+            } else if (svgBefore.isEmpty()) {
+                *(state->out) << QStringLiteral("  SVG diagnostic: no SVG in original; result has %1 chars.\n")
+                                     .arg(svgAfter.size());
+            } else if (svgAfter.isEmpty()) {
+                *(state->out) << QStringLiteral("  SVG diagnostic: SVG REMOVED by Claude (original was %1 chars).\n")
+                                     .arg(svgBefore.size());
+            } else if (svgBefore == svgAfter) {
+                *(state->out) << QStringLiteral("  SVG diagnostic: UNCHANGED (%1 chars). Claude did not modify the SVG.\n")
+                                     .arg(svgBefore.size());
+            } else {
+                *(state->out) << QStringLiteral("  SVG diagnostic: changed %1 → %2 chars.\n")
+                                     .arg(svgBefore.size()).arg(svgAfter.size());
+            }
+            state->out->flush();
         }
 
         data.insert(effectiveSaveKey, result);

@@ -62,6 +62,8 @@ public:
     void recordUpdateAttempt(int, const QString &) override {}
     QString lastUpdateAttemptAt(int, const QString &) const override { return {}; }
     QList<PageRecord> findPagesForUpdate(const QString &, const QString &, int, const QString &) const override { return {}; }
+    QList<PageRecord> findPagesWithUpdateAttempt(const QString &) const override { return {}; }
+    void clearUpdateAttempts(const QList<int> &, const QString &) override {}
     void setLangCodesToTranslate(int, const QStringList &) override {}
     void clearTranslationData(int, const QString &) override {}
     void clearAllTranslationData(int) override {}
