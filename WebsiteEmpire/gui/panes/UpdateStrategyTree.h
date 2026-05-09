@@ -28,6 +28,11 @@ public:
     static constexpr int ROLE_SAVE_KEY     = Qt::UserRole + 7;
     static constexpr int ROLE_SKIP_IF_SET  = Qt::UserRole + 8;
 
+    // Column indices for the tree view
+    static constexpr int COL_NAME       = 0;
+    static constexpr int COL_UPDATE_SVG = 1;
+    static constexpr int COL_UPDATE_IMG = 2;
+
     explicit UpdateStrategyTree(const QDir &workingDir, QObject *parent = nullptr);
 
     /** Appends a strategy top-level item and saves; returns its stable UUID. */
@@ -41,12 +46,16 @@ public:
      * Returns the new prompt's UUID, or empty if strategyId is not found.
      * saveKey: prefixed data key to save output into (empty = legacy "1_text").
      * skipIfKeyNonEmpty: when true, pages whose saveKey value is already set are skipped.
+     * updateSvg/updateImages: when true, the launcher constrains Claude to only modify
+     * SVG blocks / image references respectively.
      */
     QString addPrompt(const QString &strategyId,
                       const QString &name,
                       const QString &instructions,
-                      const QString &saveKey = {},
-                      bool           skipIfKeyNonEmpty = false);
+                      const QString &saveKey          = {},
+                      bool           skipIfKeyNonEmpty = false,
+                      bool           updateSvg         = false,
+                      bool           updateImages      = false);
 
     /** Removes the item at index (strategy removal also removes all children). */
     void removeItem(const QModelIndex &index);
@@ -58,6 +67,12 @@ public:
     void setSkipIfKeyNonEmpty(const QModelIndex &index, bool skip);
     QString saveKeyFor(const QModelIndex &index) const;
     bool    skipIfKeyNonEmptyFor(const QModelIndex &index) const;
+    bool    updateSvgFor(const QModelIndex &index) const;
+    bool    updateImagesFor(const QModelIndex &index) const;
+
+    // Overridden to auto-save when a checkbox column is toggled in the view.
+    bool setData(const QModelIndex &index, const QVariant &value,
+                 int role = Qt::EditRole) override;
 
     // --- read-only accessors by model index ---
 
@@ -78,6 +93,8 @@ public:
         QString instructions;
         QString saveKey;               ///< prefixed data key to save output (empty = "1_text")
         bool    skipIfKeyNonEmpty = false;
+        bool    updateSvg         = false; ///< Claude must only modify <svg> blocks
+        bool    updateImages      = false; ///< Claude must only modify image references
     };
     struct StrategyInfo {
         QString id;

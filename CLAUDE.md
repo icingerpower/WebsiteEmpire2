@@ -261,7 +261,9 @@ This pattern allows users to add missing configuration during operations without
 - Properties settable via Qt Designer XML must go in `.ui`, not in `.cpp`. Only use C++ for configuration that Qt Designer cannot express (e.g. `QHeaderView::setSectionResizeMode`, runtime model assignment, signal/slot connections).
 
 ### Implementations in .cpp
-- Keep implementations in `.cpp` files. Only declare in `.h`.
+- Keep **all** method implementations in `.cpp` files. `.h` files contain only declarations.
+- No inline method bodies, no `= default` bodies, no trivial one-liner getters — if it has a `{}`, it belongs in `.cpp`.
+- Allowed exceptions in `.h`: pure-virtual (`= 0`), deleted (`= delete`), and `static constexpr` constant initialisers (which *must* live in the header).
 
 ### Header Documentation
 - `.h` files must document non-obvious logic, invariants, and anything that has caused or could cause errors — not just signatures.
