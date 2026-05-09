@@ -194,7 +194,7 @@ void DialogPreviewPage::_renderPage(const PreviewEntry &entry)
     QSet<QString> cssDoneIds, jsDoneIds;
     type->addCode(QStringView{}, m_engine, engineIdx, html, css, js, cssDoneIds, jsDoneIds);
 
-    _inlineSvgs(html);
+    _inlineSvgs(html, entry.lang);
 
     QString fullHtml;
     fullHtml.reserve(css.size() + html.size() + 64);
@@ -209,7 +209,7 @@ void DialogPreviewPage::_renderPage(const PreviewEntry &entry)
     ui->textBrowser->setHtml(fullHtml);
 }
 
-void DialogPreviewPage::_inlineSvgs(QString &html)
+void DialogPreviewPage::_inlineSvgs(QString &html, const QString &lang)
 {
     const QString dbPath = m_workingDir.filePath(QStringLiteral("images.db"));
     if (!QFile::exists(dbPath)) {
@@ -243,11 +243,15 @@ void DialogPreviewPage::_inlineSvgs(QString &html)
         if (db.open()) {
             for (const QString &fn : std::as_const(filenames)) {
                 QSqlQuery q(db);
+                // Prefer the translated blob (domain=lang); fall back to source (domain='').
                 q.prepare(QStringLiteral(
-                    "SELECT b.blob FROM images b "
-                    "JOIN image_names n ON n.image_id = b.id "
-                    "WHERE n.filename = :fn LIMIT 1"));
-                q.bindValue(QStringLiteral(":fn"), fn);
+                    "SELECT b.blob FROM images b"
+                    " JOIN image_names n ON n.image_id = b.id"
+                    " WHERE n.filename = :fn AND (n.domain = :lang OR n.domain = '')"
+                    " ORDER BY CASE WHEN n.domain = :lang THEN 0 ELSE 1 END"
+                    " LIMIT 1"));
+                q.bindValue(QStringLiteral(":fn"),   fn);
+                q.bindValue(QStringLiteral(":lang"), lang);
                 if (q.exec() && q.next()) {
                     blobs.insert(fn, q.value(0).toByteArray());
                 }

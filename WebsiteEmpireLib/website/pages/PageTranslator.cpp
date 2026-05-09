@@ -20,6 +20,9 @@
 #include <QMetaObject>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTextStream>
 
@@ -213,6 +216,130 @@ void PageTranslator::_processNextJob()
     }
 
     m_currentJob = m_queue.takeFirst();
+
+    // -------------------------------------------------------------------------
+    // SVG translation sub-job
+    // -------------------------------------------------------------------------
+    if (!m_currentJob.svgFilename.isEmpty()) {
+        _log(QStringLiteral("Processing SVG %1 → %2 for page %3…")
+                 .arg(m_currentJob.svgFilename, m_currentJob.targetLang)
+                 .arg(m_currentJob.pageId));
+
+        const QString dbPath = m_workingDir.filePath(QStringLiteral("images.db"));
+        bool alreadyTranslated = false;
+        QByteArray sourceBlob;
+
+        const QString connName = QStringLiteral("transl_svg_chk_%1")
+                                     .arg(reinterpret_cast<quintptr>(this));
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+            db.setDatabaseName(dbPath);
+            if (db.open()) {
+                QSqlQuery qCheck(db);
+                qCheck.prepare(QStringLiteral(
+                    "SELECT COUNT(*) FROM image_names"
+                    " WHERE filename = :fn AND domain = :lang"));
+                qCheck.bindValue(QStringLiteral(":fn"),   m_currentJob.svgFilename);
+                qCheck.bindValue(QStringLiteral(":lang"), m_currentJob.targetLang);
+                if (qCheck.exec() && qCheck.next() && qCheck.value(0).toInt() > 0) {
+                    alreadyTranslated = true;
+                }
+                if (!alreadyTranslated) {
+                    QSqlQuery qBlob(db);
+                    qBlob.prepare(QStringLiteral(
+                        "SELECT b.blob FROM images b"
+                        " JOIN image_names n ON n.image_id = b.id"
+                        " WHERE n.filename = :fn AND n.domain = '' LIMIT 1"));
+                    qBlob.bindValue(QStringLiteral(":fn"), m_currentJob.svgFilename);
+                    if (qBlob.exec() && qBlob.next()) {
+                        sourceBlob = qBlob.value(0).toByteArray();
+                    }
+                }
+            }
+        }
+        QSqlDatabase::removeDatabase(connName);
+
+        if (alreadyTranslated) {
+            _log(QStringLiteral("  SVG %1 already translated into %2 — skipping")
+                     .arg(m_currentJob.svgFilename, m_currentJob.targetLang));
+            _processNextJob();
+            return;
+        }
+        if (sourceBlob.isEmpty()) {
+            _log(QStringLiteral("  SVG %1: no source blob in images.db — skipping")
+                     .arg(m_currentJob.svgFilename), true);
+            ++m_errors;
+            _processNextJob();
+            return;
+        }
+
+        const auto &pageRec = m_repo.findById(m_currentJob.pageId);
+        const QString context = pageRec ? pageRec->permalink : QString{};
+
+        const QString prompt =
+            QStringLiteral("Translate all human-readable text in this SVG image from ")
+            + m_currentJob.sourceLang
+            + QStringLiteral(" to ")
+            + m_currentJob.targetLang
+            + QStringLiteral(
+                  ". Preserve the exact SVG structure — only modify text inside <text>,"
+                  " <tspan>, and similar text elements. Do not translate variable names,"
+                  " scientific symbols, abbreviations, or numeric values."
+                  " Reply with ONLY the complete translated SVG starting with <svg"
+                  " and ending with </svg>. No explanation.\n\n")
+            + (context.isEmpty()
+                ? QString{}
+                : QStringLiteral("Article: ") + context + QStringLiteral("\n\n"))
+            + QString::fromUtf8(sourceBlob);
+
+        m_tempDir = std::make_unique<QTemporaryDir>();
+        if (!m_tempDir->isValid()) {
+            _log(QStringLiteral("  Failed to create temp dir for SVG %1")
+                     .arg(m_currentJob.svgFilename), true);
+            ++m_errors;
+            m_tempDir.reset();
+            _processNextJob();
+            return;
+        }
+
+        const QString promptPath = m_tempDir->path() + QStringLiteral("/prompt.txt");
+        {
+            QFile f(promptPath);
+            if (!f.open(QIODevice::WriteOnly)) {
+                _log(QStringLiteral("  Failed to write prompt file for SVG %1")
+                         .arg(m_currentJob.svgFilename), true);
+                ++m_errors;
+                m_tempDir.reset();
+                _processNextJob();
+                return;
+            }
+            f.write(prompt.toUtf8());
+        }
+
+        m_processOutput.clear();
+
+        m_process = new QProcess(this);
+        m_process->setProgram(QStringLiteral("claude"));
+        m_process->setArguments({QStringLiteral("-p"), QStringLiteral("-"),
+                                  QStringLiteral("--dangerously-skip-permissions"),
+                                  QStringLiteral("--tools"), QStringLiteral(""),
+                                  QStringLiteral("--output-format"), QStringLiteral("stream-json"),
+                                  QStringLiteral("--verbose")});
+        m_process->setStandardInputFile(promptPath);
+
+        connect(m_process, &QProcess::readyReadStandardOutput,
+                this, &PageTranslator::_onProcessReadyRead);
+        connect(m_process,
+                QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                this, &PageTranslator::_onProcessFinished);
+
+        m_process->start();
+        return;
+    }
+
+    // -------------------------------------------------------------------------
+    // Text translation job
+    // -------------------------------------------------------------------------
     _log(QStringLiteral("Processing page %1 → %2 (job %3 of original batch)…")
              .arg(m_currentJob.pageId)
              .arg(m_currentJob.targetLang)
@@ -399,6 +526,37 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
         return;
     }
 
+    // -------------------------------------------------------------------------
+    // SVG job: validate and save the translated SVG blob.
+    // -------------------------------------------------------------------------
+    if (!m_currentJob.svgFilename.isEmpty()) {
+        const QString svgTrimmed = translatedJson.trimmed();
+        static const QRegularExpression reSvgStart(
+            QStringLiteral("\\A\\s*<svg\\b"),
+            QRegularExpression::CaseInsensitiveOption);
+        if (svgTrimmed.isEmpty()
+                || !reSvgStart.match(svgTrimmed).hasMatch()
+                || !svgTrimmed.endsWith(QStringLiteral("</svg>"), Qt::CaseInsensitive)) {
+            _log(QStringLiteral("  SVG translation for %1 → %2: invalid SVG response (starts: %3)")
+                     .arg(m_currentJob.svgFilename, m_currentJob.targetLang,
+                          svgTrimmed.left(80)),
+                 true);
+            m_processOutput.clear();
+            ++m_errors;
+            _processNextJob();
+            return;
+        }
+        _saveSvgTranslation(m_currentJob.svgFilename, m_currentJob.targetLang,
+                            svgTrimmed.toUtf8());
+        m_processOutput.clear();
+        ++m_translated;
+        _log(QStringLiteral("  SVG %1 → %2: done (%3 chars)")
+                 .arg(m_currentJob.svgFilename, m_currentJob.targetLang)
+                 .arg(svgTrimmed.size()));
+        _processNextJob();
+        return;
+    }
+
     QHash<QString, QString> translations = TranslationProtocol::parseResponse(translatedJson);
 
     // Single-field fallback: Claude sometimes omits the ===BEGIN header for very
@@ -467,6 +625,39 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
     ++m_translated;
     emit pageTranslated(m_currentJob.pageId);
 
+    // Queue SVG translation sub-jobs for any [IMGFIX *.svg] shortcodes in 1_text.
+    {
+        static const QRegularExpression reImgFix(
+            QStringLiteral("\\[IMGFIX\\b[^\\]]*fileName=\"([^\"]+\\.svg)\""),
+            QRegularExpression::CaseInsensitiveOption);
+        const QString &text1 = m_currentPageData.value(QStringLiteral("1_text"));
+        if (!text1.isEmpty()) {
+            QList<TranslationJob> svgJobs;
+            QStringList seenFns;
+            auto it = reImgFix.globalMatch(text1);
+            while (it.hasNext()) {
+                const QString fn = it.next().captured(1);
+                if (!seenFns.contains(fn)) {
+                    seenFns.append(fn);
+                    TranslationJob svgJob;
+                    svgJob.pageId      = m_currentJob.pageId;
+                    svgJob.typeId      = m_currentJob.typeId;
+                    svgJob.sourceLang  = m_currentJob.sourceLang;
+                    svgJob.targetLang  = m_currentJob.targetLang;
+                    svgJob.svgFilename = fn;
+                    svgJobs.append(svgJob);
+                }
+            }
+            if (!svgJobs.isEmpty()) {
+                for (int i = svgJobs.size() - 1; i >= 0; --i) {
+                    m_queue.prepend(svgJobs.at(i));
+                }
+                _log(QStringLiteral("  Queued %1 SVG translation job(s) for page %2 → %3")
+                         .arg(svgJobs.size()).arg(m_currentJob.pageId).arg(m_currentJob.targetLang));
+            }
+        }
+    }
+
     _processNextJob();
 }
 
@@ -495,6 +686,79 @@ void PageTranslator::_log(const QString &msg, bool errorLevel)
            << msg << QStringLiteral("\n");
         m_logFile->flush();
     }
+}
+
+void PageTranslator::_saveSvgTranslation(const QString    &filename,
+                                          const QString    &lang,
+                                          const QByteArray &svgData)
+{
+    const QString dbPath = m_workingDir.filePath(QStringLiteral("images.db"));
+    const QString connName = QStringLiteral("transl_svg_write_%1")
+                                 .arg(reinterpret_cast<quintptr>(this));
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+        db.setDatabaseName(dbPath);
+        if (!db.open()) {
+            _log(QStringLiteral("  _saveSvgTranslation: cannot open images.db for %1 → %2")
+                     .arg(filename, lang), true);
+            return;
+        }
+
+        db.transaction();
+
+        // Remove existing translated entry if any.
+        {
+            QSqlQuery qFind(db);
+            qFind.prepare(QStringLiteral(
+                "SELECT image_id FROM image_names"
+                " WHERE filename = :fn AND domain = :lang LIMIT 1"));
+            qFind.bindValue(QStringLiteral(":fn"),   filename);
+            qFind.bindValue(QStringLiteral(":lang"), lang);
+            if (qFind.exec() && qFind.next()) {
+                const int oldId = qFind.value(0).toInt();
+                QSqlQuery qDelName(db);
+                qDelName.prepare(QStringLiteral(
+                    "DELETE FROM image_names WHERE filename = :fn AND domain = :lang"));
+                qDelName.bindValue(QStringLiteral(":fn"),   filename);
+                qDelName.bindValue(QStringLiteral(":lang"), lang);
+                qDelName.exec();
+                QSqlQuery qDelImg(db);
+                qDelImg.prepare(QStringLiteral("DELETE FROM images WHERE id = :id"));
+                qDelImg.bindValue(QStringLiteral(":id"), oldId);
+                qDelImg.exec();
+            }
+        }
+
+        // Insert new blob.
+        QSqlQuery qIns(db);
+        qIns.prepare(QStringLiteral(
+            "INSERT INTO images (blob, mime_type) VALUES (:blob, 'image/svg+xml')"));
+        qIns.bindValue(QStringLiteral(":blob"), svgData);
+        if (!qIns.exec()) {
+            _log(QStringLiteral("  _saveSvgTranslation: INSERT images failed: %1")
+                     .arg(qIns.lastError().text()), true);
+            db.rollback();
+            return;
+        }
+        const int newId = qIns.lastInsertId().toInt();
+
+        QSqlQuery qName(db);
+        qName.prepare(QStringLiteral(
+            "INSERT INTO image_names (domain, filename, image_id)"
+            " VALUES (:lang, :fn, :id)"));
+        qName.bindValue(QStringLiteral(":lang"), lang);
+        qName.bindValue(QStringLiteral(":fn"),   filename);
+        qName.bindValue(QStringLiteral(":id"),   newId);
+        if (!qName.exec()) {
+            _log(QStringLiteral("  _saveSvgTranslation: INSERT image_names failed: %1")
+                     .arg(qName.lastError().text()), true);
+            db.rollback();
+            return;
+        }
+
+        db.commit();
+    }
+    QSqlDatabase::removeDatabase(connName);
 }
 
 void PageTranslator::_openLogFile()

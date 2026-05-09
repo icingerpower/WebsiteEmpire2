@@ -76,10 +76,11 @@ class PageTranslator : public QObject
 
 public:
     struct TranslationJob {
-        int     pageId     = 0;   ///< source page id
+        int     pageId      = 0;   ///< source page id
         QString typeId;
         QString sourceLang;
         QString targetLang;
+        QString svgFilename;       ///< non-empty → SVG sub-job (translate this image)
     };
 
     explicit PageTranslator(IPageRepository &repo,
@@ -128,6 +129,10 @@ private:
     void _openLogFile();
     // Always deferred via Qt::QueuedConnection so quit() fires after exec() starts.
     void _emitFinished(int translated, int errors);
+    // Saves a translated SVG blob to images.db under domain=lang.
+    void _saveSvgTranslation(const QString    &filename,
+                              const QString    &lang,
+                              const QByteArray &svgData);
 
     IPageRepository &m_repo;
     CategoryTable   &m_categoryTable;

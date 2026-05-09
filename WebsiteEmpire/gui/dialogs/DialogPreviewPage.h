@@ -58,8 +58,9 @@ private:
 
     void _renderPage(const PreviewEntry &entry);
     // Replaces <img src="/file.svg"> tags in html with PNG data URIs rendered
-    // from the SVG blobs in images.db.  No-op if images.db does not exist.
-    void _inlineSvgs(QString &html);
+    // from the SVG blobs in images.db.  Prefers the blob stored under domain=lang
+    // and falls back to domain="" (source).  No-op if images.db does not exist.
+    void _inlineSvgs(QString &html, const QString &lang);
 
     // Returns the engine row index whose lang code matches lang, or 0 as fallback.
     int _engineIndexForLang(const QString &lang) const;

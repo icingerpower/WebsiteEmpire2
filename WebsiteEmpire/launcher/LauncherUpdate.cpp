@@ -419,6 +419,29 @@ static void runUpdateSession(const QString                          &pageTypeId,
                     break;
                 }
 
+                // Invalidate translated variants so PageTranslator re-generates them.
+                {
+                    const QString invConn = QStringLiteral("svg_inv_") + svgFilename;
+                    {
+                        QSqlDatabase invDb = QSqlDatabase::addDatabase(
+                            QStringLiteral("QSQLITE"), invConn);
+                        invDb.setDatabaseName(imgDbPath);
+                        if (invDb.open()) {
+                            QSqlQuery qInv(invDb);
+                            qInv.prepare(QStringLiteral(
+                                "DELETE FROM image_names"
+                                " WHERE filename = :fn AND domain != ''"));
+                            qInv.bindValue(QStringLiteral(":fn"), svgFilename);
+                            qInv.exec();
+                            QSqlQuery qOrph(invDb);
+                            qOrph.exec(QStringLiteral(
+                                "DELETE FROM images"
+                                " WHERE id NOT IN (SELECT image_id FROM image_names)"));
+                        }
+                    }
+                    QSqlDatabase::removeDatabase(invConn);
+                }
+
                 *(state->out) << QStringLiteral("  SVG saved: %1 (%2 chars)\n")
                                      .arg(svgFilename).arg(svgResult.size());
                 state->out->flush();
