@@ -113,7 +113,13 @@ public:
      * translations for articles translated before SVG translation was added.
      * Returns immediately; progress is reported via the same signals as start().
      */
-    void startSvgJobs(const QString &editingLang);
+    /**
+     * languageFilter  when non-empty, only jobs for that target lang are queued.
+     * limit           when >= 1, at most that many jobs are processed.
+     */
+    void startSvgJobs(const QString &editingLang,
+                      const QString &languageFilter = {},
+                      int            limit          = -1);
 
     /**
      * Returns all pending translation jobs as a human-readable string of

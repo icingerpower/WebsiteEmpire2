@@ -104,7 +104,9 @@ void PageTranslator::startWithJobs(const QList<TranslationJob> &jobs)
 // startSvgJobs
 // =============================================================================
 
-void PageTranslator::startSvgJobs(const QString &editingLang)
+void PageTranslator::startSvgJobs(const QString &editingLang,
+                                   const QString &languageFilter,
+                                   int            limit)
 {
     _openLogFile();
 
@@ -145,7 +147,11 @@ void PageTranslator::startSvgJobs(const QString &editingLang)
         QRegularExpression::CaseInsensitiveOption);
 
     const QList<PageRecord> &sources = m_repo.findSourcePages(editingLang);
-    _log(QStringLiteral("SVG jobs: scanning %1 source page(s)…").arg(sources.size()));
+    _log(QStringLiteral("SVG jobs: scanning %1 source page(s)%2…")
+             .arg(sources.size())
+             .arg(languageFilter.isEmpty()
+                 ? QString{}
+                 : QStringLiteral(" (language filter: %1)").arg(languageFilter)));
 
     for (const PageRecord &src : std::as_const(sources)) {
         if (src.langCodesToTranslate.isEmpty()) {
@@ -173,6 +179,9 @@ void PageTranslator::startSvgJobs(const QString &editingLang)
 
         for (const QString &fn : std::as_const(svgFns)) {
             for (const QString &targetLang : std::as_const(src.langCodesToTranslate)) {
+                if (!languageFilter.isEmpty() && targetLang != languageFilter) {
+                    continue;
+                }
                 if (translatedPairs.contains(targetLang + QLatin1Char('\n') + fn)) {
                     continue;
                 }
@@ -183,8 +192,15 @@ void PageTranslator::startSvgJobs(const QString &editingLang)
                 job.targetLang  = targetLang;
                 job.svgFilename = fn;
                 m_queue.append(job);
+                _log(QStringLiteral("  Queued: %1  SVG: %2  → %3")
+                         .arg(src.permalink, fn, targetLang));
             }
         }
+    }
+
+    if (limit >= 1 && m_queue.size() > limit) {
+        m_queue.resize(limit);
+        _log(QStringLiteral("SVG jobs limited to %1.").arg(limit));
     }
 
     _log(QStringLiteral("SVG jobs queued: %1").arg(m_queue.size()));
@@ -319,9 +335,10 @@ void PageTranslator::_processNextJob()
     // SVG translation sub-job
     // -------------------------------------------------------------------------
     if (!m_currentJob.svgFilename.isEmpty()) {
-        _log(QStringLiteral("Processing SVG %1 → %2 for page %3…")
-                 .arg(m_currentJob.svgFilename, m_currentJob.targetLang)
-                 .arg(m_currentJob.pageId));
+        const auto &svgPageRec = m_repo.findById(m_currentJob.pageId);
+        const QString svgPermalink = svgPageRec ? svgPageRec->permalink : QStringLiteral("?");
+        _log(QStringLiteral("Processing SVG %1 → %2  (%3)")
+                 .arg(m_currentJob.svgFilename, m_currentJob.targetLang, svgPermalink));
 
         const QString dbPath = m_workingDir.filePath(QStringLiteral("images.db"));
         bool alreadyTranslated = false;
@@ -371,8 +388,7 @@ void PageTranslator::_processNextJob()
             return;
         }
 
-        const auto &pageRec = m_repo.findById(m_currentJob.pageId);
-        const QString context = pageRec ? pageRec->permalink : QString{};
+        const QString context = svgPermalink == QStringLiteral("?") ? QString{} : svgPermalink;
 
         const QString prompt =
             QStringLiteral("Translate all human-readable text in this SVG image from ")
@@ -438,10 +454,14 @@ void PageTranslator::_processNextJob()
     // -------------------------------------------------------------------------
     // Text translation job
     // -------------------------------------------------------------------------
-    _log(QStringLiteral("Processing page %1 → %2 (job %3 of original batch)…")
-             .arg(m_currentJob.pageId)
-             .arg(m_currentJob.targetLang)
-             .arg(m_translated + m_errors + 1));
+    {
+        const auto &rec = m_repo.findById(m_currentJob.pageId);
+        const QString permalink = rec ? rec->permalink : QStringLiteral("?");
+        _log(QStringLiteral("Processing page %1 → %2  (%3)  job %4")
+                 .arg(m_currentJob.targetLang, permalink)
+                 .arg(m_currentJob.pageId)
+                 .arg(m_translated + m_errors + 1));
+    }
 
     m_currentPageType = AbstractPageType::createForTypeId(m_currentJob.typeId, m_categoryTable);
     if (!m_currentPageType) {

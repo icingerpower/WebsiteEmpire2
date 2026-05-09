@@ -162,7 +162,7 @@ void LauncherTranslate::run(const QString & /*value*/)
 
     if (svgOnly) {
         qDebug() << "[Translate] SVG-only mode — back-filling untranslated SVG images.";
-        translator->startSvgJobs(editingLang);
+        translator->startSvgJobs(editingLang, languageFilter, limitOverride);
     } else {
         QList<PageTranslator::TranslationJob> jobs =
             TranslationScheduler::buildJobs(*pageRepo, *categoryTable,
