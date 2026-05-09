@@ -48,6 +48,9 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogShowCommand.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogShowCommand.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogShowCommand.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickArticlesToReset.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickArticlesToReset.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickArticlesToReset.ui
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.ui

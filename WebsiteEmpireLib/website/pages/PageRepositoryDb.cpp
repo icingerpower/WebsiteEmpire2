@@ -538,6 +538,49 @@ QList<PageRecord> PageRepositoryDb::findPagesForUpdate(const QString &typeId,
 }
 
 // =============================================================================
+// findPagesWithUpdateAttempt / clearUpdateAttempts
+// =============================================================================
+
+QList<PageRecord> PageRepositoryDb::findPagesWithUpdateAttempt(const QString &promptId) const
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(SELECT_PAGES + QStringLiteral(
+        " WHERE id IN ("
+        "   SELECT DISTINCT page_id FROM update_attempts"
+        "   WHERE prompt_id = :promptId"
+        " )"
+        " ORDER BY permalink ASC"));
+    q.bindValue(QStringLiteral(":promptId"), promptId);
+    q.exec();
+    QList<PageRecord> result;
+    while (q.next()) {
+        result.append(rowToRecord(q));
+    }
+    return result;
+}
+
+void PageRepositoryDb::clearUpdateAttempts(const QList<int> &pageIds, const QString &promptId)
+{
+    if (pageIds.isEmpty()) {
+        return;
+    }
+    QStringList placeholders;
+    placeholders.reserve(pageIds.size());
+    for (int i = 0; i < pageIds.size(); ++i) {
+        placeholders.append(QStringLiteral(":pid") + QString::number(i));
+    }
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral("DELETE FROM update_attempts WHERE prompt_id = :promptId AND page_id IN (")
+              + placeholders.join(QLatin1Char(','))
+              + QStringLiteral(")"));
+    q.bindValue(QStringLiteral(":promptId"), promptId);
+    for (int i = 0; i < pageIds.size(); ++i) {
+        q.bindValue(QStringLiteral(":pid") + QString::number(i), pageIds.at(i));
+    }
+    q.exec();
+}
+
+// =============================================================================
 // setLangCodesToTranslate
 // =============================================================================
 

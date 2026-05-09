@@ -98,11 +98,14 @@
          <property name="editTriggers">
           <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
          </property>
+         <property name="selectionBehavior">
+          <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
+         </property>
          <property name="selectionMode">
           <enum>QAbstractItemView::SelectionMode::SingleSelection</enum>
          </property>
          <property name="headerHidden">
-          <bool>true</bool>
+          <bool>false</bool>
          </property>
         </widget>
        </item>
@@ -200,6 +203,29 @@
            </property>
            <property name="text">
             <string>View command</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QFrame" name="lineSeparator2">
+           <property name="frameShape">
+            <enum>QFrame::Shape::VLine</enum>
+           </property>
+           <property name="frameShadow">
+            <enum>QFrame::Shadow::Sunken</enum>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="buttonResetAttempt">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="toolTip">
+            <string>Reset update attempt records for selected articles</string>
+           </property>
+           <property name="text">
+            <string>Reset attempt</string>
            </property>
           </widget>
          </item>

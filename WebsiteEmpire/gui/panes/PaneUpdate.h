@@ -47,6 +47,7 @@ public slots:
     void updateN();
     void stop();
     void viewUpdateCommand();
+    void resetAttempt();
 
 private slots:
     void _onSelectionChanged(const QModelIndex &current, const QModelIndex &previous);

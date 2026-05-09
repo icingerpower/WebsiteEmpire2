@@ -200,6 +200,18 @@ public:
                                                   int            limit,
                                                   const QString &skipIfDataKey = {}) const = 0;
 
+    /**
+     * Returns all pages that have at least one update_attempt row for promptId,
+     * ordered by permalink ascending.
+     */
+    virtual QList<PageRecord> findPagesWithUpdateAttempt(const QString &promptId) const = 0;
+
+    /**
+     * Deletes all update_attempt rows for the given page IDs and promptId.
+     * No-op for any page ID that has no such row.
+     */
+    virtual void clearUpdateAttempts(const QList<int> &pageIds, const QString &promptId) = 0;
+
     // -------------------------------------------------------------------------
     // Translation scope management
     // -------------------------------------------------------------------------

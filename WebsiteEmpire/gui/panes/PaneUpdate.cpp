@@ -4,13 +4,18 @@
 #include "UpdateStrategyTree.h"
 #include "../dialogs/DialogAddUpdateStrategy.h"
 #include "../dialogs/DialogAddUpdatePrompt.h"
+#include "../dialogs/DialogPickArticlesToReset.h"
 #include "launcher/LauncherUpdate.h"
 #include "launcher/AbstractLauncher.h"
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/attributes/CategoryTable.h"
+#include "website/pages/PageDb.h"
+#include "website/pages/PageRepositoryDb.h"
 
 #include <QCoreApplication>
 #include "../dialogs/DialogShowCommand.h"
+#include <QHeaderView>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QProcess>
 #include <QPlainTextEdit>
@@ -41,6 +46,15 @@ void PaneUpdate::setup(const QDir           &workingDir,
     m_workingDir = workingDir;
     m_strategies = new UpdateStrategyTree(workingDir, this);
     ui->treeViewStrategies->setModel(m_strategies);
+
+    auto *header = ui->treeViewStrategies->header();
+    header->setVisible(true);
+    header->setSectionResizeMode(UpdateStrategyTree::COL_NAME,       QHeaderView::Stretch);
+    header->setSectionResizeMode(UpdateStrategyTree::COL_UPDATE_SVG, QHeaderView::Fixed);
+    header->setSectionResizeMode(UpdateStrategyTree::COL_UPDATE_IMG, QHeaderView::Fixed);
+    header->resizeSection(UpdateStrategyTree::COL_UPDATE_SVG, 38);
+    header->resizeSection(UpdateStrategyTree::COL_UPDATE_IMG, 38);
+
     ui->treeViewStrategies->expandAll();
 
     connect(ui->treeViewStrategies->selectionModel(),
@@ -307,28 +321,64 @@ void PaneUpdate::viewUpdateCommand()
     dlg.exec();
 }
 
+void PaneUpdate::resetAttempt()
+{
+    if (!m_isSetup) {
+        return;
+    }
+    const QString promptId = _currentPromptId();
+    if (promptId.isEmpty()) {
+        return;
+    }
+
+    PageDb           pageDb(m_workingDir);
+    PageRepositoryDb pageRepo(pageDb);
+
+    const QList<PageRecord> pages = pageRepo.findPagesWithUpdateAttempt(promptId);
+    if (pages.isEmpty()) {
+        QMessageBox::information(this,
+            tr("Reset attempt"),
+            tr("No update attempts found for this prompt."));
+        return;
+    }
+
+    DialogPickArticlesToReset dialog(pages, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    const QList<int> selected = dialog.selectedPageIds();
+    if (selected.isEmpty()) {
+        return;
+    }
+    pageRepo.clearUpdateAttempts(selected, promptId);
+}
+
 // ---- Private slots ----------------------------------------------------------
 
 void PaneUpdate::_onSelectionChanged(const QModelIndex &current,
                                       const QModelIndex &previous)
 {
-    if (previous.isValid() && m_isSetup && !m_strategies->isStrategy(previous)) {
-        m_strategies->setInstructions(previous, ui->textEditPrompt->toPlainText());
+    // Always work with column 0 — clicking a checkbox column must not discard edits.
+    const QModelIndex prev0 = previous.isValid() ? previous.sibling(previous.row(), 0) : QModelIndex{};
+    const QModelIndex cur0  = current.isValid()  ? current.sibling(current.row(),   0) : QModelIndex{};
+
+    if (prev0.isValid() && m_isSetup && !m_strategies->isStrategy(prev0)) {
+        m_strategies->setInstructions(prev0, ui->textEditPrompt->toPlainText());
     }
 
-    const bool hasSelection = current.isValid();
-    if (!hasSelection) {
+    if (!cur0.isValid()) {
         ui->buttonUpdateAll->setEnabled(false);
         ui->buttonUpdateOne->setEnabled(false);
         ui->buttonUpdateN->setEnabled(false);
         ui->buttonCommandUpdate->setEnabled(false);
+        ui->buttonResetAttempt->setEnabled(false);
         ui->buttonAddPrompt->setEnabled(false);
         ui->textEditPrompt->clear();
         ui->textEditPrompt->setEnabled(false);
         return;
     }
 
-    const bool isStrat = m_strategies->isStrategy(current);
+    const bool isStrat = m_strategies->isStrategy(cur0);
 
     // "Add Prompt" enabled when a strategy is selected (or a prompt under one).
     ui->buttonAddPrompt->setEnabled(true);
@@ -336,6 +386,8 @@ void PaneUpdate::_onSelectionChanged(const QModelIndex &current,
     ui->buttonUpdateOne->setEnabled(true);
     ui->buttonUpdateN->setEnabled(true);
     ui->buttonCommandUpdate->setEnabled(true);
+    // Reset attempt only makes sense when a specific prompt is selected.
+    ui->buttonResetAttempt->setEnabled(!isStrat);
 
     m_updatingPrompt = true;
     if (isStrat) {
@@ -343,7 +395,7 @@ void PaneUpdate::_onSelectionChanged(const QModelIndex &current,
         ui->textEditPrompt->setEnabled(false);
     } else {
         ui->textEditPrompt->setEnabled(true);
-        ui->textEditPrompt->setPlainText(m_strategies->instructionsFor(current));
+        ui->textEditPrompt->setPlainText(m_strategies->instructionsFor(cur0));
     }
     m_updatingPrompt = false;
 }
@@ -368,6 +420,8 @@ void PaneUpdate::_connectSlots()
             this, &PaneUpdate::stop);
     connect(ui->buttonCommandUpdate, &QPushButton::clicked,
             this, &PaneUpdate::viewUpdateCommand);
+    connect(ui->buttonResetAttempt, &QPushButton::clicked,
+            this, &PaneUpdate::resetAttempt);
     connect(ui->textEditPrompt, &QTextEdit::textChanged,
             this, &PaneUpdate::_onPromptEdited);
 }
