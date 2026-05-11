@@ -892,29 +892,25 @@ void Test_CommonBlocTranslator::test_common_bloc_translator_build_jobs_job_field
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
+
+    QList<QPair<const char *, int>> results;
+    auto run = [&](QObject &t, const char *name) {
+        results.append({name, QTest::qExec(&t, argc, argv)});
+    };
+
+    { Test_BlocTranslations t;                    run(t, "Test_BlocTranslations"); }
+    { Test_CommonBlocHeader_Translations t;        run(t, "Test_CommonBlocHeader_Translations"); }
+    { Test_CommonBlocMenu_Translations t;          run(t, "Test_CommonBlocMenu_Translations"); }
+    { Test_AbstractTheme_Translation t;            run(t, "Test_AbstractTheme_Translation"); }
+    { Test_CommonBlocTranslator t;                 run(t, "Test_CommonBlocTranslator"); }
+
     int status = 0;
-
-    {
-        Test_BlocTranslations t;
-        status |= QTest::qExec(&t, argc, argv);
+    fprintf(stderr, "\n========= Aggregated Results =========\n");
+    for (const auto &[name, code] : std::as_const(results)) {
+        fprintf(stderr, "  %s  %s\n", code == 0 ? "PASS" : "FAIL", name);
+        status |= code;
     }
-    {
-        Test_CommonBlocHeader_Translations t;
-        status |= QTest::qExec(&t, argc, argv);
-    }
-    {
-        Test_CommonBlocMenu_Translations t;
-        status |= QTest::qExec(&t, argc, argv);
-    }
-    {
-        Test_AbstractTheme_Translation t;
-        status |= QTest::qExec(&t, argc, argv);
-    }
-    {
-        Test_CommonBlocTranslator t;
-        status |= QTest::qExec(&t, argc, argv);
-    }
-
+    fprintf(stderr, "======================================\n");
     return status;
 }
 

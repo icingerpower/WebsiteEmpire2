@@ -31,6 +31,11 @@ namespace Ui { class DialogPreviewPage; }
  *     keys matching "_tr:<lang>:" and adding each unique lang found.
  *   - Legacy translation page records (sourcePageId != 0): added for
  *     backward compatibility with the pre-inline-translation scheme.
+ *   - Remaining engine languages: any language configured in the engine but not
+ *     yet listed is added pointing to the source page.  This allows page types
+ *     whose rendering is driven entirely by addCode() (e.g. category hub pages)
+ *     to be previewed in every language without requiring separate translation
+ *     records or inline data keys.
  *
  * The dialog holds non-owning references; all three must outlive the dialog.
  */

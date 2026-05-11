@@ -106,6 +106,13 @@ const QString &BlocTranslations::translation(const QString &fieldId,
     if (langIt == fieldIt.value().constEnd()) {
         return s_emptyString;
     }
+    const auto srcIt = m_sources.constFind(fieldId);
+    if (srcIt == m_sources.constEnd()) {
+        return s_emptyString;
+    }
+    if (langIt.value().sourceHash != _sha1(srcIt.value())) {
+        return s_emptyString; // stale — source changed since this translation was produced
+    }
     return langIt.value().text;
 }
 
@@ -215,12 +222,3 @@ void BlocTranslations::loadFromMap(const QHash<QString, QString> &map)
     }
 }
 
-// =============================================================================
-// _purgeStaleFor
-// =============================================================================
-
-void BlocTranslations::_purgeStaleFor(const QString & /*fieldId*/, const QString & /*newHash*/)
-{
-    // Stale translations are preserved for serving until the translation
-    // pipeline explicitly replaces them with fresh ones.
-}

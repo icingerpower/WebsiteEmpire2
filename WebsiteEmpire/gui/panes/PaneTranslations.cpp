@@ -159,8 +159,8 @@ void PaneTranslations::_viewCommands()
     const QString prefix = QStringLiteral("WebsiteEmpire --%1 \"%2\"")
         .arg(AbstractLauncher::OPTION_WORKING_DIR, workingPath);
 
-    // Pick a sensible example language for the --language option: second unique
-    // lang code in the engine (first is the editing/source language).
+    // Pick a sensible example language: second unique lang code in the engine
+    // (first is the editing/source language).
     QString exampleLang = QStringLiteral("fr");
     if (m_engine) {
         QSet<QString> seen;
@@ -178,38 +178,48 @@ void PaneTranslations::_viewCommands()
         }
     }
 
-    const QString cmdTranslateMin = prefix
-        + QStringLiteral(" --") + LauncherTranslate::OPTION_NAME;
+    QStringList sections;
 
-    const QString cmdTranslateFull = prefix
+    // One section per translate mode — driven by LauncherTranslate::translateModes().
+    // Adding a new TranslateMode there automatically adds a command example here.
+    for (const auto &mode : LauncherTranslate::translateModes()) {
+        QString cmd = prefix + QStringLiteral(" --") + LauncherTranslate::OPTION_NAME;
+        if (!mode.flag.isEmpty()) {
+            cmd += QStringLiteral(" --") + mode.flag;
+        }
+
+        QString section = QStringLiteral("# ") + mode.title + QStringLiteral(":\n");
+        if (!mode.detail.isEmpty()) {
+            const auto &detailLines = mode.detail.split(QLatin1Char('\n'));
+            for (const QString &line : detailLines) {
+                section += QStringLiteral("#   ") + line + QStringLiteral("\n");
+            }
+        }
+        section += cmd;
+        sections.append(section);
+    }
+
+    // Optional filters apply to all modes — shown once with the first mode as example.
+    const QString filterCmd = prefix
         + QStringLiteral(" --") + LauncherTranslate::OPTION_NAME
-        + QStringLiteral(" --") + LauncherTranslate::OPTION_LANGUAGE + QStringLiteral(" ") + exampleLang
-        + QStringLiteral(" --") + LauncherTranslate::OPTION_LIMIT + QStringLiteral(" 1");
+        + QStringLiteral(" --") + LauncherTranslate::OPTION_LANGUAGE
+        + QStringLiteral(" ") + exampleLang
+        + QStringLiteral(" --") + LauncherTranslate::OPTION_LIMIT
+        + QStringLiteral(" 1");
+    sections.append(
+        tr("# Optional filters (replace '%1' and '1' as needed):\n"
+           "#   --language  restrict to one target language\n"
+           "#   --limit     stop after N jobs\n").arg(exampleLang)
+        + filterCmd
+    );
 
-    const QString cmdCommon = prefix
-        + QStringLiteral(" --") + LauncherTranslateCommon::OPTION_NAME;
+    // Common blocs — separate launcher.
+    sections.append(
+        tr("# Translate common blocs (header, footer, …):\n")
+        + prefix + QStringLiteral(" --") + LauncherTranslateCommon::OPTION_NAME
+    );
 
-    const QString cmdSvg = prefix
-        + QStringLiteral(" --") + LauncherTranslate::OPTION_NAME
-        + QStringLiteral(" --") + LauncherTranslate::OPTION_SVG;
-
-    const QString text = tr(
-        "# Translate pages — text + SVG images (all languages):\n"
-        "#   Translates untranslated pages.  After each page's text is done,\n"
-        "#   its SVG images are translated automatically in the same run.\n"
-        "%1\n\n"
-        "# Same with optional filters (replace '%2' and '1' as needed):\n"
-        "#   --language  restrict to one target language\n"
-        "#   --limit     stop after N jobs\n"
-        "%3\n\n"
-        "# Translate SVG images only — skip text:\n"
-        "#   Use this to back-fill SVG translations for pages whose text is\n"
-        "#   already translated (e.g. articles translated before SVG support\n"
-        "#   was added).  Text fields are never touched.\n"
-        "%4\n\n"
-        "# Translate common blocs (header, footer, …):\n"
-        "%5"
-    ).arg(cmdTranslateMin, exampleLang, cmdTranslateFull, cmdSvg, cmdCommon);
+    const QString text = sections.join(QStringLiteral("\n\n"));
 
     auto *dlg  = new QDialog(this);
     dlg->setWindowTitle(tr("Translation Commands"));

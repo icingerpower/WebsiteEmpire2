@@ -21,6 +21,9 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePages.ui
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneGeneratedPages.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneGeneratedPages.h
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneGeneratedPages.ui
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageStats.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageStats.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageStats.ui
@@ -51,6 +54,9 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickArticlesToReset.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickArticlesToReset.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickArticlesToReset.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogViewUpdatedArticles.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogViewUpdatedArticles.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogViewUpdatedArticles.ui
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickEngine.ui

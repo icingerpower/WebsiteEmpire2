@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PaneGeneratedPages</class>
+ <widget class="QWidget" name="PaneGeneratedPages">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1280</width>
+    <height>760</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <item>
+      <widget class="QPushButton" name="buttonSyncStubs">
+       <property name="toolTip">
+        <string>Create stub hub pages for any categories not yet covered. Use after importing new categories or topics.</string>
+       </property>
+       <property name="text">
+        <string>Sync stubs</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="buttonReRenderStale">
+       <property name="toolTip">
+        <string>Re-render all hub pages currently marked as stale. Use after editing templates, common blocs, or translations.</string>
+       </property>
+       <property name="text">
+        <string>Re-render stale</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="buttonReRenderSelected">
+       <property name="toolTip">
+        <string>Force re-render of the selected pages even if not stale. Use after directly editing a specific page's content or settings.</string>
+       </property>
+       <property name="text">
+        <string>Re-render selected</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="buttonPreview">
+       <property name="toolTip">
+        <string>Preview the selected page in a dialog. Use after re-rendering to verify the result.</string>
+       </property>
+       <property name="text">
+        <string>Preview</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QTableView" name="tableViewPages">
+     <property name="selectionMode">
+      <enum>QAbstractItemView::SelectionMode::ExtendedSelection</enum>
+     </property>
+     <property name="selectionBehavior">
+      <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
+     </property>
+     <property name="editTriggers">
+      <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
+     </property>
+     <attribute name="horizontalHeaderStretchLastSection">
+      <bool>true</bool>
+     </attribute>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

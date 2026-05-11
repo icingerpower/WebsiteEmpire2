@@ -47,6 +47,7 @@ public slots:
     void updateN();
     void stop();
     void viewUpdateCommand();
+    void viewUpdated();
     void resetAttempt();
 
 private slots:

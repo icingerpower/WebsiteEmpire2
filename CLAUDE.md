@@ -34,6 +34,22 @@ Drogon must be built from source; see the install instructions in `StaticWebsite
 
 ## Testing
 
+### Test target naming
+All `WebsiteEmpireTests` CMake targets (and their C++ class names) must start with
+`Test_Website_` so that ctest output identifies them as belonging to WebsiteEmpire:
+
+```cmake
+# BAD
+add_empire_test(Test_Translation_Settings   test_translation_settings.cpp)
+add_empire_test(Test_CategoryHub_DirtySet   test_category_hub_dirty_set.cpp)
+
+# GOOD
+add_empire_test(Test_Website_Translation_Settings   test_translation_settings.cpp)
+add_empire_test(Test_Website_CategoryHub_DirtySet   test_category_hub_dirty_set.cpp)
+```
+
+The C++ class name inside the file must match the target name exactly (same `Test_Website_*` prefix).
+
 ### Test method naming
 Each Qt test slot name must make the tested class and scenario immediately readable
 without opening the file.  Use the pattern:

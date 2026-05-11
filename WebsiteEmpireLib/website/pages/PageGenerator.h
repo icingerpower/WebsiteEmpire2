@@ -6,8 +6,10 @@
 #include <QString>
 
 class AbstractEngine;
+class AbstractPageType;
 class CategoryTable;
 class IPageRepository;
+class PageRecord;
 
 /**
  * Generates static HTML pages from the page repository and writes them into
@@ -50,6 +52,23 @@ public:
                     AbstractEngine &engine,
                     int             websiteIndex);
 
+    /**
+     * Generates only the pages whose IDs are listed in pageIds and writes them
+     * to content.db.  Skips IDs that are not found in the repository.
+     * Does NOT build the available-pages index (hub blocs do not need it).
+     * Pages whose translation is incomplete for the current engine language are
+     * silently skipped rather than throwing.
+     * Returns the number of pages successfully written.
+     *
+     * Used by CategoryHubSyncer::renderDirtyHubs() to re-render hub pages
+     * without a full generation pass.
+     */
+    int generateSubset(const QList<int> &pageIds,
+                       const QDir       &workingDir,
+                       const QString    &domain,
+                       AbstractEngine   &engine,
+                       int               websiteIndex);
+
     // Exposed for testing.
     static QByteArray gzipCompress(const QByteArray &input);
     static QString    computeEtag(const QByteArray &data);
@@ -59,6 +78,18 @@ private:
     CategoryTable   &m_categoryTable;
 
     static void ensureSchema(const QString &connectionName);
+
+    /**
+     * Generates HTML for a fully-loaded page type and writes one row to
+     * content.db via connName (which must already be open and schema-ready).
+     * Returns true on success.
+     */
+    bool _writePage(AbstractPageType &type,
+                    const PageRecord &record,
+                    const QString    &connName,
+                    const QString    &domain,
+                    AbstractEngine   &engine,
+                    int               websiteIndex);
 };
 
 #endif // PAGEGENERATOR_H

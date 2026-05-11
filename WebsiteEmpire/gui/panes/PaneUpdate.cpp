@@ -5,6 +5,7 @@
 #include "../dialogs/DialogAddUpdateStrategy.h"
 #include "../dialogs/DialogAddUpdatePrompt.h"
 #include "../dialogs/DialogPickArticlesToReset.h"
+#include "../dialogs/DialogViewUpdatedArticles.h"
 #include "launcher/LauncherUpdate.h"
 #include "launcher/AbstractLauncher.h"
 #include "website/pages/AbstractPageType.h"
@@ -221,14 +222,14 @@ void PaneUpdate::_runUpdate(int limit)
 
     // Inactivity timer: if the subprocess produces no output for 20 minutes,
     // it is assumed stuck (e.g. a silent claude hang). Any output resets it.
-    static constexpr int kInactivityMs = 20 * 60 * 1000;
+    static constexpr int kInactivityMs = 25 * 60 * 1000;
     auto *inactivityTimer = new QTimer(this);
     inactivityTimer->setSingleShot(true);
     inactivityTimer->setInterval(kInactivityMs);
     m_inactivityTimer = inactivityTimer;
     connect(inactivityTimer, &QTimer::timeout, this, [this]() {
         ui->textEditOutput->appendPlainText(
-            tr("\n[Inactivity timeout — no output for 20 min. Killing process.]"));
+            tr("\n[Inactivity timeout — no output for 25 min. Killing process.]"));
         if (m_activeProcess) {
             m_activeProcess->kill();
         }
@@ -321,6 +322,28 @@ void PaneUpdate::viewUpdateCommand()
     dlg.exec();
 }
 
+void PaneUpdate::viewUpdated()
+{
+    if (!m_isSetup) {
+        return;
+    }
+    const QString promptId = _currentPromptId();
+    if (promptId.isEmpty()) {
+        return;
+    }
+    const QModelIndex current = ui->treeViewStrategies->currentIndex();
+    const QString typeId = m_strategies->pageTypeIdFor(current);
+
+    PageDb           pageDb(m_workingDir);
+    PageRepositoryDb pageRepo(pageDb);
+
+    const QList<PageRecord> updated    = pageRepo.findPagesWithUpdateAttempt(promptId);
+    const QList<PageRecord> notUpdated = pageRepo.findPagesWithoutUpdateAttempt(typeId, promptId);
+
+    DialogViewUpdatedArticles dialog(updated, notUpdated, this);
+    dialog.exec();
+}
+
 void PaneUpdate::resetAttempt()
 {
     if (!m_isSetup) {
@@ -371,6 +394,7 @@ void PaneUpdate::_onSelectionChanged(const QModelIndex &current,
         ui->buttonUpdateOne->setEnabled(false);
         ui->buttonUpdateN->setEnabled(false);
         ui->buttonCommandUpdate->setEnabled(false);
+        ui->buttonViewUpdated->setEnabled(false);
         ui->buttonResetAttempt->setEnabled(false);
         ui->buttonAddPrompt->setEnabled(false);
         ui->textEditPrompt->clear();
@@ -386,7 +410,8 @@ void PaneUpdate::_onSelectionChanged(const QModelIndex &current,
     ui->buttonUpdateOne->setEnabled(true);
     ui->buttonUpdateN->setEnabled(true);
     ui->buttonCommandUpdate->setEnabled(true);
-    // Reset attempt only makes sense when a specific prompt is selected.
+    // These two only make sense when a specific prompt is selected.
+    ui->buttonViewUpdated->setEnabled(!isStrat);
     ui->buttonResetAttempt->setEnabled(!isStrat);
 
     m_updatingPrompt = true;
@@ -420,6 +445,8 @@ void PaneUpdate::_connectSlots()
             this, &PaneUpdate::stop);
     connect(ui->buttonCommandUpdate, &QPushButton::clicked,
             this, &PaneUpdate::viewUpdateCommand);
+    connect(ui->buttonViewUpdated, &QPushButton::clicked,
+            this, &PaneUpdate::viewUpdated);
     connect(ui->buttonResetAttempt, &QPushButton::clicked,
             this, &PaneUpdate::resetAttempt);
     connect(ui->textEditPrompt, &QTextEdit::textChanged,

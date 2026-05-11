@@ -207,6 +207,14 @@ public:
     virtual QList<PageRecord> findPagesWithUpdateAttempt(const QString &promptId) const = 0;
 
     /**
+     * Returns source pages (source_page_id IS NULL) of typeId that have NO
+     * update_attempt row for promptId, ordered by permalink ascending.
+     * Used to display articles not yet processed by this prompt.
+     */
+    virtual QList<PageRecord> findPagesWithoutUpdateAttempt(const QString &typeId,
+                                                             const QString &promptId) const = 0;
+
+    /**
      * Deletes all update_attempt rows for the given page IDs and promptId.
      * No-op for any page ID that has no such row.
      */

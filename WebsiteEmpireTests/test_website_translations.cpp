@@ -1642,37 +1642,27 @@ void Test_AbstractCommonBloc_WebCodeAdderBridge::test_commonbloc_collect_appends
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
+
+    QList<QPair<const char *, int>> results;
+    auto run = [&](QObject &t, const char *name) {
+        results.append({name, QTest::qExec(&t, argc, argv)});
+    };
+
+    { Test_BlocTranslations_MapPersistence t;          run(t, "Test_BlocTranslations_MapPersistence"); }
+    { Test_PageBlocText_Translation t;                 run(t, "Test_PageBlocText_Translation"); }
+    { Test_PageBlocSocial_NoTranslation t;             run(t, "Test_PageBlocSocial_NoTranslation"); }
+    { Test_AbstractPageType_TranslationRouting t;      run(t, "Test_AbstractPageType_TranslationRouting"); }
+    { Test_AbstractEngine_AvailablePages t;            run(t, "Test_AbstractEngine_AvailablePages"); }
+    { Test_PageGenerator_TranslationGuard t;           run(t, "Test_PageGenerator_TranslationGuard"); }
+    { Test_AbstractCommonBloc_WebCodeAdderBridge t;    run(t, "Test_AbstractCommonBloc_WebCodeAdderBridge"); }
+
     int status = 0;
-
-    {
-        Test_BlocTranslations_MapPersistence t;
-        status |= QTest::qExec(&t, argc, argv);
+    fprintf(stderr, "\n========= Aggregated Results =========\n");
+    for (const auto &[name, code] : std::as_const(results)) {
+        fprintf(stderr, "  %s  %s\n", code == 0 ? "PASS" : "FAIL", name);
+        status |= code;
     }
-    {
-        Test_PageBlocText_Translation t;
-        status |= QTest::qExec(&t, argc, argv);
-    }
-    {
-        Test_PageBlocSocial_NoTranslation t;
-        status |= QTest::qExec(&t, argc, argv);
-    }
-    {
-        Test_AbstractPageType_TranslationRouting t;
-        status |= QTest::qExec(&t, argc, argv);
-    }
-    {
-        Test_AbstractEngine_AvailablePages t;
-        status |= QTest::qExec(&t, argc, argv);
-    }
-    {
-        Test_PageGenerator_TranslationGuard t;
-        status |= QTest::qExec(&t, argc, argv);
-    }
-    {
-        Test_AbstractCommonBloc_WebCodeAdderBridge t;
-        status |= QTest::qExec(&t, argc, argv);
-    }
-
+    fprintf(stderr, "======================================\n");
     return status;
 }
 

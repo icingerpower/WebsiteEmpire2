@@ -40,14 +40,34 @@ add_empire_test(Test_Website_PageGenerator    test_page_generator.cpp)
 add_empire_test(Test_Engine_PageBlocJs        test_engine_page_bloc_js.cpp)
 add_empire_test(Test_Website_CommonBlocTranslations  test_common_bloc_translations.cpp)
 add_empire_test(Test_Website_Translations            test_website_translations.cpp)
-add_empire_test(Test_Translation_Settings            test_translation_settings.cpp)
-add_empire_test(Test_Translation_PageAssessor        test_translation_page_assessor.cpp)
-add_empire_test(Test_Translation_Scheduler           test_translation_scheduler.cpp)
-add_empire_test(Test_Translation_StatusTable         test_translation_status_table.cpp)
-add_empire_test(Test_Translation_FieldTable          test_translation_field_table.cpp)
-add_empire_test(Test_Translation_Protocol            test_translation_protocol.cpp)
-add_empire_test(Test_Website_GenerationWorkflow      test_generation_workflow.cpp)
-add_empire_test(Test_Website_GenerationCoroutine     test_generation_coroutine.cpp)
+add_empire_test(Test_Website_Translation_Settings            test_translation_settings.cpp)
+add_empire_test(Test_Website_Translation_PageAssessor        test_translation_page_assessor.cpp)
+add_empire_test(Test_Website_Translation_Scheduler           test_translation_scheduler.cpp)
+add_empire_test(Test_Website_Translation_StatusTable         test_translation_status_table.cpp)
+add_empire_test(Test_Website_Translation_FieldTable          test_translation_field_table.cpp)
+add_empire_test(Test_Website_Translation_Protocol            test_translation_protocol.cpp)
+add_empire_test(Test_Website_GenerationWorkflow              test_generation_workflow.cpp)
+add_empire_test(Test_Website_GenerationCoroutine             test_generation_coroutine.cpp)
+add_empire_test(Test_Website_CategoryHub_DirtySet            test_category_hub_dirty_set.cpp)
+add_empire_test(Test_Website_CategoryHub_Syncer              test_category_hub_syncer.cpp)
+
+# LauncherTranslate modes test compiles launcher code directly (no app binary needed).
+add_executable(Test_Website_LauncherTranslate_Modes
+    test_launcher_translate_modes.cpp
+    ../WebsiteEmpire/launcher/LauncherTranslate.cpp
+    ../WebsiteEmpire/launcher/AbstractLauncher.cpp
+    ../../common/workingdirectory/WorkingDirectoryManager.cpp)
+add_test(NAME Test_Website_LauncherTranslate_Modes COMMAND Test_Website_LauncherTranslate_Modes)
+target_link_libraries(Test_Website_LauncherTranslate_Modes PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Sql
+    QCoro::Core
+    -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+target_include_directories(Test_Website_LauncherTranslate_Modes PRIVATE
+    ../WebsiteEmpireLib
+    ../WebsiteEmpire/launcher
+    ${CMAKE_CURRENT_SOURCE_DIR})
 
 # GenStrategyTable test compiles app-layer pane code directly.
 add_executable(Test_Website_GenStrategyTable

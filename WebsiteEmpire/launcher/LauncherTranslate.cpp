@@ -19,10 +19,64 @@
 
 #include <algorithm>
 
+// ---------------------------------------------------------------------------
+// ModeRecorder infrastructure
+// ---------------------------------------------------------------------------
+
+LauncherTranslate::ModeRecorder::ModeRecorder(const TranslateMode &mode)
+{
+    getModes().append(mode);
+}
+
+const QList<LauncherTranslate::TranslateMode> &LauncherTranslate::translateModes()
+{
+    return getModes();
+}
+
+QList<LauncherTranslate::TranslateMode> &LauncherTranslate::getModes()
+{
+    static QList<TranslateMode> list;
+    return list;
+}
+
+// ---------------------------------------------------------------------------
+// Option constants + mode registrations
+//
+// Pattern: declare each mode-selecting OPTION constant, then immediately place
+// a ModeRecorder below it.  Adding a new flag here is sufficient — the View
+// Commands dialog picks it up automatically via translateModes().
+// ---------------------------------------------------------------------------
+
+// Default mode: text + SVG (no extra flag).  Must appear first so the dialog
+// shows it at the top.
+static const LauncherTranslate::ModeRecorder reg_default({
+    QString(),
+    QStringLiteral("Translate pages — text + SVG images (all languages)"),
+    QStringLiteral("Translates untranslated pages.  After each page’s text is done,\n"
+                   "its SVG images are translated automatically in the same run.")
+});
+
 const QString LauncherTranslate::OPTION_NAME     = QStringLiteral("translate");
 const QString LauncherTranslate::OPTION_LANGUAGE  = QStringLiteral("language");
 const QString LauncherTranslate::OPTION_LIMIT     = QStringLiteral("limit");
-const QString LauncherTranslate::OPTION_SVG       = QStringLiteral("svg");
+
+const QString LauncherTranslate::OPTION_TEXT = QStringLiteral("text");
+static const LauncherTranslate::ModeRecorder reg_text({
+    LauncherTranslate::OPTION_TEXT,
+    QStringLiteral("Text only — no SVG back-fill"),
+    QStringLiteral("Use when SVG translation is not needed or is already done.")
+});
+
+const QString LauncherTranslate::OPTION_SVG = QStringLiteral("svg");
+static const LauncherTranslate::ModeRecorder reg_svg({
+    LauncherTranslate::OPTION_SVG,
+    QStringLiteral("SVG images only — skip text"),
+    QStringLiteral("Back-fills SVG translations for pages whose text is already\n"
+                   "translated (e.g. articles translated before SVG support was added).\n"
+                   "Text fields are never touched.")
+});
+
+// ---------------------------------------------------------------------------
 
 DECLARE_LAUNCHER(LauncherTranslate)
 
@@ -51,8 +105,10 @@ void LauncherTranslate::run(const QString & /*value*/)
         }
     }
 
-    // --svg: run SVG-only jobs (back-fill translated SVGs for already-translated pages).
-    const bool svgOnly = args.contains(QStringLiteral("--") + OPTION_SVG);
+    // --svg / --text: restrict to one phase; default (neither) runs both.
+    const bool svgOnly  = args.contains(QStringLiteral("--") + OPTION_SVG);
+    const bool textOnly = args.contains(QStringLiteral("--") + OPTION_TEXT);
+    bool runBoth        = !svgOnly && !textOnly;
 
     const QDir workingDir = WorkingDirectoryManager::instance()->workingDir();
 
@@ -151,14 +207,21 @@ void LauncherTranslate::run(const QString & /*value*/)
     });
 
     QObject::connect(translator, &PageTranslator::finished, holder,
-                     [holder, pageRepo, pageDb](int translated, int errors) {
-                         qDebug() << "[Translate] Done. Translated:" << translated
-                                  << " Errors:" << errors;
-                         delete pageRepo;
-                         delete pageDb;
-                         holder->deleteLater();
-                         QCoreApplication::quit();
-                     });
+        [holder, pageRepo, pageDb, translator, editingLang, languageFilter, limitOverride, runBoth]
+        (int translated, int errors) mutable {
+            qDebug() << "[Translate] Done. Translated:" << translated
+                     << " Errors:" << errors;
+            if (runBoth) {
+                runBoth = false;
+                qDebug() << "[Translate] Starting SVG back-fill phase…";
+                translator->startSvgJobs(editingLang, languageFilter, limitOverride);
+                return;
+            }
+            delete pageRepo;
+            delete pageDb;
+            holder->deleteLater();
+            QCoreApplication::quit();
+        });
 
     if (svgOnly) {
         qDebug() << "[Translate] SVG-only mode — back-filling untranslated SVG images.";

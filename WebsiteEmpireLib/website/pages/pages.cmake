@@ -38,6 +38,10 @@ set(PAGES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/GenPageQueue.cpp
     ${CMAKE_CURRENT_LIST_DIR}/GenScheduler.h
     ${CMAKE_CURRENT_LIST_DIR}/GenScheduler.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CategoryHubDirtySet.h
+    ${CMAKE_CURRENT_LIST_DIR}/CategoryHubDirtySet.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CategoryHubSyncer.h
+    ${CMAKE_CURRENT_LIST_DIR}/CategoryHubSyncer.cpp
     ${ATTRIBUTES_FILES}
     ${BLOCS_FILES}
     ${PAGES_WIDGETS_FILES}

@@ -129,6 +129,29 @@ DialogPreviewPage::DialogPreviewPage(IPageRepository &repo,
     }
 
     // -------------------------------------------------------------------------
+    // 4. Engine languages not yet listed.
+    //    Some page types (e.g. category hub) render in any language via
+    //    addCode() without storing per-language data in the page record.
+    //    Adding remaining engine languages lets those pages be previewed in
+    //    every configured language.
+    // -------------------------------------------------------------------------
+    for (int i = 0; i < engine.rowCount(); ++i) {
+        const QString lang = engine.getLangCode(i);
+        if (lang.isEmpty() || listedLangs.contains(lang)) {
+            continue;
+        }
+        listedLangs.insert(lang);
+
+        PreviewEntry e;
+        e.pageIdToLoad = rootId;
+        e.lang         = lang;
+        m_entries.append(e);
+
+        auto *item = new QListWidgetItem(lang, ui->listLanguages);
+        item->setToolTip(rootRec->permalink);
+    }
+
+    // -------------------------------------------------------------------------
     // Select the row matching the originally requested pageId.
     // -------------------------------------------------------------------------
     int selectedRow = 0;
@@ -185,6 +208,7 @@ void DialogPreviewPage::_renderPage(const PreviewEntry &entry)
     // For inline translations, the source lang must be set so the page type
     // knows which fields are already in the source language vs translated.
     type->setAuthorLang(rec->lang);
+    type->bindGenerationContext(m_repo, m_workingDir);
 
     // Resolve the engine row for the requested language so addCode picks the
     // correct tr:<lang>:* translation keys during rendering.

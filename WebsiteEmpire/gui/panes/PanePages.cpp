@@ -5,6 +5,7 @@
 #include "website/AbstractEngine.h"
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/AbstractLegalPageDef.h"
+#include "website/pages/PageTypeCategory.h"
 #include "website/pages/PageTypeHome.h"
 #include "website/pages/PageTypeLegal.h"
 #include "website/pages/PageRecord.h"
@@ -426,6 +427,9 @@ void PanePages::_initDb()
     ui->comboBoxPageType->clear();
     ui->comboBoxPageType->addItem(tr("All page types"), QString());
     for (const QString &typeId : AbstractPageType::allTypeIds()) {
+        if (typeId == QLatin1String(PageTypeCategory::TYPE_ID)) {
+            continue; // managed exclusively in the Generated Pages pane
+        }
         const auto pageType = AbstractPageType::createForTypeId(typeId, *m_categoryTable);
         if (pageType) {
             ui->comboBoxPageType->addItem(pageType->getDisplayName(), typeId);
@@ -444,7 +448,8 @@ void PanePages::_refreshModel()
     }
     m_model->setQuery(
         QStringLiteral(
-            "SELECT id, type_id, permalink, lang, updated_at FROM pages ORDER BY id"),
+            "SELECT id, type_id, permalink, lang, updated_at FROM pages"
+            " WHERE type_id != 'category_hub' ORDER BY id"),
         m_pageDb->database());
     m_model->setHeaderData(0, Qt::Horizontal, tr("ID"));
     m_model->setHeaderData(1, Qt::Horizontal, tr("Type"));

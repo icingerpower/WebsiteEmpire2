@@ -3,6 +3,7 @@
 
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/PageTypeArticle.h"
+#include "website/pages/PageTypeCategory.h"
 #include "website/pages/PageTypeLegal.h"
 #include "website/pages/attributes/CategoryTable.h"
 
@@ -15,8 +16,11 @@ private slots:
     void test_registry_all_type_ids_not_empty();
     void test_registry_all_type_ids_contains_article();
     void test_registry_all_type_ids_contains_legal();
+    void test_registry_all_type_ids_contains_category_hub();
 
     // --- createForTypeId ---
+    void test_registry_create_category_hub_returns_non_null();
+    void test_registry_create_category_hub_type_id_matches();
     void test_registry_create_article_returns_non_null();
     void test_registry_create_unknown_returns_null();
     void test_registry_create_article_type_id_matches();
@@ -33,6 +37,10 @@ private slots:
     // --- PageTypeLegal constants ---
     void test_registry_legal_type_id_constant();
     void test_registry_legal_display_name_constant();
+
+    // --- PageTypeCategory constants ---
+    void test_registry_category_hub_type_id_constant();
+    void test_registry_category_hub_display_name_constant();
 
     // --- getTypeId / getDisplayName via instance ---
     void test_registry_article_instance_get_type_id();
@@ -73,6 +81,12 @@ void Test_PageTypeRegistry::test_registry_all_type_ids_contains_legal()
 {
     QVERIFY(AbstractPageType::allTypeIds().contains(
         QLatin1String(PageTypeLegal::TYPE_ID)));
+}
+
+void Test_PageTypeRegistry::test_registry_all_type_ids_contains_category_hub()
+{
+    QVERIFY(AbstractPageType::allTypeIds().contains(
+        QLatin1String(PageTypeCategory::TYPE_ID)));
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +163,21 @@ void Test_PageTypeRegistry::test_registry_create_legal_display_name_matches()
 // Constants
 // ---------------------------------------------------------------------------
 
+void Test_PageTypeRegistry::test_registry_create_category_hub_returns_non_null()
+{
+    Fixture f;
+    QVERIFY(AbstractPageType::createForTypeId(
+        QLatin1String(PageTypeCategory::TYPE_ID), f.categoryTable) != nullptr);
+}
+
+void Test_PageTypeRegistry::test_registry_create_category_hub_type_id_matches()
+{
+    Fixture f;
+    const auto type = AbstractPageType::createForTypeId(
+        QLatin1String(PageTypeCategory::TYPE_ID), f.categoryTable);
+    QCOMPARE(type->getTypeId(), QLatin1String(PageTypeCategory::TYPE_ID));
+}
+
 void Test_PageTypeRegistry::test_registry_article_type_id_constant()
 {
     QCOMPARE(QLatin1String(PageTypeArticle::TYPE_ID), QStringLiteral("article"));
@@ -199,6 +228,16 @@ void Test_PageTypeRegistry::test_registry_legal_instance_get_display_name()
     Fixture f;
     const PageTypeLegal legal(f.categoryTable);
     QCOMPARE(legal.getDisplayName(), QStringLiteral("Legal"));
+}
+
+void Test_PageTypeRegistry::test_registry_category_hub_type_id_constant()
+{
+    QCOMPARE(QLatin1String(PageTypeCategory::TYPE_ID), QStringLiteral("category_hub"));
+}
+
+void Test_PageTypeRegistry::test_registry_category_hub_display_name_constant()
+{
+    QCOMPARE(QLatin1String(PageTypeCategory::DISPLAY_NAME), QStringLiteral("Category Hub"));
 }
 
 void Test_PageTypeRegistry::test_registry_legal_type_id_differs_from_article()

@@ -97,6 +97,13 @@ private slots:
     void test_pagegen_generate_html_contains_text_content();
     void test_pagegen_generate_redirect_row_for_old_permalink();
     void test_pagegen_generate_second_run_updates_existing_rows();
+
+    // --- generateSubset ---
+    void test_pagegen_subset_empty_list_returns_zero();
+    void test_pagegen_subset_writes_specified_page_to_content_db();
+    void test_pagegen_subset_returns_count_of_written_pages();
+    void test_pagegen_subset_unknown_id_is_skipped();
+    void test_pagegen_subset_only_renders_listed_ids();
 };
 
 // ---------------------------------------------------------------------------
@@ -357,6 +364,65 @@ void Test_PageGenerator::test_pagegen_generate_second_run_updates_existing_rows(
     q.exec(QStringLiteral("SELECT COUNT(*) FROM pages"));
     q.next();
     QCOMPARE(q.value(0).toInt(), 1); // still one row, not two
+    f.closeContentDb(conn);
+}
+
+// ---------------------------------------------------------------------------
+// generateSubset
+// ---------------------------------------------------------------------------
+
+void Test_PageGenerator::test_pagegen_subset_empty_list_returns_zero()
+{
+    Fixture f;
+    QCOMPARE(f.gen.generateSubset({}, QDir(f.dir.path()),
+                                   QStringLiteral("example.com"), f.engine, 0), 0);
+}
+
+void Test_PageGenerator::test_pagegen_subset_writes_specified_page_to_content_db()
+{
+    Fixture f;
+    const int id = f.addArticle(QStringLiteral("/p.html"), QStringLiteral("text"));
+    f.gen.generateSubset({id}, QDir(f.dir.path()),
+                          QStringLiteral("example.com"), f.engine, 0);
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral("SELECT COUNT(*) FROM pages WHERE path = '/p.html'"));
+    q.next();
+    QCOMPARE(q.value(0).toInt(), 1);
+    f.closeContentDb(conn);
+}
+
+void Test_PageGenerator::test_pagegen_subset_returns_count_of_written_pages()
+{
+    Fixture f;
+    const int id1 = f.addArticle(QStringLiteral("/p1.html"), QStringLiteral("a"));
+    const int id2 = f.addArticle(QStringLiteral("/p2.html"), QStringLiteral("b"));
+    QCOMPARE(f.gen.generateSubset({id1, id2}, QDir(f.dir.path()),
+                                   QStringLiteral("example.com"), f.engine, 0), 2);
+}
+
+void Test_PageGenerator::test_pagegen_subset_unknown_id_is_skipped()
+{
+    Fixture f;
+    QCOMPARE(f.gen.generateSubset({9999}, QDir(f.dir.path()),
+                                   QStringLiteral("example.com"), f.engine, 0), 0);
+}
+
+void Test_PageGenerator::test_pagegen_subset_only_renders_listed_ids()
+{
+    Fixture f;
+    const int id1 = f.addArticle(QStringLiteral("/p1.html"), QStringLiteral("a"));
+    f.addArticle(QStringLiteral("/p2.html"), QStringLiteral("b"));
+    // Only render id1 — p2.html must not appear in content.db.
+    f.gen.generateSubset({id1}, QDir(f.dir.path()),
+                          QStringLiteral("example.com"), f.engine, 0);
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral("SELECT COUNT(*) FROM pages"));
+    q.next();
+    QCOMPARE(q.value(0).toInt(), 1);
     f.closeContentDb(conn);
 }
 

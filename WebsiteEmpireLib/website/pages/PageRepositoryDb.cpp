@@ -559,6 +559,28 @@ QList<PageRecord> PageRepositoryDb::findPagesWithUpdateAttempt(const QString &pr
     return result;
 }
 
+QList<PageRecord> PageRepositoryDb::findPagesWithoutUpdateAttempt(const QString &typeId,
+                                                                    const QString &promptId) const
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(SELECT_PAGES + QStringLiteral(
+        " WHERE type_id = :typeId"
+        "   AND source_page_id IS NULL"
+        "   AND id NOT IN ("
+        "     SELECT DISTINCT page_id FROM update_attempts"
+        "     WHERE prompt_id = :promptId"
+        "   )"
+        " ORDER BY permalink ASC"));
+    q.bindValue(QStringLiteral(":typeId"),   typeId);
+    q.bindValue(QStringLiteral(":promptId"), promptId);
+    q.exec();
+    QList<PageRecord> result;
+    while (q.next()) {
+        result.append(rowToRecord(q));
+    }
+    return result;
+}
+
 void PageRepositoryDb::clearUpdateAttempts(const QList<int> &pageIds, const QString &promptId)
 {
     if (pageIds.isEmpty()) {

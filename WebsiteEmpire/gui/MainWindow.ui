@@ -40,6 +40,11 @@
         <string>Pages</string>
        </attribute>
       </widget>
+      <widget class="PaneGeneratedPages" name="tabGeneratedPages">
+       <attribute name="title">
+        <string>Generated pages</string>
+       </attribute>
+      </widget>
       <widget class="PaneGeneration" name="tabGeneration">
        <attribute name="title">
         <string>Generation</string>
@@ -104,6 +109,12 @@
    <class>PanePages</class>
    <extends>QWidget</extends>
    <header>gui/panes/PanePages.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>PaneGeneratedPages</class>
+   <extends>QWidget</extends>
+   <header>gui/panes/PaneGeneratedPages.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>

@@ -60,6 +60,8 @@ public:
                                                         int            limit,
                                                         const QString &skipIfDataKey = {}) const override;
     QList<PageRecord>                findPagesWithUpdateAttempt(const QString &promptId) const override;
+    QList<PageRecord>                findPagesWithoutUpdateAttempt(const QString &typeId,
+                                                                    const QString &promptId) const override;
     void                             clearUpdateAttempts(const QList<int> &pageIds,
                                                          const QString &promptId) override;
     void                             setLangCodesToTranslate(int id,

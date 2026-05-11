@@ -15,6 +15,7 @@
 #include <QSqlDatabase>
 #include <QSqlQuery>
 
+#include <atomic>
 #include <zlib.h>
 
 // =============================================================================
@@ -100,6 +101,84 @@ void PageGenerator::ensureSchema(const QString &connectionName)
 }
 
 // =============================================================================
+// _writePage  (private helper)
+// =============================================================================
+
+bool PageGenerator::_writePage(AbstractPageType &type,
+                                const PageRecord &record,
+                                const QString    &connName,
+                                const QString    &domain,
+                                AbstractEngine   &engine,
+                                int               websiteIndex)
+{
+    QString html, css, js;
+    QSet<QString> cssDoneIds, jsDoneIds;
+    type.addCode(QStringView{}, engine, websiteIndex, html, css, js, cssDoneIds, jsDoneIds);
+
+    const QByteArray &htmlGz = gzipCompress(html.toUtf8());
+    const QString    &etag   = computeEtag(htmlGz);
+    const QString    &now    = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+    QSqlDatabase db = QSqlDatabase::database(connName);
+    db.transaction();
+
+    QSqlQuery upsertPage(db);
+    upsertPage.prepare(QStringLiteral(
+        "INSERT INTO pages (path, domain, lang, etag, updated_at)"
+        " VALUES (:path, :domain, :lang, :etag, :now)"
+        " ON CONFLICT(path) DO UPDATE SET"
+        "   domain=excluded.domain, lang=excluded.lang,"
+        "   etag=excluded.etag, updated_at=excluded.updated_at"));
+    upsertPage.bindValue(QStringLiteral(":path"),   record.permalink);
+    upsertPage.bindValue(QStringLiteral(":domain"), domain);
+    upsertPage.bindValue(QStringLiteral(":lang"),   record.lang);
+    upsertPage.bindValue(QStringLiteral(":etag"),   etag);
+    upsertPage.bindValue(QStringLiteral(":now"),    now);
+    upsertPage.exec();
+
+    QSqlQuery idQ(db);
+    idQ.prepare(QStringLiteral("SELECT id FROM pages WHERE path = :path"));
+    idQ.bindValue(QStringLiteral(":path"), record.permalink);
+    idQ.exec();
+    idQ.next();
+    const int contentPageId = idQ.value(0).toInt();
+
+    QSqlQuery upsertVariant(db);
+    upsertVariant.prepare(QStringLiteral(
+        "INSERT INTO page_variants (page_id, label, is_active, html_gz, etag)"
+        " VALUES (:page_id, 'control', 1, :html_gz, :etag)"
+        " ON CONFLICT(page_id, label) DO UPDATE SET"
+        "   is_active=1, html_gz=excluded.html_gz, etag=excluded.etag"));
+    upsertVariant.bindValue(QStringLiteral(":page_id"), contentPageId);
+    upsertVariant.bindValue(QStringLiteral(":html_gz"), htmlGz);
+    upsertVariant.bindValue(QStringLiteral(":etag"),    etag);
+    upsertVariant.exec();
+
+    const QList<PermalinkHistoryEntry> &history = m_pageRepo.permalinkHistory(record.id);
+    for (const PermalinkHistoryEntry &entry : std::as_const(history)) {
+        QSqlQuery redirect(db);
+        if (entry.redirectType == QStringLiteral("deleted")) {
+            redirect.prepare(QStringLiteral(
+                "INSERT OR IGNORE INTO redirects (old_path, new_path, status_code)"
+                " VALUES (:old_path, NULL, 410)"));
+            redirect.bindValue(QStringLiteral(":old_path"), entry.permalink);
+        } else {
+            const int code = (entry.redirectType == QStringLiteral("parked")) ? 302 : 301;
+            redirect.prepare(QStringLiteral(
+                "INSERT OR IGNORE INTO redirects (old_path, new_path, status_code)"
+                " VALUES (:old_path, :new_path, :code)"));
+            redirect.bindValue(QStringLiteral(":old_path"), entry.permalink);
+            redirect.bindValue(QStringLiteral(":new_path"), record.permalink);
+            redirect.bindValue(QStringLiteral(":code"),     code);
+        }
+        redirect.exec();
+    }
+
+    db.commit();
+    return true;
+}
+
+// =============================================================================
 // generateAll
 // =============================================================================
 
@@ -108,7 +187,6 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                                AbstractEngine &engine,
                                int             websiteIndex)
 {
-    // Open content.db.
     const QString connName = QStringLiteral("page_generator_content_db");
     {
         QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
@@ -133,7 +211,6 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         QHash<QString, QSet<QString>> availablePages;
         for (const PageRecord &r : std::as_const(pages)) {
             if (r.langCodesToTranslate.isEmpty()) {
-                // Not yet assessed: treated as available in the current language.
                 availablePages[currentLang].insert(r.permalink);
             } else {
                 availablePages[r.lang].insert(r.permalink);
@@ -146,10 +223,6 @@ int PageGenerator::generateAll(const QDir     &workingDir,
     }
 
     for (const PageRecord &record : std::as_const(pages)) {
-        // Skip pages not intended for this language.
-        // Only apply the language filter when langCodesToTranslate is explicitly set.
-        // Pages with an empty list have not been assessed — generate them for any
-        // language (backward-compatible behaviour preserving pre-assessment state).
         const bool hasExplicitTargets = !record.langCodesToTranslate.isEmpty();
         const bool isSourceLang       = (record.lang == currentLang);
         const bool isTargetLang       = record.langCodesToTranslate.contains(currentLang);
@@ -182,77 +255,82 @@ int PageGenerator::generateAll(const QDir     &workingDir,
             ex.raise();
         }
 
-        QString html, css, js;
-        QSet<QString> cssDoneIds, jsDoneIds;
-        type->addCode(QStringView{}, engine, websiteIndex, html, css, js, cssDoneIds, jsDoneIds);
+        if (_writePage(*type, record, connName, domain, engine, websiteIndex)) {
+            ++count;
+        }
+    }
 
-        const QByteArray &htmlGz  = gzipCompress(html.toUtf8());
-        const QString    &etag    = computeEtag(htmlGz);
-        const QDateTime   utcNow  = QDateTime::currentDateTimeUtc();
-        const QString    &now     = utcNow.toString(Qt::ISODate);
-
+    {
         QSqlDatabase db = QSqlDatabase::database(connName);
-        db.transaction();
+        db.close();
+    }
+    QSqlDatabase::removeDatabase(connName);
 
-        // Upsert page row.
-        QSqlQuery upsertPage(db);
-        upsertPage.prepare(QStringLiteral(
-            "INSERT INTO pages (path, domain, lang, etag, updated_at)"
-            " VALUES (:path, :domain, :lang, :etag, :now)"
-            " ON CONFLICT(path) DO UPDATE SET"
-            "   domain=excluded.domain, lang=excluded.lang,"
-            "   etag=excluded.etag, updated_at=excluded.updated_at"));
-        upsertPage.bindValue(QStringLiteral(":path"),   record.permalink);
-        upsertPage.bindValue(QStringLiteral(":domain"), domain);
-        upsertPage.bindValue(QStringLiteral(":lang"),   record.lang);
-        upsertPage.bindValue(QStringLiteral(":etag"),   etag);
-        upsertPage.bindValue(QStringLiteral(":now"),    now);
-        upsertPage.exec();
+    return count;
+}
 
-        // Fetch the page id (whether just inserted or pre-existing).
-        QSqlQuery idQ(db);
-        idQ.prepare(QStringLiteral("SELECT id FROM pages WHERE path = :path"));
-        idQ.bindValue(QStringLiteral(":path"), record.permalink);
-        idQ.exec();
-        idQ.next();
-        const int contentPageId = idQ.value(0).toInt();
+// =============================================================================
+// generateSubset
+// =============================================================================
 
-        // Upsert control variant.
-        QSqlQuery upsertVariant(db);
-        upsertVariant.prepare(QStringLiteral(
-            "INSERT INTO page_variants (page_id, label, is_active, html_gz, etag)"
-            " VALUES (:page_id, 'control', 1, :html_gz, :etag)"
-            " ON CONFLICT(page_id, label) DO UPDATE SET"
-            "   is_active=1, html_gz=excluded.html_gz, etag=excluded.etag"));
-        upsertVariant.bindValue(QStringLiteral(":page_id"), contentPageId);
-        upsertVariant.bindValue(QStringLiteral(":html_gz"), htmlGz);
-        upsertVariant.bindValue(QStringLiteral(":etag"),    etag);
-        upsertVariant.exec();
+int PageGenerator::generateSubset(const QList<int> &pageIds,
+                                   const QDir       &workingDir,
+                                   const QString    &domain,
+                                   AbstractEngine   &engine,
+                                   int               websiteIndex)
+{
+    if (pageIds.isEmpty()) {
+        return 0;
+    }
 
-        // Insert redirect rows for old permalinks — status depends on redirectType.
-        const QList<PermalinkHistoryEntry> &history = m_pageRepo.permalinkHistory(record.id);
-        for (const PermalinkHistoryEntry &entry : std::as_const(history)) {
-            QSqlQuery redirect(db);
-            if (entry.redirectType == QStringLiteral("deleted")) {
-                // 410 Gone — no forwarding destination
-                redirect.prepare(QStringLiteral(
-                    "INSERT OR IGNORE INTO redirects (old_path, new_path, status_code)"
-                    " VALUES (:old_path, NULL, 410)"));
-                redirect.bindValue(QStringLiteral(":old_path"), entry.permalink);
-            } else {
-                const int code = (entry.redirectType == QStringLiteral("parked")) ? 302 : 301;
-                redirect.prepare(QStringLiteral(
-                    "INSERT OR IGNORE INTO redirects (old_path, new_path, status_code)"
-                    " VALUES (:old_path, :new_path, :code)"));
-                redirect.bindValue(QStringLiteral(":old_path"), entry.permalink);
-                redirect.bindValue(QStringLiteral(":new_path"), record.permalink);
-                redirect.bindValue(QStringLiteral(":code"),     code);
-            }
-            redirect.exec();
+    static std::atomic<int> s_counter{0};
+    const QString connName = QStringLiteral("page_generator_subset_")
+                             + QString::number(s_counter.fetch_add(1));
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+        db.setDatabaseName(workingDir.filePath(QLatin1StringView(FILENAME)));
+        db.open();
+    }
+    ensureSchema(connName);
+
+    int count = 0;
+    const QString &currentLang = engine.getLangCode(websiteIndex);
+
+    for (int id : std::as_const(pageIds)) {
+        const auto optRecord = m_pageRepo.findById(id);
+        if (!optRecord) {
+            continue;
+        }
+        const PageRecord &record = *optRecord;
+
+        const bool hasExplicitTargets = !record.langCodesToTranslate.isEmpty();
+        const bool isSourceLang       = (record.lang == currentLang);
+        const bool isTargetLang       = record.langCodesToTranslate.contains(currentLang);
+
+        if (hasExplicitTargets && !isSourceLang && !isTargetLang) {
+            continue;
         }
 
-        db.commit();
-        ++count;
+        auto type = AbstractPageType::createForTypeId(record.typeId, m_categoryTable);
+        if (!type) {
+            continue;
+        }
+
+        const QHash<QString, QString> &data = m_pageRepo.loadData(record.id);
+        type->load(data);
+        type->setAuthorLang(record.lang);
+        type->bindGenerationContext(m_pageRepo, workingDir);
+
+        // Skip silently on incomplete translation — subset renders are best-effort
+        // re-renders, not a CI gate.
+        if (hasExplicitTargets && isTargetLang
+                && !type->isTranslationComplete(QStringView{}, currentLang)) {
+            continue;
+        }
+
+        if (_writePage(*type, record, connName, domain, engine, websiteIndex)) {
+            ++count;
+        }
     }
 
     {

@@ -28,8 +28,8 @@ class BlocTranslations
 public:
     /**
      * Register or update source text for a field.
-     * Existing translations are kept even if stale — they continue to be served
-     * until the translation pipeline explicitly replaces them.
+     * If the source text changes, existing translations are kept in storage but
+     * translation() will return empty for them until they are re-translated.
      */
     void setSource(const QString &fieldId, const QString &source);
 
@@ -66,7 +66,8 @@ public:
     QStringList knownLangCodes() const;
 
     /**
-     * Returns the translated text, or a shared empty string if absent.
+     * Returns the translated text, or a shared empty string if absent or stale
+     * (i.e. source text has changed since the translation was produced).
      */
     const QString &translation(const QString &fieldId,
                                const QString &langCode) const;
@@ -112,7 +113,6 @@ private:
     QHash<QString, QHash<QString, Entry>> m_entries;  // fieldId -> langCode -> Entry
 
     static QString _sha1(const QString &text);
-    void           _purgeStaleFor(const QString &fieldId, const QString &newHash);
 };
 
 #endif // BLOCTRANSLATIONS_H

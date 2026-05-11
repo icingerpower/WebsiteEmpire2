@@ -5,6 +5,8 @@
 #include "website/AbstractEngine.h"
 #include "website/HostTable.h"
 #include "website/pages/attributes/CategoryTable.h"
+#include "website/pages/CategoryHubDirtySet.h"
+#include "website/pages/CategoryHubSyncer.h"
 #include "website/pages/PageDb.h"
 #include "website/pages/PageGenerator.h"
 #include "website/pages/PageRepositoryDb.h"
@@ -362,10 +364,17 @@ void PaneDomains::deployLocally()
         }
 
         // Generate all pages into workingDir/content.db
-        CategoryTable   categoryTable(m_workingDir);
-        PageDb          pageDb(m_workingDir);
+        CategoryTable    categoryTable(m_workingDir);
+        PageDb           pageDb(m_workingDir);
         PageRepositoryDb pageRepo(pageDb);
-        PageGenerator   generator(pageRepo, categoryTable);
+        PageGenerator    generator(pageRepo, categoryTable);
+
+        // Ensure a hub stub exists for every category, then mark stale hubs
+        // before the full generation pass so the generated_at stamps stay fresh.
+        CategoryHubDirtySet hubDirtySet(m_workingDir);
+        CategoryHubSyncer   hubSyncer(pageRepo, categoryTable, hubDirtySet, generator);
+        hubSyncer.syncStubs(m_engine->getLangCode(0));
+        hubSyncer.markStaleByStats(m_workingDir);
 
         // One generateAll() call per unique domain — multiple engine rows can
         // share the same domain (e.g. different themes); generating twice would
@@ -385,6 +394,10 @@ void PaneDomains::deployLocally()
             seenDomains.insert(domain);
             totalPages += generator.generateAll(m_workingDir, domain, *m_engine, i);
         }
+
+        // All pages — including hub pages — were just regenerated.  Clear the
+        // dirty set so the Generated Pages pane reflects "Ready" on next open.
+        hubDirtySet.clear();
 
         // Copy content.db to the deploy folder
         _deployLocallyImpl();

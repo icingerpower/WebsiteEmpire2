@@ -2,6 +2,7 @@
 
 #include "website/AbstractEngine.h"
 #include "website/pages/IPageRepository.h"
+#include "website/theme/AbstractTheme.h"
 #include "website/pages/PageRecord.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/blocs/widgets/PageBlocHubGridWidget.h"
@@ -12,6 +13,102 @@
 #include <QSqlQuery>
 
 #include <algorithm>
+
+// =============================================================================
+// File-local helpers
+// =============================================================================
+
+namespace {
+
+QString permalinkToTitle(const QString &permalink)
+{
+    QString title = permalink;
+    if (title.startsWith(QLatin1Char('/'))) {
+        title = title.mid(1);
+    }
+    if (title.endsWith(QStringLiteral(".html"))) {
+        title.chop(5);
+    }
+    title.replace(QLatin1Char('-'), QLatin1Char(' '));
+    bool capitalizeNext = true;
+    for (int i = 0; i < title.size(); ++i) {
+        if (title.at(i) == QLatin1Char(' ')) {
+            capitalizeNext = true;
+        } else if (capitalizeNext) {
+            title[i] = title.at(i).toUpper();
+            capitalizeNext = false;
+        }
+    }
+    return title;
+}
+
+QString extractExcerpt(const QString &rawText, qsizetype maxSentences)
+{
+    if (rawText.isEmpty()) {
+        return {};
+    }
+    QString plain;
+    const auto &paras = rawText.split(QStringLiteral("\n\n"), Qt::SkipEmptyParts);
+    for (const QString &para : paras) {
+        const QString &trimmed = para.trimmed();
+        if (trimmed.startsWith(QLatin1Char('['))) {
+            continue;
+        }
+        QString clean;
+        clean.reserve(trimmed.size());
+        int depth = 0;
+        for (const QChar &ch : trimmed) {
+            if (ch == QLatin1Char('[')) {
+                ++depth;
+            } else if (ch == QLatin1Char(']')) {
+                if (depth > 0) {
+                    --depth;
+                }
+            } else if (depth == 0) {
+                clean += ch;
+            }
+        }
+        const QString &cleanTrimmed = clean.trimmed();
+        if (!cleanTrimmed.isEmpty()) {
+            if (!plain.isEmpty()) {
+                plain += QLatin1Char(' ');
+            }
+            plain += cleanTrimmed;
+        }
+    }
+    if (plain.isEmpty()) {
+        return {};
+    }
+    QStringList sentences;
+    qsizetype start = 0;
+    const qsizetype len = plain.size();
+    for (qsizetype i = 0; i < len && sentences.size() < maxSentences; ++i) {
+        const QChar c = plain.at(i);
+        if (c != QLatin1Char('.') && c != QLatin1Char('!') && c != QLatin1Char('?')) {
+            continue;
+        }
+        if (i + 1 < len && plain.at(i + 1) != QLatin1Char(' ')) {
+            continue;
+        }
+        sentences.append(plain.mid(start, i - start + 1).trimmed());
+        start = i + 2;
+    }
+    if (sentences.size() < maxSentences && start < len) {
+        const QString &tail = plain.mid(start).trimmed();
+        if (!tail.isEmpty()) {
+            sentences.append(tail);
+        }
+    }
+    return sentences.join(QStringLiteral(" "));
+}
+
+struct ArticleEntry {
+    PageRecord record;
+    QString    title;
+    QString    excerpt;
+};
+
+} // namespace
 
 // =============================================================================
 // Construction / bindContext
@@ -145,7 +242,11 @@ void PageBlocHubGrid::addCode(QStringView     /*origContent*/,
 
     // ── Collect articles belonging to any selected category ───────────
     const QSet<int> catIds(m_selectedCategoryIds.begin(), m_selectedCategoryIds.end());
-    QList<PageRecord> articles;
+    const QString &lang = engine.getLangCode(websiteIndex);
+    // Article text lives at bloc index 1 ("1_text"); its inline translation
+    // key follows the same prefix: "1_tr:<lang>:text".
+    const QString textKey = QStringLiteral("1_tr:") + lang + QStringLiteral(":text");
+    QList<ArticleEntry> entries;
 
     const auto &allPages = m_repo->findAll();
     for (const auto &record : std::as_const(allPages)) {
@@ -167,37 +268,51 @@ void PageBlocHubGrid::addCode(QStringView     /*origContent*/,
             }
         }
         if (inCategory) {
-            articles.append(record);
+            const QString &translatedText = data.value(textKey);
+            if (translatedText.isEmpty() && lang != record.lang) {
+                continue; // not yet translated for this language — skip
+            }
+            ArticleEntry entry;
+            entry.record  = record;
+            entry.title   = permalinkToTitle(record.permalink);
+            const auto &sourceText = data.value(QStringLiteral("1_text"));
+            entry.excerpt = extractExcerpt(
+                translatedText.isEmpty() ? sourceText : translatedText, 2);
+            entries.append(entry);
         }
     }
 
-    if (articles.isEmpty()) {
+    if (entries.isEmpty()) {
         return;
     }
 
-    // ── Load stats and sort: CTR → views → recency ────────────────────
+    // ── Load stats and sort: CTR → views → title (alphabetical) ──────
     const auto &statsMap = _loadStats();
 
-    std::stable_sort(articles.begin(), articles.end(),
-        [&statsMap](const PageRecord &a, const PageRecord &b) {
-            const ArticleStats &sa = statsMap.value(a.permalink);
-            const ArticleStats &sb = statsMap.value(b.permalink);
+    std::stable_sort(entries.begin(), entries.end(),
+        [&statsMap](const ArticleEntry &a, const ArticleEntry &b) {
+            const ArticleStats &sa = statsMap.value(a.record.permalink);
+            const ArticleStats &sb = statsMap.value(b.record.permalink);
             if (sa.ctr != sb.ctr) {
                 return sa.ctr > sb.ctr;
             }
             if (sa.views != sb.views) {
                 return sa.views > sb.views;
             }
-            return a.updatedAt > b.updatedAt;
+            return a.title < b.title;
         });
 
-    if (articles.size() > m_maxArticles) {
-        articles = articles.mid(0, m_maxArticles);
+    if (entries.size() > m_maxArticles) {
+        entries = entries.mid(0, m_maxArticles);
     }
 
     // ── CSS (once per page) ────────────────────────────────────────────
     if (!cssDoneIds.contains(QStringLiteral("page-bloc-hub-grid"))) {
         cssDoneIds.insert(QStringLiteral("page-bloc-hub-grid"));
+
+        const AbstractTheme *theme = engine.getActiveTheme();
+        const QString primary = theme ? theme->primaryColor() : QStringLiteral("#1a73e8");
+
         css += QStringLiteral(
             ".hub-grid{"
                 "display:grid;"
@@ -208,26 +323,43 @@ void PageBlocHubGrid::addCode(QStringView     /*origContent*/,
             ".hub-card{"
                 "background:#fff;"
                 "border-radius:.75rem;"
-                "box-shadow:0 2px 8px rgba(0,0,0,.1);"
-                "overflow:hidden;"
+                "box-shadow:0 2px 12px rgba(0,0,0,.07);"
+                "border-left:4px solid ");
+        css += primary;
+        css += QStringLiteral(
+            ";"
+                "padding:1.25rem;"
+                "display:flex;"
+                "flex-direction:column;"
+                "gap:.5rem;"
                 "transition:transform .2s,box-shadow .2s"
             "}"
             ".hub-card:hover{"
-                "transform:translateY(-4px);"
-                "box-shadow:0 6px 20px rgba(0,0,0,.15)"
+                "transform:translateY(-3px);"
+                "box-shadow:0 6px 20px rgba(0,0,0,.12)"
             "}"
             ".hub-card__link{"
                 "display:block;"
-                "padding:1.25rem;"
                 "text-decoration:none;"
-                "color:inherit"
+                "color:#1a1a1a"
             "}"
             ".hub-card__title{"
                 "font-size:1.05rem;"
                 "font-weight:600;"
                 "margin:0;"
                 "line-height:1.4;"
-                "color:#1a1a1a"
+                "color:#1a1a1a;"
+                "transition:color .15s"
+            "}"
+            ".hub-card__link:hover .hub-card__title{color:");
+        css += primary;
+        css += QStringLiteral(
+            "}"
+            ".hub-card__excerpt{"
+                "font-size:.875rem;"
+                "color:#1a1a1a;"
+                "margin:0;"
+                "line-height:1.6"
             "}");
     }
 
@@ -274,36 +406,22 @@ void PageBlocHubGrid::addCode(QStringView     /*origContent*/,
     // ── HTML ───────────────────────────────────────────────────────────
     html += QStringLiteral("<div class=\"hub-grid\">");
 
-    for (const auto &record : std::as_const(articles)) {
-        // Derive display title from permalink (e.g. /my-article.html → My Article)
-        QString title = record.permalink;
-        if (title.startsWith(QLatin1Char('/'))) {
-            title = title.mid(1);
-        }
-        if (title.endsWith(QStringLiteral(".html"))) {
-            title.chop(5);
-        }
-        title.replace(QLatin1Char('-'), QLatin1Char(' '));
-        bool capitalizeNext = true;
-        for (int i = 0; i < title.size(); ++i) {
-            if (title.at(i) == QLatin1Char(' ')) {
-                capitalizeNext = true;
-            } else if (capitalizeNext) {
-                title[i] = title.at(i).toUpper();
-                capitalizeNext = false;
-            }
-        }
-
+    for (const auto &entry : std::as_const(entries)) {
         html += QStringLiteral("<article class=\"hub-card\" data-hub-permalink=\"");
-        html += record.permalink;
+        html += entry.record.permalink;
         html += QStringLiteral("\">");
         html += QStringLiteral("<a href=\"");
-        html += record.permalink;
+        html += entry.record.permalink;
         html += QStringLiteral("\" class=\"hub-card__link\">");
         html += QStringLiteral("<h3 class=\"hub-card__title\">");
-        html += title;
+        html += entry.title;
         html += QStringLiteral("</h3>");
         html += QStringLiteral("</a>");
+        if (!entry.excerpt.isEmpty()) {
+            html += QStringLiteral("<p class=\"hub-card__excerpt\">");
+            html += entry.excerpt.toHtmlEscaped();
+            html += QStringLiteral("</p>");
+        }
         html += QStringLiteral("</article>");
     }
 
