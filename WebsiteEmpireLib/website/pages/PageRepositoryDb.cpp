@@ -28,21 +28,23 @@ static PageRecord rowToRecord(const QSqlQuery &q)
     r.createdAt    = q.value(4).toString();
     r.updatedAt    = q.value(5).toString();
     r.translatedAt = q.value(6).isNull() ? QString() : q.value(6).toString();
-    r.sourcePageId = q.value(7).isNull() ? 0        : q.value(7).toInt();
+    r.sourcePageId = q.value(7).isNull() ? 0         : q.value(7).toInt();
     r.generatedAt  = q.value(8).isNull() ? QString() : q.value(8).toString();
-    // langs_to_translate: stored as comma-separated BCP-47 codes (column 9)
     if (!q.value(9).isNull()) {
         const QString raw = q.value(9).toString().trimmed();
         if (!raw.isEmpty()) {
             r.langCodesToTranslate = raw.split(QLatin1Char(','), Qt::SkipEmptyParts);
         }
     }
+    r.generationState = static_cast<PageGenerationState>(
+        q.value(10).isNull() ? 0 : q.value(10).toInt());
     return r;
 }
 
 static const QLatin1StringView SELECT_PAGES{
     "SELECT id, type_id, permalink, lang, created_at, updated_at,"
-    "       translated_at, source_page_id, generated_at, langs_to_translate"
+    "       translated_at, source_page_id, generated_at, langs_to_translate,"
+    "       generation_state"
     " FROM pages"};
 
 // =============================================================================
@@ -504,7 +506,8 @@ QList<PageRecord> PageRepositoryDb::findPagesForUpdate(const QString &typeId,
     q.prepare(QStringLiteral(
         "SELECT p.id, p.type_id, p.permalink, p.lang,"
         "       p.created_at, p.updated_at, p.translated_at,"
-        "       p.source_page_id, p.generated_at, p.langs_to_translate"
+        "       p.source_page_id, p.generated_at, p.langs_to_translate,"
+        "       p.generation_state"
         " FROM pages p"
         " LEFT JOIN ("
         "   SELECT page_id, MAX(updated_at) AS last_updated"
@@ -615,4 +618,97 @@ void PageRepositoryDb::setLangCodesToTranslate(int id, const QStringList &langs)
     q.bindValue(QStringLiteral(":v"),  value.isEmpty() ? QVariant{} : QVariant{value});
     q.bindValue(QStringLiteral(":id"), id);
     q.exec();
+}
+
+// =============================================================================
+// Generation state
+// =============================================================================
+
+void PageRepositoryDb::setGenerationState(int id, PageGenerationState state)
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "UPDATE pages SET generation_state = :state WHERE id = :id"));
+    q.bindValue(QStringLiteral(":state"), static_cast<int>(state));
+    q.bindValue(QStringLiteral(":id"),    id);
+    q.exec();
+}
+
+QList<PageRecord> PageRepositoryDb::findByGenerationState(const QString        &typeId,
+                                                           PageGenerationState   state) const
+{
+    QList<PageRecord> result;
+    QSqlQuery q(m_db.database());
+    q.prepare(QString::fromLatin1(SELECT_PAGES)
+              + QStringLiteral(
+                  " WHERE type_id = :typeId"
+                  "   AND source_page_id IS NULL"
+                  "   AND generation_state = :state"
+                  " ORDER BY id ASC"));
+    q.bindValue(QStringLiteral(":typeId"), typeId);
+    q.bindValue(QStringLiteral(":state"),  static_cast<int>(state));
+    q.exec();
+    while (q.next()) {
+        result.append(rowToRecord(q));
+    }
+    return result;
+}
+
+// =============================================================================
+// Translation image state
+// =============================================================================
+
+PageGenerationState PageRepositoryDb::translationImageState(int            pageId,
+                                                             const QString &lang) const
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "SELECT state FROM page_translation_image_states"
+        " WHERE page_id = :page_id AND lang = :lang"));
+    q.bindValue(QStringLiteral(":page_id"), pageId);
+    q.bindValue(QStringLiteral(":lang"),    lang);
+    q.exec();
+    if (q.next()) {
+        return static_cast<PageGenerationState>(q.value(0).toInt());
+    }
+    return PageGenerationState::Pending;
+}
+
+void PageRepositoryDb::setTranslationImageState(int                 pageId,
+                                                 const QString      &lang,
+                                                 PageGenerationState state)
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "INSERT INTO page_translation_image_states (page_id, lang, state)"
+        " VALUES (:page_id, :lang, :state)"
+        " ON CONFLICT(page_id, lang) DO UPDATE SET state = excluded.state"));
+    q.bindValue(QStringLiteral(":page_id"), pageId);
+    q.bindValue(QStringLiteral(":lang"),    lang);
+    q.bindValue(QStringLiteral(":state"),   static_cast<int>(state));
+    q.exec();
+}
+
+void PageRepositoryDb::invalidateTranslationImages(int pageId)
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "UPDATE page_translation_image_states SET state = 0 WHERE page_id = :page_id"));
+    q.bindValue(QStringLiteral(":page_id"), pageId);
+    q.exec();
+}
+
+QStringList PageRepositoryDb::pendingTranslationImageLangs(int pageId) const
+{
+    const auto &record = findById(pageId);
+    if (!record || record->langCodesToTranslate.isEmpty()) {
+        return {};
+    }
+    QStringList pending;
+    for (const QString &lang : std::as_const(record->langCodesToTranslate)) {
+        if (translationImageState(pageId, lang) != PageGenerationState::Complete) {
+            pending.append(lang);
+        }
+    }
+    return pending;
 }

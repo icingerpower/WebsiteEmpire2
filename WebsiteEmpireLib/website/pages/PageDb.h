@@ -11,12 +11,17 @@
  * Schema
  * ------
  * pages
- *   id          INTEGER PRIMARY KEY AUTOINCREMENT
- *   type_id     TEXT    NOT NULL
- *   permalink   TEXT    UNIQUE NOT NULL
- *   lang        TEXT    NOT NULL
- *   created_at  TEXT    NOT NULL   -- ISO 8601 UTC
- *   updated_at  TEXT    NOT NULL   -- ISO 8601 UTC
+ *   id                  INTEGER PRIMARY KEY AUTOINCREMENT
+ *   type_id             TEXT    NOT NULL
+ *   permalink           TEXT    UNIQUE NOT NULL
+ *   lang                TEXT    NOT NULL
+ *   created_at          TEXT    NOT NULL   -- ISO 8601 UTC
+ *   updated_at          TEXT    NOT NULL   -- ISO 8601 UTC
+ *   translated_at       TEXT               -- ISO 8601 UTC; migration column
+ *   source_page_id      INTEGER            -- NULL for root pages; migration column
+ *   generated_at        TEXT               -- ISO 8601 UTC; migration column
+ *   langs_to_translate  TEXT               -- comma-separated BCP-47; migration column
+ *   generation_state    INTEGER DEFAULT 0  -- PageGenerationState enum; migration column
  *
  * page_data                         -- flat key/value store for bloc content
  *   page_id     INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE
@@ -29,6 +34,12 @@
  *   page_id     INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE
  *   old_permalink TEXT  NOT NULL
  *   changed_at  TEXT    NOT NULL   -- ISO 8601 UTC
+ *
+ * page_translation_image_states     -- per-language social image generation state
+ *   page_id     INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE
+ *   lang        TEXT    NOT NULL   -- BCP-47 target language code
+ *   state       INTEGER NOT NULL DEFAULT 0  -- PageGenerationState (Pending=0 / Complete=3)
+ *   PRIMARY KEY (page_id, lang)
  *
  * Multiple PageDb instances in the same process each get a unique connection
  * name to satisfy Qt's "one connection per database name" requirement.

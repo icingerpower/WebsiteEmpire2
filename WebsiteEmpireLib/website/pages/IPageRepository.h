@@ -1,6 +1,7 @@
 #ifndef IPAGEREPOSITORY_H
 #define IPAGEREPOSITORY_H
 
+#include "website/pages/PageGenerationState.h"
 #include "website/pages/PageRecord.h"
 #include "website/pages/PermalinkHistoryEntry.h"
 
@@ -250,6 +251,58 @@ public:
      * No-op when no translation data exists for the page.
      */
     virtual void clearAllTranslationData(int pageId) = 0;
+
+    // -------------------------------------------------------------------------
+    // Generation state
+    // -------------------------------------------------------------------------
+
+    /**
+     * Updates the generation_state column for a single page.
+     * Call after each pipeline step completes to enable crash recovery.
+     */
+    virtual void setGenerationState(int id, PageGenerationState state) = 0;
+
+    /**
+     * Returns all source pages (source_page_id IS NULL) of typeId whose
+     * generation_state equals state, ordered by id ASC.
+     * Used by LauncherGeneration to resume mid-pipeline work.
+     */
+    virtual QList<PageRecord> findByGenerationState(const QString        &typeId,
+                                                     PageGenerationState   state) const = 0;
+
+    // -------------------------------------------------------------------------
+    // Translation image state
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns the translation image state for (pageId, lang), or Pending if
+     * no row exists yet.
+     */
+    virtual PageGenerationState translationImageState(int            pageId,
+                                                       const QString &lang) const = 0;
+
+    /**
+     * Upserts the translation image state for (pageId, lang).
+     * Call with Complete after social SVGs + WebPs are written for a language.
+     */
+    virtual void setTranslationImageState(int                 pageId,
+                                           const QString      &lang,
+                                           PageGenerationState state) = 0;
+
+    /**
+     * Resets all translation image states for pageId back to Pending.
+     * Called by LauncherUpdate when the source SVG changes, so outdated
+     * translated blobs are silently overwritten on the next translation run.
+     * Does NOT delete any image blobs — only the state rows are updated.
+     */
+    virtual void invalidateTranslationImages(int pageId) = 0;
+
+    /**
+     * Returns the BCP-47 language codes for which pageId still has
+     * translation image state Pending (i.e. social images need (re-)generation).
+     * Only languages listed in the page's langCodesToTranslate are considered.
+     */
+    virtual QStringList pendingTranslationImageLangs(int pageId) const = 0;
 };
 
 #endif // IPAGEREPOSITORY_H

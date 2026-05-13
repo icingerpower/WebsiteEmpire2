@@ -69,6 +69,17 @@ public:
     void                             clearTranslationData(int pageId,
                                                           const QString &lang) override;
     void                             clearAllTranslationData(int pageId) override;
+    void                             setGenerationState(int id,
+                                                        PageGenerationState state) override;
+    QList<PageRecord>                findByGenerationState(const QString        &typeId,
+                                                           PageGenerationState   state) const override;
+    PageGenerationState              translationImageState(int            pageId,
+                                                           const QString &lang) const override;
+    void                             setTranslationImageState(int                 pageId,
+                                                              const QString      &lang,
+                                                              PageGenerationState state) override;
+    void                             invalidateTranslationImages(int pageId) override;
+    QStringList                      pendingTranslationImageLangs(int pageId) const override;
 
     // Returns the number of generated pages (generated_at IS NOT NULL) whose
     // permalink is in expectedPermalinks.  Used by the GUI to cross-reference

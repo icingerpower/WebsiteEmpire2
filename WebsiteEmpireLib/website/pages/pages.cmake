@@ -21,6 +21,7 @@ set(PAGES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeHome.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeLegal.h
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeLegal.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageGenerationState.h
     ${CMAKE_CURRENT_LIST_DIR}/PageRecord.h
     ${CMAKE_CURRENT_LIST_DIR}/PermalinkHistoryEntry.h
     ${CMAKE_CURRENT_LIST_DIR}/IPageRepository.h

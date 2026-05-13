@@ -1,6 +1,8 @@
 #ifndef PAGERECORD_H
 #define PAGERECORD_H
 
+#include "website/pages/PageGenerationState.h"
+
 #include <QString>
 #include <QStringList>
 
@@ -18,22 +20,27 @@
  * sourcePageId         — legacy field; 0 for root pages (kept for backward compat).
  * generatedAt          — ISO 8601 UTC timestamp set by LauncherGeneration after AI
  *                        content generation; empty until AI generates the content.
+ * generationState      — how far the AI pipeline has progressed; see PageGenerationState.
+ *                        Defaults to Pending for new pages.  Legacy rows (migrated from
+ *                        before this field existed) are set to Complete when generated_at
+ *                        IS NOT NULL, Pending otherwise.
  * langCodesToTranslate — BCP-47 codes this page should be translated into,
  *                        set exclusively by the assessment step.  The generator
  *                        throws if a code is listed here but the translation is
  *                        incomplete.  Empty = author language only.
  */
 struct PageRecord {
-    int         id           = 0;
-    QString     typeId;
-    QString     permalink;
-    QString     lang;
-    QString     createdAt;
-    QString     updatedAt;
-    QString     translatedAt;
-    int         sourcePageId = 0;
-    QString     generatedAt;
-    QStringList langCodesToTranslate; ///< set by assessment step; drives generation
+    int                  id              = 0;
+    QString              typeId;
+    QString              permalink;
+    QString              lang;
+    QString              createdAt;
+    QString              updatedAt;
+    QString              translatedAt;
+    int                  sourcePageId    = 0;
+    QString              generatedAt;
+    PageGenerationState  generationState = PageGenerationState::Pending;
+    QStringList          langCodesToTranslate; ///< set by assessment step; drives generation
 };
 
 #endif // PAGERECORD_H

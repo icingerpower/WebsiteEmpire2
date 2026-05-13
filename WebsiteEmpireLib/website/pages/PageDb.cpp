@@ -145,4 +145,28 @@ void PageDb::createSchema()
         q.exec(QStringLiteral(
             "ALTER TABLE pages ADD COLUMN langs_to_translate TEXT"));
     }
+
+    // pages.generation_state — PageGenerationState enum (Pending=0 … Complete=3).
+    // Legacy rows with generated_at IS NOT NULL are promoted to Complete so the
+    // translation guard (state must be Complete) does not block existing content.
+    if (!columnExists(m_connectionName, QStringLiteral("pages"),
+                      QStringLiteral("generation_state"))) {
+        q.exec(QStringLiteral(
+            "ALTER TABLE pages ADD COLUMN generation_state INTEGER NOT NULL DEFAULT 0"));
+        q.exec(QStringLiteral(
+            "UPDATE pages SET generation_state = 3 WHERE generated_at IS NOT NULL"));
+    }
+
+    // page_translation_image_states — per-language social image generation state.
+    // Pending (0): social SVGs / WebPs not yet translated for this language.
+    // Complete (3): all social image variants translated and written to images.db.
+    // LauncherUpdate resets rows to Pending when the source SVG changes, so
+    // outdated blobs are silently overwritten on the next translation run.
+    q.exec(QStringLiteral(
+        "CREATE TABLE IF NOT EXISTS page_translation_image_states ("
+        "  page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,"
+        "  lang    TEXT    NOT NULL,"
+        "  state   INTEGER NOT NULL DEFAULT 0,"
+        "  PRIMARY KEY (page_id, lang)"
+        ")"));
 }
