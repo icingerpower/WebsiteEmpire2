@@ -5,14 +5,18 @@
 #include "website/HostTable.h"
 #include "website/WebsiteSettingsTable.h"
 #include "website/ImageWriter.h"
+#include "website/pages/AbstractPageType.h"
 #include "website/pages/GenPageQueue.h"
 #include "website/pages/GenScheduler.h"
 #include "website/pages/PageDb.h"
+#include "website/pages/PageGenerationState.h"
 #include "website/pages/PageRepositoryDb.h"
 #include "website/pages/attributes/CategoryTable.h"
+#include "website/pages/blocs/AbstractSecondaryPageBloc.h"
 #include "website/perf/GscDataSource.h"
 #include "website/perf/GscSettings.h"
 #include "website/perf/StatsDbDataSource.h"
+#include "website/social/AbstractSocialMedia.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
 
 #include <csignal>
@@ -22,11 +26,14 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QImage>
+#include <QPainter>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QSvgRenderer>
 #include <QTemporaryDir>
 #include <QTextStream>
 
@@ -169,10 +176,11 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt)
 // Per-session coroutine
 // ---------------------------------------------------------------------------
 
-static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
-                                               QString        strategyId,
+static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
+                                               QString         strategyId,
                                                AbstractEngine *engine,
                                                int             websiteIndex,
+                                               CategoryTable  &categoryTable,
                                                GenRunState    *state,
                                                int             sessionIndex)
 {
@@ -202,6 +210,189 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
                              .arg(page.typeId)
                              .arg(queue->pendingCount());
         state->out->flush();
+
+        // ---- Smart retry: ContentReady / MainImageReady pages ----------------
+        // These pages already have saved content; skip content regeneration and
+        // run only the social-media second pass.  The SVG is loaded from
+        // images.db if available; otherwise it is re-generated from the existing
+        // article text (1_text from page_data) without touching the content.
+        if (page.id != 0) {
+            const int     pageId = page.id;
+            const QString domain = engine->data(
+                engine->index(websiteIndex, AbstractEngine::COL_DOMAIN)).toString();
+            const QString lang   = engine->getLangCode(websiteIndex);
+
+            *(state->out) << QStringLiteral("[S%1] Smart retry (second-pass only): %2\n")
+                                 .arg(sNum).arg(page.permalink);
+            state->out->flush();
+
+            // Load existing article text to find the SVG filename.
+            const QHash<QString, QString> retryData = pageRepo.loadData(pageId);
+            const QString retryText = retryData.value(QStringLiteral("1_text"));
+            if (retryText.isEmpty()) {
+                *(state->out) << QStringLiteral("[S%1] SKIP retry (no 1_text): %2\n")
+                                     .arg(sNum).arg(page.permalink);
+                state->out->flush();
+                continue;
+            }
+
+            // Try to load the existing main SVG from images.db.
+            QString retrySvg;
+            const QList<GenPageQueue::ImgFixRef> retryRefs =
+                GenPageQueue::parseImgFixRefs(retryText);
+            for (const auto &ref : std::as_const(retryRefs)) {
+                if (!ref.fileName.endsWith(QStringLiteral(".svg"), Qt::CaseInsensitive)) {
+                    continue;
+                }
+                const QByteArray svgBlob = imageWriter.readSvg(domain, ref.fileName);
+                if (!svgBlob.isEmpty()) {
+                    retrySvg = QString::fromUtf8(svgBlob);
+                    *(state->out) << QStringLiteral("[S%1] Loaded existing SVG: %2\n")
+                                         .arg(sNum).arg(ref.fileName);
+                    state->out->flush();
+                    break;
+                }
+            }
+
+            // SVG not in images.db — regenerate it from the existing text.
+            if (retrySvg.isEmpty() && !g_stopRequested) {
+                *(state->out) << QStringLiteral(
+                    "[S%1] SVG not in images.db — regenerating from existing text...\n")
+                    .arg(sNum);
+                state->out->flush();
+                for (const auto &ref : std::as_const(retryRefs)) {
+                    if (g_stopRequested) { break; }
+                    if (!ref.fileName.endsWith(QStringLiteral(".svg"), Qt::CaseInsensitive)) {
+                        continue;
+                    }
+                    const QString svgPrompt = queue->buildSvgPrompt(ref, page.permalink, lang);
+                    const QString svgResp   = co_await runClaudePrompt(svgPrompt);
+                    if (svgResp.startsWith(QStringLiteral("__ERROR__"))) {
+                        *(state->out) << QStringLiteral("[S%1] WARN (SVG regen): %2\n")
+                                             .arg(sNum).arg(svgResp);
+                        state->out->flush();
+                        continue;
+                    }
+                    static const QRegularExpression reSvgOpenR(
+                        QStringLiteral("<svg[\\s>]"), QRegularExpression::CaseInsensitiveOption);
+                    const auto mr    = reSvgOpenR.match(svgResp);
+                    const int  sS    = mr.hasMatch() ? mr.capturedStart() : -1;
+                    const int  sE    = svgResp.lastIndexOf(QStringLiteral("</svg>"));
+                    if (sS < 0 || sE < sS) {
+                        *(state->out) << QStringLiteral("[S%1] WARN (SVG regen): no valid SVG for %2\n")
+                                             .arg(sNum).arg(ref.fileName);
+                        state->out->flush();
+                        continue;
+                    }
+                    const QString svgContent = svgResp.mid(sS, sE + 6 - sS);
+                    imageWriter.writeSvg(svgContent.toUtf8(), domain, ref.fileName);
+                    retrySvg = svgContent;
+                    *(state->out) << QStringLiteral("[S%1] SVG regenerated: %2\n")
+                                         .arg(sNum).arg(ref.fileName);
+                    state->out->flush();
+                    break;
+                }
+            }
+
+            // Run second pass.
+            auto retryPageType = AbstractPageType::createForTypeId(page.typeId, categoryTable);
+            const bool svgExpectedR = queue->wantsSvgImage()
+                                      && retryPageType
+                                      && retryPageType->hasSvg();
+
+            if (!retrySvg.isEmpty() && !g_stopRequested) {
+                pageRepo.setGenerationState(pageId, PageGenerationState::MainImageReady);
+                if (retryPageType) {
+                    QHash<QString, QString> retryPageData = pageRepo.loadData(pageId);
+                    retryPageType->load(retryPageData);
+                    const QList<const AbstractPageBloc *> &blocs =
+                        retryPageType->getPageBlocs();
+                    for (int bIdx = 0; bIdx < blocs.size() && !g_stopRequested; ++bIdx) {
+                        const AbstractPageBloc *bloc = blocs.at(bIdx);
+                        if (!bloc->isSecondTimeGeneration()) { continue; }
+                        const auto *secBloc =
+                            static_cast<const AbstractSecondaryPageBloc *>(bloc);
+                        const QList<QString> prompts =
+                            secBloc->buildSecondPassPrompts(retrySvg, page);
+                        const QList<AbstractSocialMedia::ImageSize> sizes =
+                            secBloc->requiredImageSizes();
+
+                        bool anyVariantSaved = false;
+                        for (int vi = 0; vi < prompts.size() && !g_stopRequested; ++vi) {
+                            const AbstractSocialMedia::ImageSize imgSize = sizes.at(vi);
+                            const QSize dims = AbstractSocialMedia::imageSizeDimensions(imgSize);
+                            const QString &webpSuffix = AbstractSocialMedia::webpSuffix(imgSize);
+
+                            QString slug = page.permalink;
+                            while (slug.startsWith(QLatin1Char('/'))) { slug.remove(0, 1); }
+                            const QString webpFilename = slug + webpSuffix;
+
+                            *(state->out) << QStringLiteral(
+                                "[S%1] 2nd pass (retry, bloc %2, variant %3/%4): %5...\n")
+                                .arg(sNum).arg(bIdx).arg(vi + 1).arg(prompts.size()).arg(webpFilename);
+                            state->out->flush();
+
+                            const QString svgRaw = co_await runClaudePrompt(prompts.at(vi));
+                            if (svgRaw.startsWith(QStringLiteral("__ERROR__"))) {
+                                *(state->out) << QStringLiteral("[S%1] WARN (2nd pass retry): %2\n")
+                                                     .arg(sNum).arg(svgRaw);
+                                state->out->flush();
+                                continue;
+                            }
+                            QString validatedSvg;
+                            try {
+                                validatedSvg = secBloc->validateSecondPassResult(svgRaw, vi);
+                            } catch (...) {
+                                *(state->out) << QStringLiteral(
+                                    "[S%1] WARN (2nd pass retry): validation failed, variant %2\n")
+                                    .arg(sNum).arg(vi);
+                                state->out->flush();
+                                continue;
+                            }
+                            QSvgRenderer renderer(validatedSvg.toUtf8());
+                            if (!renderer.isValid()) {
+                                *(state->out) << QStringLiteral(
+                                    "[S%1] WARN (2nd pass retry): not renderable, variant %2\n")
+                                    .arg(sNum).arg(vi);
+                                state->out->flush();
+                                continue;
+                            }
+                            QImage img(dims, QImage::Format_ARGB32);
+                            img.fill(Qt::white);
+                            QPainter painter(&img);
+                            renderer.render(&painter);
+                            painter.end();
+
+                            imageWriter.writeQImage(img, domain, webpFilename);
+                            const QString dataKey =
+                                QStringLiteral("%1_").arg(bIdx) + secBloc->variantDataKey(vi);
+                            retryPageData.insert(dataKey, webpFilename);
+                            anyVariantSaved = true;
+
+                            *(state->out) << QStringLiteral("[S%1] 2nd pass WebP saved (retry): %2\n")
+                                                 .arg(sNum).arg(webpFilename);
+                            state->out->flush();
+                        }
+                        if (anyVariantSaved) {
+                            pageRepo.saveData(pageId, retryPageData);
+                        }
+                    }
+                }
+            }
+
+            if (!svgExpectedR || !retrySvg.isEmpty()) {
+                pageRepo.setGenerationState(pageId, PageGenerationState::Complete);
+                state->jobsCompleted.fetch_add(1);
+                *(state->out) << QStringLiteral("[S%1] OK (retry): %2\n")
+                                     .arg(sNum).arg(page.permalink);
+            } else {
+                *(state->out) << QStringLiteral(
+                    "[S%1] WARN: %2 — SVG still missing after retry, stays ContentReady\n")
+                    .arg(sNum).arg(page.permalink);
+            }
+            state->out->flush();
+            continue; // Skip first-pass content generation entirely.
+        }
 
         // ---- Call 1: write article content (up to 3 attempts) ---------------
         *(state->out) << QStringLiteral("[S%1] Building prompt...\n").arg(sNum);
@@ -320,12 +511,14 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
 
         // ---- For source-DB-backed pages (id == 0), create the row first -----
         // Only reached when content is valid — no orphan rows on failure.
+        // Pages with id != 0 (ContentReady/MainImageReady retries) are handled
+        // by the smart retry path above and have already continued.
         int pageId = page.id;
         const bool pageCreatedHere = (pageId == 0);
         if (pageId == 0) {
             pageId = pageRepo.create(page.typeId, page.permalink, page.lang);
             if (pageId <= 0) {
-                // Permalink already exists (race between sessions) — skip.
+                // Permalink exists (race between sessions) — skip.
                 *(state->out) << QStringLiteral("[S%1] SKIP (exists): %2\n")
                                      .arg(sNum).arg(page.permalink);
                 state->out->flush();
@@ -338,16 +531,27 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
                                      ? QString{} : metadataJson;
         if (queue->processContentAndMetadata(pageId, articleText, safeMetadata, pageRepo)) {
             pageRepo.recordStrategyAttempt(pageId, strategyId);
+            pageRepo.setGenerationState(pageId, PageGenerationState::ContentReady);
             state->jobsCompleted.fetch_add(1);
             *(state->out) << QStringLiteral("[S%1] OK: %2\n")
                                  .arg(sNum).arg(page.permalink);
 
             // ---- Generate SVG images referenced in the article --------------
+            auto pageType = AbstractPageType::createForTypeId(page.typeId, categoryTable);
+            // SVG is required when the strategy wants it AND the page type declares
+            // it needs one.  If SVG generation fails, the page stays in ContentReady
+            // so that the next generation run can retry rather than silently marking
+            // the page Complete without any social-media images.
+            const bool svgExpected = queue->wantsSvgImage()
+                                     && pageType
+                                     && pageType->hasSvg();
+
             const QList<GenPageQueue::ImgFixRef> imgRefs =
                 GenPageQueue::parseImgFixRefs(articleText);
             const QString domain = engine->data(
                 engine->index(websiteIndex, AbstractEngine::COL_DOMAIN)).toString();
             const QString lang = engine->getLangCode(websiteIndex);
+            QString sourceSvgForSocialMedia; // first SVG content — seed for second pass
             for (const auto &ref : std::as_const(imgRefs)) {
                 if (g_stopRequested) {
                     break;
@@ -395,8 +599,113 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue  *queue,
 
                 const QString svgContent = svgResponse.mid(svgStart, svgEnd + 6 - svgStart);
                 imageWriter.writeSvg(svgContent.toUtf8(), domain, ref.fileName);
+                if (sourceSvgForSocialMedia.isEmpty()) {
+                    sourceSvgForSocialMedia = svgContent;
+                }
                 *(state->out) << QStringLiteral("[S%1] SVG saved: %2\n")
                                      .arg(sNum).arg(ref.fileName);
+                state->out->flush();
+            }
+
+            // ---- Second pass: social media image variants -------------------
+            if (!g_stopRequested && !sourceSvgForSocialMedia.isEmpty()) {
+                pageRepo.setGenerationState(pageId, PageGenerationState::MainImageReady);
+
+                if (pageType) {
+                    QHash<QString, QString> pageData = pageRepo.loadData(pageId);
+                    pageType->load(pageData);
+
+                    const QList<const AbstractPageBloc *> &blocs = pageType->getPageBlocs();
+                    for (int blocIdx = 0; blocIdx < blocs.size() && !g_stopRequested; ++blocIdx) {
+                        const AbstractPageBloc *bloc = blocs.at(blocIdx);
+                        if (!bloc->isSecondTimeGeneration()) {
+                            continue;
+                        }
+                        const auto *secBloc =
+                            static_cast<const AbstractSecondaryPageBloc *>(bloc);
+                        const QList<QString> prompts =
+                            secBloc->buildSecondPassPrompts(sourceSvgForSocialMedia, page);
+                        const QList<AbstractSocialMedia::ImageSize> sizes =
+                            secBloc->requiredImageSizes();
+
+                        bool anyVariantSaved = false;
+                        for (int vi = 0; vi < prompts.size() && !g_stopRequested; ++vi) {
+                            const AbstractSocialMedia::ImageSize imgSize = sizes.at(vi);
+                            const QSize dims = AbstractSocialMedia::imageSizeDimensions(imgSize);
+                            const QString &webpSuffix = AbstractSocialMedia::webpSuffix(imgSize);
+
+                            QString slug = page.permalink;
+                            while (slug.startsWith(QLatin1Char('/'))) {
+                                slug.remove(0, 1);
+                            }
+                            const QString webpFilename = slug + webpSuffix;
+
+                            *(state->out) << QStringLiteral("[S%1] 2nd pass SVG (bloc %2, variant %3/%4): %5...\n")
+                                                 .arg(sNum).arg(blocIdx).arg(vi + 1)
+                                                 .arg(prompts.size()).arg(webpFilename);
+                            state->out->flush();
+
+                            const QString svgRaw = co_await runClaudePrompt(prompts.at(vi));
+                            if (svgRaw.startsWith(QStringLiteral("__ERROR__"))) {
+                                *(state->out) << QStringLiteral("[S%1] WARN (2nd pass): %2\n")
+                                                     .arg(sNum).arg(svgRaw);
+                                state->out->flush();
+                                continue;
+                            }
+
+                            QString validatedSvg;
+                            try {
+                                validatedSvg = secBloc->validateSecondPassResult(svgRaw, vi);
+                            } catch (...) {
+                                *(state->out) << QStringLiteral(
+                                    "[S%1] WARN (2nd pass): SVG validation failed for variant %2\n")
+                                    .arg(sNum).arg(vi);
+                                state->out->flush();
+                                continue;
+                            }
+
+                            QSvgRenderer renderer(validatedSvg.toUtf8());
+                            if (!renderer.isValid()) {
+                                *(state->out) << QStringLiteral(
+                                    "[S%1] WARN (2nd pass): SVG not renderable for variant %2\n")
+                                    .arg(sNum).arg(vi);
+                                state->out->flush();
+                                continue;
+                            }
+                            QImage img(dims, QImage::Format_ARGB32);
+                            img.fill(Qt::white);
+                            QPainter painter(&img);
+                            renderer.render(&painter);
+                            painter.end();
+
+                            imageWriter.writeQImage(img, domain, webpFilename);
+
+                            const QString dataKey = QStringLiteral("%1_").arg(blocIdx)
+                                                    + secBloc->variantDataKey(vi);
+                            pageData.insert(dataKey, webpFilename);
+                            anyVariantSaved = true;
+
+                            *(state->out) << QStringLiteral("[S%1] 2nd pass WebP saved: %2\n")
+                                                 .arg(sNum).arg(webpFilename);
+                            state->out->flush();
+                        }
+
+                        if (anyVariantSaved) {
+                            pageRepo.saveData(pageId, pageData);
+                        }
+                    }
+                }
+            }
+            // Only mark Complete when SVG requirements are satisfied.  If SVG
+            // was expected (strategy + page type) but none was generated, leave
+            // the page in ContentReady so the next run retries SVG generation.
+            if (!svgExpected || !sourceSvgForSocialMedia.isEmpty()) {
+                pageRepo.setGenerationState(pageId, PageGenerationState::Complete);
+            } else {
+                *(state->out) << QStringLiteral(
+                    "[S%1] WARN: %2 — SVG expected but not generated; "
+                    "page stays ContentReady for retry on next run\n")
+                    .arg(sNum).arg(page.permalink);
                 state->out->flush();
             }
         } else {
@@ -540,6 +849,11 @@ void LauncherGeneration::run(const QString & /*value*/)
     static const QRegularExpression reNonAlnum(QStringLiteral("[^a-z0-9]+"));
 
     // Pre-load all existing permalinks once (avoid repeated findAll() calls).
+    // ALL pages (any state) are excluded from the source-DB virtual-page list so
+    // that existing articles are never regenerated from scratch unintentionally.
+    // ContentReady / MainImageReady pages are re-queued explicitly below with
+    // their real ids so the smart retry path runs the second pass without
+    // touching already-saved content.
     const QList<PageRecord> allExistingPages = schedRepo.findAll();
     QSet<QString> allExistingPermalinks;
     allExistingPermalinks.reserve(allExistingPages.size());
@@ -683,6 +997,46 @@ void LauncherGeneration::run(const QString & /*value*/)
             // findPendingByTypeId() — existing pending stubs still get processed.
         }
 
+        // Prepend ContentReady / MainImageReady pages of this type so they are
+        // retried by the smart second-pass path in runGenerationSession.  These
+        // pages already have saved content and (usually) an existing SVG in
+        // images.db; the session loads the SVG and runs only the second pass
+        // without touching the article text.
+        {
+            const QList<PageRecord> crPages =
+                schedRepo.findByGenerationState(info.pageTypeId,
+                                               PageGenerationState::ContentReady);
+            const QList<PageRecord> mirPages =
+                schedRepo.findByGenerationState(info.pageTypeId,
+                                               PageGenerationState::MainImageReady);
+
+            if (!crPages.isEmpty() || !mirPages.isEmpty()) {
+                // For classic strategies that didn't build a virtualPages list,
+                // also harvest Pending pages from pages.db so they still get
+                // processed alongside the retry pages.
+                const bool isClassicStrategy =
+                    !virtualPagesByStrategyId.contains(info.strategyId);
+                QList<PageRecord> &vp = virtualPagesByStrategyId[info.strategyId];
+                if (isClassicStrategy) {
+                    const QList<PageRecord> pending =
+                        schedRepo.findPendingByTypeId(info.pageTypeId);
+                    vp.append(pending);
+                }
+                // MainImageReady first (only second pass needed), then ContentReady.
+                for (const PageRecord &p : std::as_const(mirPages)) {
+                    vp.prepend(p);
+                }
+                for (const PageRecord &p : std::as_const(crPages)) {
+                    vp.prepend(p);
+                }
+                info.pendingCountOverride = vp.size();
+                *out << QStringLiteral("  → %1 retry page(s) (ContentReady/MainImageReady) queued for %2\n")
+                            .arg(crPages.size() + mirPages.size())
+                            .arg(info.pageTypeId);
+                out->flush();
+            }
+        }
+
         strategyInfos.append(info);
     }
 
@@ -746,6 +1100,7 @@ void LauncherGeneration::run(const QString & /*value*/)
         for (int s = 0; s < alloc.sessionCount; ++s) {
             runGenerationSession(queue, alloc.strategyId,
                                   engine, editingLangIndex,
+                                  *categoryTable,
                                   state, state->activeCount - alloc.sessionCount + s);
         }
     }
