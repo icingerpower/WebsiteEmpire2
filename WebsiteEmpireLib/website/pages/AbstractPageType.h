@@ -129,6 +129,30 @@ public:
     virtual void bindGenerationContext(IPageRepository &repo, const QDir &workingDir);
 
     /**
+     * Returns social-media <meta> tag HTML to be injected into the page <head>.
+     *
+     * addCode() calls this and appends the result between the <style> block and
+     * </head>.  The base URL is "https://<domain>" (no trailing slash).
+     *
+     * The default implementation returns an empty string.  Page types that have
+     * a social-media bloc (PageTypeArticle, PageTypeCategory) override this to
+     * iterate AbstractSocialMedia::all() and emit per-platform tags.
+     */
+    virtual QString buildHeadMetaTags(const QString &baseUrl) const;
+
+    /**
+     * Returns true when the page type requires an SVG image to be generated as
+     * part of its first-pass AI pipeline (e.g. PageTypeArticle).
+     *
+     * LauncherGeneration uses this to decide whether a page that completed the
+     * content step without a valid SVG should be marked Complete or left in
+     * ContentReady so that the SVG generation is retried on the next run.
+     * Page types where SVG is optional or absent (e.g. PageTypeCategory) keep
+     * the default false so that missing SVG does not block completion.
+     */
+    virtual bool hasSvg() const;
+
+    /**
      * Aggregates each bloc's getAiKeyClues() into a single flat map, prefixing
      * every key with "<blocIndex>_" to match the save()/load() namespace.
      * Used by GenPageQueue to replace empty-string placeholders in the JSON schema

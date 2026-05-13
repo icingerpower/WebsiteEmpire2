@@ -130,6 +130,20 @@ void AbstractPageType::bindGenerationContext(IPageRepository & /*repo*/,
 }
 
 // =============================================================================
+// buildHeadMetaTags / hasSvg
+// =============================================================================
+
+QString AbstractPageType::buildHeadMetaTags(const QString & /*baseUrl*/) const
+{
+    return {};
+}
+
+bool AbstractPageType::hasSvg() const
+{
+    return false;
+}
+
+// =============================================================================
 // load / save
 // =============================================================================
 
@@ -260,12 +274,20 @@ void AbstractPageType::addCode(QStringView     origContent,
         html += langCode;
         html += QStringLiteral("\"");
     }
+    const QString domain = engine.data(engine.index(websiteIndex, AbstractEngine::COL_DOMAIN)).toString();
+    const QString baseUrl = domain.isEmpty()
+                            ? QString{}
+                            : QStringLiteral("https://") + domain;
+
     html += QStringLiteral("><head><meta charset=\"utf-8\">");
     html += headExtra;
     if (!innerCss.isEmpty()) {
         html += QStringLiteral("<style>");
         html += innerCss;
         html += QStringLiteral("</style>");
+    }
+    if (!baseUrl.isEmpty()) {
+        html += buildHeadMetaTags(baseUrl);
     }
     html += QStringLiteral("</head><body>");
     html += bodyHtml;

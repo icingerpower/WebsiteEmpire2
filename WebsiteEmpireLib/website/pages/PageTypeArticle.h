@@ -4,7 +4,7 @@
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/blocs/PageBlocAutoLink.h"
 #include "website/pages/blocs/PageBlocCategoryLinks.h"
-#include "website/pages/blocs/PageBlocSocial.h"
+#include "website/pages/blocs/PageBlocSocialMedia.h"
 #include "website/pages/blocs/PageBlocText.h"
 
 #include <QScopedPointer>
@@ -16,7 +16,7 @@ class PageBlocCategory;
  * A page type composed of five blocs (in order):
  *   0 — PageBlocCategory      : primary breadcrumb category
  *   1 — PageBlocText           : main article body
- *   2 — PageBlocSocial         : Open Graph / social-media meta tags
+ *   2 — PageBlocSocialMedia    : social-media text metadata + image variants (second pass)
  *   3 — PageBlocAutoLink       : keywords that auto-link to this page
  *   4 — PageBlocCategoryLinks  : cross-reference category links (body parts, etc.)
  *
@@ -55,15 +55,24 @@ public:
     void setPageUrl(const QString &url);
 
     /** Returns the social-media bloc for direct access by the page generator. */
-    const PageBlocSocial &socialBloc() const { return m_socialBloc; }
+    const PageBlocSocialMedia &socialBloc() const { return m_socialBloc; }
 
     /** Returns the auto-link bloc for direct access by the page generator. */
     const PageBlocAutoLink &autoLinkBloc() const { return m_autoLinkBloc; }
 
+    QString buildHeadMetaTags(const QString &baseUrl) const override;
+
+    /**
+     * Returns true: PageTypeArticle always requires an SVG image in the first
+     * pass.  LauncherGeneration will not mark the page Complete if SVG
+     * generation failed — it stays ContentReady for retry on the next run.
+     */
+    bool hasSvg() const override;
+
 private:
     QScopedPointer<PageBlocCategory> m_categoryBloc;
     PageBlocText                     m_textBloc;
-    PageBlocSocial                   m_socialBloc;
+    PageBlocSocialMedia              m_socialBloc;
     PageBlocAutoLink                 m_autoLinkBloc;
     PageBlocCategoryLinks            m_categoryLinksBloc;
     QList<const AbstractPageBloc *>  m_blocs;

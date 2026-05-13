@@ -3,7 +3,7 @@
 
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/blocs/PageBlocHubGrid.h"
-#include "website/pages/blocs/PageBlocSocial.h"
+#include "website/pages/blocs/PageBlocSocialMedia.h"
 
 class CategoryTable;
 
@@ -13,7 +13,7 @@ class CategoryTable;
  *
  * Blocs (in order):
  *   0 — PageBlocHubGrid  : grid of article cards, sorted by CTR → views → recency
- *   1 — PageBlocSocial   : Open Graph / social-media meta tags
+ *   1 — PageBlocSocialMedia : social-media text metadata + image variants
  *
  * Registered under TYPE_ID = "category_hub".
  *
@@ -37,9 +37,14 @@ public:
 
     void bindGenerationContext(IPageRepository &repo, const QDir &workingDir) override;
 
+    /** Returns the social-media bloc for direct access by the page generator. */
+    const PageBlocSocialMedia &socialBloc() const { return m_socialBloc; }
+
+    QString buildHeadMetaTags(const QString &baseUrl) const override;
+
 private:
     PageBlocHubGrid                 m_hubGridBloc;
-    PageBlocSocial                  m_socialBloc;
+    PageBlocSocialMedia             m_socialBloc;
     QList<const AbstractPageBloc *> m_blocs;
 };
 
