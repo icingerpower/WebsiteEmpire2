@@ -4,8 +4,8 @@ project(WebsiteEmpireLib LANGUAGES CXX)
 
 include(../common.cmake)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Gui Widgets Sql Network)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets Sql Network)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Gui Widgets Sql Network Svg)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets Sql Network Svg)
 find_package(ZLIB REQUIRED)
 
 setup_qcoro(COMPONENTS Network Core)
@@ -33,6 +33,7 @@ target_link_libraries(WebsiteEmpireLib
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
     Qt${QT_VERSION_MAJOR}::Network
+    Qt${QT_VERSION_MAJOR}::Svg
     QCoro::Network
     QCoro::Core
     ZLIB::ZLIB

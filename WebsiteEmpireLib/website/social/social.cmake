@@ -1,0 +1,16 @@
+set(SOCIAL_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractSocialMedia.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractSocialMedia.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/SocialMediaOpenGraph.h
+    ${CMAKE_CURRENT_LIST_DIR}/SocialMediaOpenGraph.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/SocialMediaLinkedIn.h
+    ${CMAKE_CURRENT_LIST_DIR}/SocialMediaLinkedIn.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/SocialMediaTwitter.h
+    ${CMAKE_CURRENT_LIST_DIR}/SocialMediaTwitter.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/SocialMediaTwitterSummary.h
+    ${CMAKE_CURRENT_LIST_DIR}/SocialMediaTwitterSummary.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/SocialMediaGoogle.h
+    ${CMAKE_CURRENT_LIST_DIR}/SocialMediaGoogle.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/SocialMediaPinterest.h
+    ${CMAKE_CURRENT_LIST_DIR}/SocialMediaPinterest.cpp
+)

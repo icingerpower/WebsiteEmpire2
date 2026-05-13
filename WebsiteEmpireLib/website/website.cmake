@@ -1,5 +1,6 @@
 include(${CMAKE_CURRENT_LIST_DIR}/shortcodes/shortcodes.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/pages/pages.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/social/social.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/commonblocs/commonblocs.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/theme/theme.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/perf/perf.cmake)
@@ -21,6 +22,7 @@ set(WEBSITE_FILES
     ${CMAKE_CURRENT_LIST_DIR}/WebsiteSettingsTable.cpp
     ${SHORTCODES_FILES}
     ${PAGES_FILES}
+    ${SOCIAL_FILES}
     ${COMMONBLOCS_FILES}
     ${THEME_FILES}
     ${PERF_FILES}
