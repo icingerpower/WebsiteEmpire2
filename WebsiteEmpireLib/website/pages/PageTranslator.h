@@ -149,6 +149,11 @@ private:
     void _saveSvgTranslation(const QString    &filename,
                               const QString    &lang,
                               const QByteArray &svgData);
+    // Rasterizes a translated SVG to one WebP per matching social-image size
+    // and writes each under (lang, webpFilename) in images.db.
+    void _rasterizeSvgToWebPs(const QString    &svgFilename,
+                               const QByteArray &svgData,
+                               const QString    &lang);
 
     IPageRepository &m_repo;
     CategoryTable   &m_categoryTable;

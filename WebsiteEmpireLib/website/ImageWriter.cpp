@@ -96,6 +96,24 @@ qint64 ImageWriter::writeSvg(const QByteArray &svgData,
     return imageId;
 }
 
+QByteArray ImageWriter::readSvg(const QString &domain, const QString &filename) const
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connName);
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral(
+        "SELECT i.blob FROM images i"
+        " JOIN image_names n ON n.image_id = i.id"
+        " WHERE n.domain = :domain AND n.filename = :filename"
+        "   AND i.mime_type = 'image/svg+xml'"
+        " LIMIT 1"));
+    q.bindValue(QStringLiteral(":domain"),   domain);
+    q.bindValue(QStringLiteral(":filename"), filename);
+    if (!q.exec() || !q.next()) {
+        return {};
+    }
+    return q.value(0).toByteArray();
+}
+
 // =============================================================================
 // Private
 // =============================================================================

@@ -4,25 +4,31 @@
 #include "website/pages/AbstractLegalPageDef.h"
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/IPageRepository.h"
+#include "website/pages/PageGenerationState.h"
 #include "website/pages/PageRecord.h"
 #include "website/pages/PageTypeLegal.h"
 #include "website/pages/attributes/CategoryTable.h"
+#include "website/social/AbstractSocialMedia.h"
 #include "website/translation/TranslationProtocol.h"
 
 #include <algorithm>
 
+#include <QBuffer>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMetaObject>
+#include <QPainter>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QSvgRenderer>
 #include <QTemporaryDir>
 #include <QTextStream>
 
@@ -666,6 +672,19 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
         }
         _saveSvgTranslation(m_currentJob.svgFilename, m_currentJob.targetLang,
                             svgTrimmed.toUtf8());
+
+        // Rasterize each social-image WebP variant that matches this SVG stem.
+        // The stem is the SVG filename without its "-og.svg"/"-wide.svg"/etc. suffix.
+        // We also write WebP variants for all four canonical sizes.
+        _rasterizeSvgToWebPs(m_currentJob.svgFilename,
+                             svgTrimmed.toUtf8(),
+                             m_currentJob.targetLang);
+
+        // Mark translation image state as complete for this page × lang pair.
+        m_repo.setTranslationImageState(m_currentJob.pageId,
+                                        m_currentJob.targetLang,
+                                        PageGenerationState::Complete);
+
         m_processOutput.clear();
         ++m_translated;
         _log(QStringLiteral("  SVG %1 → %2: done (%3 chars)")
@@ -875,6 +894,124 @@ void PageTranslator::_saveSvgTranslation(const QString    &filename,
         }
 
         db.commit();
+    }
+    QSqlDatabase::removeDatabase(connName);
+}
+
+void PageTranslator::_rasterizeSvgToWebPs(const QString    &svgFilename,
+                                           const QByteArray &svgData,
+                                           const QString    &lang)
+{
+    // Determine which ImageSize this SVG corresponds to from its filename suffix.
+    // Supported suffixes: -og.svg, -wide.svg, -square.svg, -portrait.svg
+    static const struct { AbstractSocialMedia::ImageSize size; QLatin1String svgSuffix; } kMap[] = {
+        { AbstractSocialMedia::ImageSize::Landscape, QLatin1String("-og.svg")       },
+        { AbstractSocialMedia::ImageSize::Wide,      QLatin1String("-wide.svg")     },
+        { AbstractSocialMedia::ImageSize::Square,    QLatin1String("-square.svg")   },
+        { AbstractSocialMedia::ImageSize::Portrait,  QLatin1String("-portrait.svg") },
+    };
+
+    const QString lowerFn = svgFilename.toLower();
+    AbstractSocialMedia::ImageSize imgSize = AbstractSocialMedia::ImageSize::Landscape;
+    bool found = false;
+    for (const auto &entry : kMap) {
+        if (lowerFn.endsWith(entry.svgSuffix)) {
+            imgSize = entry.size;
+            found   = true;
+            break;
+        }
+    }
+    if (!found) {
+        return; // not a social-media SVG variant — nothing to rasterize
+    }
+
+    const QSize dims = AbstractSocialMedia::imageSizeDimensions(imgSize);
+
+    QSvgRenderer renderer(svgData);
+    if (!renderer.isValid()) {
+        _log(QStringLiteral("  _rasterizeSvgToWebPs: SVG not renderable for %1 → %2")
+                 .arg(svgFilename, lang), true);
+        return;
+    }
+
+    QImage img(dims, QImage::Format_ARGB32);
+    img.fill(Qt::white);
+    QPainter painter(&img);
+    renderer.render(&painter);
+    painter.end();
+
+    QBuffer buf;
+    buf.open(QBuffer::WriteOnly);
+    if (!img.save(&buf, "webp")) {
+        _log(QStringLiteral("  _rasterizeSvgToWebPs: WebP encoding failed for %1")
+                 .arg(svgFilename), true);
+        return;
+    }
+    const QByteArray webpBlob = buf.data();
+
+    // Derive WebP filename from SVG filename by swapping suffix.
+    const QString webpFilename = svgFilename.left(
+        svgFilename.size() - 4) + QStringLiteral("webp"); // replace ".svg" with ".webp"
+
+    // Write to images.db under (lang, webpFilename).
+    const QString dbPath = m_workingDir.filePath(QStringLiteral("images.db"));
+    const QString connName = QStringLiteral("transl_webp_write_%1")
+                                 .arg(reinterpret_cast<quintptr>(this));
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+        db.setDatabaseName(dbPath);
+        if (!db.open()) {
+            _log(QStringLiteral("  _rasterizeSvgToWebPs: cannot open images.db for %1 → %2")
+                     .arg(webpFilename, lang), true);
+        } else {
+            db.transaction();
+
+            // Remove any existing translated WebP for this (lang, filename) pair.
+            {
+                QSqlQuery qFind(db);
+                qFind.prepare(QStringLiteral(
+                    "SELECT image_id FROM image_names"
+                    " WHERE filename = :fn AND domain = :lang LIMIT 1"));
+                qFind.bindValue(QStringLiteral(":fn"),   webpFilename);
+                qFind.bindValue(QStringLiteral(":lang"), lang);
+                if (qFind.exec() && qFind.next()) {
+                    const int oldId = qFind.value(0).toInt();
+                    QSqlQuery qDel(db);
+                    qDel.prepare(QStringLiteral(
+                        "DELETE FROM image_names WHERE filename = :fn AND domain = :lang"));
+                    qDel.bindValue(QStringLiteral(":fn"),   webpFilename);
+                    qDel.bindValue(QStringLiteral(":lang"), lang);
+                    qDel.exec();
+                    QSqlQuery qDelImg(db);
+                    qDelImg.prepare(QStringLiteral("DELETE FROM images WHERE id = :id"));
+                    qDelImg.bindValue(QStringLiteral(":id"), oldId);
+                    qDelImg.exec();
+                }
+            }
+
+            QSqlQuery qIns(db);
+            qIns.prepare(QStringLiteral(
+                "INSERT INTO images (blob, mime_type) VALUES (:blob, 'image/webp')"));
+            qIns.bindValue(QStringLiteral(":blob"), webpBlob);
+            if (qIns.exec()) {
+                const int newId = qIns.lastInsertId().toInt();
+                QSqlQuery qName(db);
+                qName.prepare(QStringLiteral(
+                    "INSERT INTO image_names (domain, filename, image_id)"
+                    " VALUES (:lang, :fn, :id)"));
+                qName.bindValue(QStringLiteral(":lang"), lang);
+                qName.bindValue(QStringLiteral(":fn"),   webpFilename);
+                qName.bindValue(QStringLiteral(":id"),   newId);
+                qName.exec();
+                db.commit();
+                _log(QStringLiteral("  WebP rasterized: %1 → %2 (%3×%4)")
+                         .arg(webpFilename, lang).arg(dims.width()).arg(dims.height()));
+            } else {
+                db.rollback();
+                _log(QStringLiteral("  _rasterizeSvgToWebPs: INSERT failed for %1 → %2: %3")
+                         .arg(webpFilename, lang, qIns.lastError().text()), true);
+            }
+        }
     }
     QSqlDatabase::removeDatabase(connName);
 }

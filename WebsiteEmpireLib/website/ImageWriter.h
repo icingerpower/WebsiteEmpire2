@@ -74,6 +74,14 @@ public:
                     const QString    &domain,
                     const QString    &filename);
 
+    /**
+     * Returns the raw SVG bytes for (domain, filename), or an empty QByteArray
+     * if the entry does not exist or is not an SVG (mime_type != image/svg+xml).
+     * Used by LauncherGeneration to load an existing main-article SVG for the
+     * social-media second pass without regenerating article content.
+     */
+    QByteArray readSvg(const QString &domain, const QString &filename) const;
+
 private:
     void _ensureSchema();
 

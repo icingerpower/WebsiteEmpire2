@@ -3,6 +3,7 @@
 #include "gui/panes/UpdateStrategyTree.h"
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/PageDb.h"
+#include "website/pages/PageGenerationState.h"
 #include "website/pages/PageRepositoryDb.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
@@ -453,6 +454,11 @@ static void runUpdateSession(const QString                          &pageTypeId,
                 state->out->flush();
                 continue;
             }
+
+            // SVG changed → social media image variants are stale; reset state so
+            // the second pass re-runs, and clear per-language completion flags.
+            pageRepo.setGenerationState(page.id, PageGenerationState::ContentReady);
+            pageRepo.invalidateTranslationImages(page.id);
 
             // Record the attempt without touching 1_text.
             pageRepo.recordUpdateAttempt(page.id, promptId);
