@@ -68,6 +68,12 @@ public:
     void setLangCodesToTranslate(int, const QStringList &) override {}
     void clearTranslationData(int, const QString &) override {}
     void clearAllTranslationData(int) override {}
+    void setGenerationState(int, PageGenerationState) override {}
+    QList<PageRecord> findByGenerationState(const QString &, PageGenerationState) const override { return {}; }
+    PageGenerationState translationImageState(int, const QString &) const override { return PageGenerationState::Pending; }
+    void setTranslationImageState(int, const QString &, PageGenerationState) override {}
+    void invalidateTranslationImages(int) override {}
+    QStringList pendingTranslationImageLangs(int) const override { return {}; }
 
 private:
     QList<PageRecord>                    m_records;

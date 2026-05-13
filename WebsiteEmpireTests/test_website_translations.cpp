@@ -5,7 +5,7 @@
  *
  *   BlocTranslations (map persistence)
  *   → PageBlocText (translation methods)
- *   → PageBlocSocial (no translation)
+ *   → PageBlocSocialMedia (no translation)
  *   → AbstractPageType (routing, aggregation)
  *   → AbstractEngine (available-pages map)
  *   → PageGenerator (generation guard / state machine)
@@ -51,7 +51,7 @@
 #include "website/pages/PageTypeArticle.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/blocs/PageBlocText.h"
-#include "website/pages/blocs/PageBlocSocial.h"
+#include "website/pages/blocs/PageBlocSocialMedia.h"
 
 // =============================================================================
 // Shared helpers
@@ -625,13 +625,13 @@ void Test_PageBlocText_Translation::test_pagebloctext_addcode_falls_back_to_sour
 }
 
 // =============================================================================
-// Test_PageBlocSocial_NoTranslation
+// Test_PageBlocSocialMedia_NoTranslation
 //
-// PageBlocSocial has no translatable fields; it uses the WebCodeAdder base-class
+// PageBlocSocialMedia has no translatable fields; it uses the WebCodeAdder base-class
 // no-ops.  These tests confirm that fact explicitly.
 // =============================================================================
 
-class Test_PageBlocSocial_NoTranslation : public QObject
+class Test_PageBlocSocialMedia_NoTranslation : public QObject
 {
     Q_OBJECT
 
@@ -642,14 +642,14 @@ private slots:
     void test_pagebloc_social_is_complete_independent_of_field_content();
 };
 
-void Test_PageBlocSocial_NoTranslation::test_pagebloc_social_collect_translatables_empty()
+void Test_PageBlocSocialMedia_NoTranslation::test_pagebloc_social_collect_translatables_empty()
 {
-    PageBlocSocial bloc;
+    PageBlocSocialMedia bloc;
     bloc.load({
-        {QLatin1String(PageBlocSocial::KEY_FB_TITLE), QStringLiteral("Facebook Title")},
-        {QLatin1String(PageBlocSocial::KEY_FB_DESC),  QStringLiteral("Facebook Desc")},
-        {QLatin1String(PageBlocSocial::KEY_TW_TITLE), QStringLiteral("Twitter Title")},
-        {QLatin1String(PageBlocSocial::KEY_TW_DESC),  QStringLiteral("Twitter Desc")},
+        {QLatin1String(PageBlocSocialMedia::KEY_FB_TITLE), QStringLiteral("Facebook Title")},
+        {QLatin1String(PageBlocSocialMedia::KEY_FB_DESC),  QStringLiteral("Facebook Desc")},
+        {QLatin1String(PageBlocSocialMedia::KEY_TW_TITLE), QStringLiteral("Twitter Title")},
+        {QLatin1String(PageBlocSocialMedia::KEY_TW_DESC),  QStringLiteral("Twitter Desc")},
     });
 
     QList<TranslatableField> fields;
@@ -658,12 +658,12 @@ void Test_PageBlocSocial_NoTranslation::test_pagebloc_social_collect_translatabl
     QVERIFY(fields.isEmpty());
 }
 
-void Test_PageBlocSocial_NoTranslation::test_pagebloc_social_is_complete_always_true_with_content()
+void Test_PageBlocSocialMedia_NoTranslation::test_pagebloc_social_is_complete_always_true_with_content()
 {
-    PageBlocSocial bloc;
+    PageBlocSocialMedia bloc;
     bloc.load({
-        {QLatin1String(PageBlocSocial::KEY_FB_TITLE), QStringLiteral("Some title")},
-        {QLatin1String(PageBlocSocial::KEY_LI_DESC),  QStringLiteral("Some description")},
+        {QLatin1String(PageBlocSocialMedia::KEY_FB_TITLE), QStringLiteral("Some title")},
+        {QLatin1String(PageBlocSocialMedia::KEY_LI_DESC),  QStringLiteral("Some description")},
     });
 
     // No matter what lang is asked, must return true (no override → base class returns true)
@@ -672,29 +672,29 @@ void Test_PageBlocSocial_NoTranslation::test_pagebloc_social_is_complete_always_
     QVERIFY(bloc.isTranslationComplete(QStringView{}, QStringLiteral("zh")));
 }
 
-void Test_PageBlocSocial_NoTranslation::test_pagebloc_social_apply_translation_no_crash()
+void Test_PageBlocSocialMedia_NoTranslation::test_pagebloc_social_apply_translation_no_crash()
 {
-    PageBlocSocial bloc;
-    bloc.load({{QLatin1String(PageBlocSocial::KEY_FB_TITLE), QStringLiteral("Title")}});
+    PageBlocSocialMedia bloc;
+    bloc.load({{QLatin1String(PageBlocSocialMedia::KEY_FB_TITLE), QStringLiteral("Title")}});
 
     // Must not crash — silently ignored
-    bloc.applyTranslation(QStringView{}, QLatin1String(PageBlocSocial::KEY_FB_TITLE),
+    bloc.applyTranslation(QStringView{}, QLatin1String(PageBlocSocialMedia::KEY_FB_TITLE),
                           QStringLiteral("fr"), QStringLiteral("Titre"));
 }
 
-void Test_PageBlocSocial_NoTranslation::test_pagebloc_social_is_complete_independent_of_field_content()
+void Test_PageBlocSocialMedia_NoTranslation::test_pagebloc_social_is_complete_independent_of_field_content()
 {
     // Even with completely filled social fields, no translation is required
-    PageBlocSocial bloc;
+    PageBlocSocialMedia bloc;
     bloc.load({
-        {QLatin1String(PageBlocSocial::KEY_FB_TITLE), QStringLiteral("FB Title")},
-        {QLatin1String(PageBlocSocial::KEY_FB_DESC),  QStringLiteral("FB Desc")},
-        {QLatin1String(PageBlocSocial::KEY_TW_TITLE), QStringLiteral("TW Title")},
-        {QLatin1String(PageBlocSocial::KEY_TW_DESC),  QStringLiteral("TW Desc")},
-        {QLatin1String(PageBlocSocial::KEY_PT_TITLE), QStringLiteral("PT Title")},
-        {QLatin1String(PageBlocSocial::KEY_PT_DESC),  QStringLiteral("PT Desc")},
-        {QLatin1String(PageBlocSocial::KEY_LI_TITLE), QStringLiteral("LI Title")},
-        {QLatin1String(PageBlocSocial::KEY_LI_DESC),  QStringLiteral("LI Desc")},
+        {QLatin1String(PageBlocSocialMedia::KEY_FB_TITLE), QStringLiteral("FB Title")},
+        {QLatin1String(PageBlocSocialMedia::KEY_FB_DESC),  QStringLiteral("FB Desc")},
+        {QLatin1String(PageBlocSocialMedia::KEY_TW_TITLE), QStringLiteral("TW Title")},
+        {QLatin1String(PageBlocSocialMedia::KEY_TW_DESC),  QStringLiteral("TW Desc")},
+        {QLatin1String(PageBlocSocialMedia::KEY_PT_TITLE), QStringLiteral("PT Title")},
+        {QLatin1String(PageBlocSocialMedia::KEY_PT_DESC),  QStringLiteral("PT Desc")},
+        {QLatin1String(PageBlocSocialMedia::KEY_LI_TITLE), QStringLiteral("LI Title")},
+        {QLatin1String(PageBlocSocialMedia::KEY_LI_DESC),  QStringLiteral("LI Desc")},
     });
 
     QVERIFY(bloc.isTranslationComplete(QStringView{}, QStringLiteral("fr")));
@@ -707,7 +707,7 @@ void Test_PageBlocSocial_NoTranslation::test_pagebloc_social_is_complete_indepen
 // Uses PageTypeArticle as the concrete subclass because:
 //   bloc 0 = PageBlocCategory    (no translatable fields)
 //   bloc 1 = PageBlocText        (one translatable field: KEY_TEXT)
-//   bloc 2 = PageBlocSocial      (no translatable fields)
+//   bloc 2 = PageBlocSocialMedia      (no translatable fields)
 //   bloc 3 = PageBlocAutoLink    (no translatable fields)
 // =============================================================================
 
@@ -796,12 +796,12 @@ void Test_AbstractPageType_TranslationRouting::test_pagetype_collect_empty_when_
 void Test_AbstractPageType_TranslationRouting::test_pagetype_collect_social_bloc_contributes_nothing()
 {
     // Load social bloc data via the prefixed map; collectTranslatables must not
-    // produce entries for bloc 2 (PageBlocSocial has no override)
+    // produce entries for bloc 2 (PageBlocSocialMedia has no override)
     ArticleTypeFixture f;
     f.article.load({
         {QStringLiteral("1_") + QLatin1String(PageBlocText::KEY_TEXT), QStringLiteral("text")},
-        {QStringLiteral("2_") + QLatin1String(PageBlocSocial::KEY_FB_TITLE), QStringLiteral("FB Title")},
-        {QStringLiteral("2_") + QLatin1String(PageBlocSocial::KEY_FB_DESC),  QStringLiteral("FB Desc")},
+        {QStringLiteral("2_") + QLatin1String(PageBlocSocialMedia::KEY_FB_TITLE), QStringLiteral("FB Title")},
+        {QStringLiteral("2_") + QLatin1String(PageBlocSocialMedia::KEY_FB_DESC),  QStringLiteral("FB Desc")},
         {QStringLiteral("0_categories"), QString()},
     });
 
@@ -1650,7 +1650,7 @@ int main(int argc, char *argv[])
 
     { Test_BlocTranslations_MapPersistence t;          run(t, "Test_BlocTranslations_MapPersistence"); }
     { Test_PageBlocText_Translation t;                 run(t, "Test_PageBlocText_Translation"); }
-    { Test_PageBlocSocial_NoTranslation t;             run(t, "Test_PageBlocSocial_NoTranslation"); }
+    { Test_PageBlocSocialMedia_NoTranslation t;             run(t, "Test_PageBlocSocialMedia_NoTranslation"); }
     { Test_AbstractPageType_TranslationRouting t;      run(t, "Test_AbstractPageType_TranslationRouting"); }
     { Test_AbstractEngine_AvailablePages t;            run(t, "Test_AbstractEngine_AvailablePages"); }
     { Test_PageGenerator_TranslationGuard t;           run(t, "Test_PageGenerator_TranslationGuard"); }

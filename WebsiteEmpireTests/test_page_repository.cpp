@@ -2,6 +2,7 @@
 #include <QTemporaryDir>
 
 #include "website/pages/PageDb.h"
+#include "website/pages/PageGenerationState.h"
 #include "website/pages/PageRecord.h"
 #include "website/pages/PageRepositoryDb.h"
 
@@ -104,6 +105,20 @@ private slots:
     void test_pagerepo_findpagesforupdate_no_skip_key_returns_all_with_content();
     void test_pagerepo_findpagesforupdate_skipkey_not_skipped_before_this_prompt_ran();
     void test_pagerepo_findpagesforupdate_skipkey_skipped_after_this_prompt_ran();
+
+    // --- generation state ---
+    void test_pagerepo_genstate_defaults_to_pending();
+    void test_pagerepo_genstate_set_and_read_back();
+    void test_pagerepo_genstate_findbystate_returns_matching();
+    void test_pagerepo_genstate_findbystate_excludes_other_states();
+    void test_pagerepo_genstate_findbystate_excludes_translations();
+
+    // --- translation image state ---
+    void test_pagerepo_translimgstate_defaults_to_pending();
+    void test_pagerepo_translimgstate_set_and_read_back();
+    void test_pagerepo_translimgstate_invalidate_resets_all_langs();
+    void test_pagerepo_translimgstate_pending_langs_returns_incomplete();
+    void test_pagerepo_translimgstate_pending_langs_empty_when_all_complete();
 };
 
 // ---------------------------------------------------------------------------
@@ -626,6 +641,118 @@ void Test_PageRepository::test_pagerepo_findpagesforupdate_skipkey_skipped_after
     const auto pages = f.repo.findPagesForUpdate(
         QStringLiteral("article"), QStringLiteral("prompt-2"), -1, QStringLiteral("0_categories"));
     QCOMPARE(pages.size(), 0);
+}
+
+// =============================================================================
+// generation state
+// =============================================================================
+
+void Test_PageRepository::test_pagerepo_genstate_defaults_to_pending()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/a.html"), QStringLiteral("en"));
+    const auto &rec = f.repo.findById(id);
+    QVERIFY(rec.has_value());
+    QCOMPARE(rec->generationState, PageGenerationState::Pending);
+}
+
+void Test_PageRepository::test_pagerepo_genstate_set_and_read_back()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/b.html"), QStringLiteral("en"));
+    f.repo.setGenerationState(id, PageGenerationState::ContentReady);
+    const auto &rec = f.repo.findById(id);
+    QVERIFY(rec.has_value());
+    QCOMPARE(rec->generationState, PageGenerationState::ContentReady);
+}
+
+void Test_PageRepository::test_pagerepo_genstate_findbystate_returns_matching()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/c.html"), QStringLiteral("en"));
+    f.repo.setGenerationState(id, PageGenerationState::MainImageReady);
+    const auto &pages = f.repo.findByGenerationState(QStringLiteral("article"),
+                                                      PageGenerationState::MainImageReady);
+    QCOMPARE(pages.size(), 1);
+    QCOMPARE(pages.at(0).id, id);
+}
+
+void Test_PageRepository::test_pagerepo_genstate_findbystate_excludes_other_states()
+{
+    Fixture f;
+    f.repo.create(QStringLiteral("article"), QStringLiteral("/d.html"), QStringLiteral("en"));
+    // Pending (0) — not MainImageReady
+    const auto &pages = f.repo.findByGenerationState(QStringLiteral("article"),
+                                                      PageGenerationState::MainImageReady);
+    QCOMPARE(pages.size(), 0);
+}
+
+void Test_PageRepository::test_pagerepo_genstate_findbystate_excludes_translations()
+{
+    Fixture f;
+    const int srcId = f.repo.create(QStringLiteral("article"), QStringLiteral("/e.html"), QStringLiteral("en"));
+    f.repo.setGenerationState(srcId, PageGenerationState::MainImageReady);
+    const int trId = f.repo.createTranslation(srcId, QStringLiteral("article"),
+                                               QStringLiteral("/e-fr.html"), QStringLiteral("fr"));
+    f.repo.setGenerationState(trId, PageGenerationState::MainImageReady);
+    const auto &pages = f.repo.findByGenerationState(QStringLiteral("article"),
+                                                      PageGenerationState::MainImageReady);
+    QCOMPARE(pages.size(), 1);
+    QCOMPARE(pages.at(0).id, srcId);
+}
+
+// =============================================================================
+// translation image state
+// =============================================================================
+
+void Test_PageRepository::test_pagerepo_translimgstate_defaults_to_pending()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/f.html"), QStringLiteral("en"));
+    QCOMPARE(f.repo.translationImageState(id, QStringLiteral("fr")),
+             PageGenerationState::Pending);
+}
+
+void Test_PageRepository::test_pagerepo_translimgstate_set_and_read_back()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/g.html"), QStringLiteral("en"));
+    f.repo.setTranslationImageState(id, QStringLiteral("fr"), PageGenerationState::Complete);
+    QCOMPARE(f.repo.translationImageState(id, QStringLiteral("fr")),
+             PageGenerationState::Complete);
+}
+
+void Test_PageRepository::test_pagerepo_translimgstate_invalidate_resets_all_langs()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/h.html"), QStringLiteral("en"));
+    f.repo.setTranslationImageState(id, QStringLiteral("fr"), PageGenerationState::Complete);
+    f.repo.setTranslationImageState(id, QStringLiteral("de"), PageGenerationState::Complete);
+    f.repo.invalidateTranslationImages(id);
+    QCOMPARE(f.repo.translationImageState(id, QStringLiteral("fr")), PageGenerationState::Pending);
+    QCOMPARE(f.repo.translationImageState(id, QStringLiteral("de")), PageGenerationState::Pending);
+}
+
+void Test_PageRepository::test_pagerepo_translimgstate_pending_langs_returns_incomplete()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/i.html"), QStringLiteral("en"));
+    f.repo.setLangCodesToTranslate(id, {QStringLiteral("fr"), QStringLiteral("de")});
+    f.repo.setTranslationImageState(id, QStringLiteral("fr"), PageGenerationState::Complete);
+    // "de" still Pending
+    const QStringList &pending = f.repo.pendingTranslationImageLangs(id);
+    QCOMPARE(pending.size(), 1);
+    QCOMPARE(pending.at(0), QStringLiteral("de"));
+}
+
+void Test_PageRepository::test_pagerepo_translimgstate_pending_langs_empty_when_all_complete()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/j.html"), QStringLiteral("en"));
+    f.repo.setLangCodesToTranslate(id, {QStringLiteral("fr"), QStringLiteral("de")});
+    f.repo.setTranslationImageState(id, QStringLiteral("fr"), PageGenerationState::Complete);
+    f.repo.setTranslationImageState(id, QStringLiteral("de"), PageGenerationState::Complete);
+    QVERIFY(f.repo.pendingTranslationImageLangs(id).isEmpty());
 }
 
 QTEST_MAIN(Test_PageRepository)
