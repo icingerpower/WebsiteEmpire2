@@ -3,6 +3,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/widgets/widgets.cmake)
 set(BLOCS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/AbstractPageBloc.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractPageBloc.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractSecondaryPageBloc.h
+    ${CMAKE_CURRENT_LIST_DIR}/AbstractSecondaryPageBloc.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocText.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocText.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategory.h
@@ -15,8 +17,8 @@ set(BLOCS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocCategoryArticles.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocJs.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocJs.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/PageBlocSocial.h
-    ${CMAKE_CURRENT_LIST_DIR}/PageBlocSocial.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocSocialMedia.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocSocialMedia.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocAutoLink.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocAutoLink.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocHubGrid.h

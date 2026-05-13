@@ -100,6 +100,20 @@ public:
      * return a const reference to it to avoid per-call copies.
      */
     virtual const QList<const AbstractAttribute *> &getAttributes() const;
+
+    /**
+     * Returns true if this bloc requires a second AI generation pass that runs
+     * after the main article generation (text + metadata + primary SVG) is
+     * complete and saved.
+     *
+     * The default returns false.  AbstractSecondaryPageBloc overrides this to
+     * return true and adds the pure virtual interface for the second pass.
+     *
+     * LauncherGeneration iterates the page type's blocs after reaching
+     * PageGenerationState::MainImageReady and dispatches second-pass prompts
+     * only to blocs for which this returns true.
+     */
+    virtual bool isSecondTimeGeneration() const;
 };
 
 #endif // ABSTRACTPAGEBLOC_H

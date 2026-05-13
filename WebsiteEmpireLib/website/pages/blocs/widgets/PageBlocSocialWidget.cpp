@@ -1,7 +1,7 @@
 #include "PageBlocSocialWidget.h"
 #include "ui_PageBlocSocialWidget.h"
 
-#include "website/pages/blocs/PageBlocSocial.h"
+#include "website/pages/blocs/PageBlocSocialMedia.h"
 
 #include <QPushButton>
 
@@ -32,24 +32,24 @@ PageBlocSocialWidget::~PageBlocSocialWidget()
 
 void PageBlocSocialWidget::load(const QHash<QString, QString> &values)
 {
-    ui->editFacebookTitle->setText(values.value(QLatin1String(PageBlocSocial::KEY_FB_TITLE)));
-    ui->editFacebookDesc->setPlainText(values.value(QLatin1String(PageBlocSocial::KEY_FB_DESC)));
-    ui->editTwitterTitle->setText(values.value(QLatin1String(PageBlocSocial::KEY_TW_TITLE)));
-    ui->editTwitterDesc->setPlainText(values.value(QLatin1String(PageBlocSocial::KEY_TW_DESC)));
-    ui->editPinterestTitle->setText(values.value(QLatin1String(PageBlocSocial::KEY_PT_TITLE)));
-    ui->editPinterestDesc->setPlainText(values.value(QLatin1String(PageBlocSocial::KEY_PT_DESC)));
-    ui->editLinkedInTitle->setText(values.value(QLatin1String(PageBlocSocial::KEY_LI_TITLE)));
-    ui->editLinkedInDesc->setPlainText(values.value(QLatin1String(PageBlocSocial::KEY_LI_DESC)));
+    ui->editFacebookTitle->setText(values.value(QLatin1String(PageBlocSocialMedia::KEY_FB_TITLE)));
+    ui->editFacebookDesc->setPlainText(values.value(QLatin1String(PageBlocSocialMedia::KEY_FB_DESC)));
+    ui->editTwitterTitle->setText(values.value(QLatin1String(PageBlocSocialMedia::KEY_TW_TITLE)));
+    ui->editTwitterDesc->setPlainText(values.value(QLatin1String(PageBlocSocialMedia::KEY_TW_DESC)));
+    ui->editPinterestTitle->setText(values.value(QLatin1String(PageBlocSocialMedia::KEY_PT_TITLE)));
+    ui->editPinterestDesc->setPlainText(values.value(QLatin1String(PageBlocSocialMedia::KEY_PT_DESC)));
+    ui->editLinkedInTitle->setText(values.value(QLatin1String(PageBlocSocialMedia::KEY_LI_TITLE)));
+    ui->editLinkedInDesc->setPlainText(values.value(QLatin1String(PageBlocSocialMedia::KEY_LI_DESC)));
 }
 
 void PageBlocSocialWidget::save(QHash<QString, QString> &values) const
 {
-    values.insert(QLatin1String(PageBlocSocial::KEY_FB_TITLE), ui->editFacebookTitle->text());
-    values.insert(QLatin1String(PageBlocSocial::KEY_FB_DESC),  ui->editFacebookDesc->toPlainText());
-    values.insert(QLatin1String(PageBlocSocial::KEY_TW_TITLE), ui->editTwitterTitle->text());
-    values.insert(QLatin1String(PageBlocSocial::KEY_TW_DESC),  ui->editTwitterDesc->toPlainText());
-    values.insert(QLatin1String(PageBlocSocial::KEY_PT_TITLE), ui->editPinterestTitle->text());
-    values.insert(QLatin1String(PageBlocSocial::KEY_PT_DESC),  ui->editPinterestDesc->toPlainText());
-    values.insert(QLatin1String(PageBlocSocial::KEY_LI_TITLE), ui->editLinkedInTitle->text());
-    values.insert(QLatin1String(PageBlocSocial::KEY_LI_DESC),  ui->editLinkedInDesc->toPlainText());
+    values.insert(QLatin1String(PageBlocSocialMedia::KEY_FB_TITLE), ui->editFacebookTitle->text());
+    values.insert(QLatin1String(PageBlocSocialMedia::KEY_FB_DESC),  ui->editFacebookDesc->toPlainText());
+    values.insert(QLatin1String(PageBlocSocialMedia::KEY_TW_TITLE), ui->editTwitterTitle->text());
+    values.insert(QLatin1String(PageBlocSocialMedia::KEY_TW_DESC),  ui->editTwitterDesc->toPlainText());
+    values.insert(QLatin1String(PageBlocSocialMedia::KEY_PT_TITLE), ui->editPinterestTitle->text());
+    values.insert(QLatin1String(PageBlocSocialMedia::KEY_PT_DESC),  ui->editPinterestDesc->toPlainText());
+    values.insert(QLatin1String(PageBlocSocialMedia::KEY_LI_TITLE), ui->editLinkedInTitle->text());
+    values.insert(QLatin1String(PageBlocSocialMedia::KEY_LI_DESC),  ui->editLinkedInDesc->toPlainText());
 }

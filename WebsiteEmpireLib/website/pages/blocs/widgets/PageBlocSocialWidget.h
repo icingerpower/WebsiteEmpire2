@@ -6,7 +6,7 @@
 namespace Ui { class PageBlocSocialWidget; }
 
 /**
- * Edit widget for a PageBlocSocial bloc.
+ * Edit widget for a PageBlocSocialMedia bloc.
  *
  * Displays title and description fields for four social platforms:
  * Facebook / Open Graph, Twitter / X, Pinterest, and LinkedIn.
