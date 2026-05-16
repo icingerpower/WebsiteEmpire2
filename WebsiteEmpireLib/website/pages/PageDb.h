@@ -22,6 +22,9 @@
  *   generated_at        TEXT               -- ISO 8601 UTC; migration column
  *   langs_to_translate  TEXT               -- comma-separated BCP-47; migration column
  *   generation_state    INTEGER DEFAULT 0  -- PageGenerationState enum; migration column
+ *   flags               INTEGER DEFAULT 0  -- PageFlag bitmask; migration column
+ *   end_permalink       TEXT    DEFAULT '' -- URL slug suffix from strategy (e.g. "genes-biomarkers"); migration column
+ *   published_at        TEXT               -- ISO 8601 UTC; NULL until first deploy; migration column
  *
  * page_data                         -- flat key/value store for bloc content
  *   page_id     INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE

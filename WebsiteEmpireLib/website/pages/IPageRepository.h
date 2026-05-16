@@ -1,6 +1,7 @@
 #ifndef IPAGEREPOSITORY_H
 #define IPAGEREPOSITORY_H
 
+#include "website/pages/PageFlag.h"
 #include "website/pages/PageGenerationState.h"
 #include "website/pages/PageRecord.h"
 #include "website/pages/PermalinkHistoryEntry.h"
@@ -91,7 +92,8 @@ public:
     // -------------------------------------------------------------------------
 
     /**
-     * Updates the permalink for id and records the old one in permalink_history
+     * Updates the permalink for id.  When the page is published (published_at IS NOT NULL)
+     * and the permalink actually changes, records the old permalink in permalink_history
      * with redirect_type = 'permanent'.  No-op when the permalink has not changed.
      */
     virtual void updatePermalink(int id, const QString &newPermalink) = 0;
@@ -104,9 +106,35 @@ public:
 
     /**
      * Changes the redirect type for a single history entry.
-     * type must be one of: "permanent" (301), "parked" (302), "deleted" (410).
+     * type must be one of: "permanent" (301), "parked" (302), "deleted" (410), "none" (no redirect).
      */
     virtual void setHistoryRedirectType(int historyEntryId, const QString &type) = 0;
+
+    // -------------------------------------------------------------------------
+    // End-permalink / published state
+    // -------------------------------------------------------------------------
+
+    /**
+     * Sets the end_permalink suffix for page id.
+     * Call immediately after create() when the page was generated from a strategy
+     * that has a non-empty endPermalink (e.g. "genes-biomarkers").
+     */
+    virtual void setEndPermalink(int id, const QString &value) = 0;
+
+    /**
+     * Stamps published_at to utcIso (ISO 8601 UTC) for page id.
+     * Call this in PaneDomains::deployLocally() after a successful deploy so
+     * that subsequent permalink changes trigger history entries.
+     * No-op when published_at is already set (once published, stays published).
+     */
+    virtual void setPublishedAt(int id, const QString &utcIso) = 0;
+
+    /**
+     * Sets published_at = NOW() for every page whose generation_state is Complete
+     * and whose published_at is still NULL.
+     * Call once in PaneDomains::deployLocally() after a successful deploy.
+     */
+    virtual void markAllCompleteAsPublished() = 0;
 
     // -------------------------------------------------------------------------
     // Translation tracking
@@ -303,6 +331,28 @@ public:
      * Only languages listed in the page's langCodesToTranslate are considered.
      */
     virtual QStringList pendingTranslationImageLangs(int pageId) const = 0;
+
+    // -------------------------------------------------------------------------
+    // Page flags
+    // -------------------------------------------------------------------------
+
+    /**
+     * Sets or clears a single PageFlag bit for page id.
+     *
+     * When flag == PageFlag::SocialMedia and on == true, and the page's current
+     * generation_state is Complete, the state is also reset to MainImageReady so
+     * that the next --generation run picks up the page for the social-media
+     * second pass.
+     */
+    virtual void setFlag(int id, PageFlag flag, bool on) = 0;
+
+    /**
+     * Returns all source pages (source_page_id IS NULL) that have the given
+     * flag bit set, ordered by id ASC.
+     * Used by LauncherReview and LauncherGeneration to locate pages that need
+     * the social-media second pass or other review-driven actions.
+     */
+    virtual QList<PageRecord> findByFlag(PageFlag flag) const = 0;
 };
 
 #endif // IPAGEREPOSITORY_H

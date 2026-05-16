@@ -10,6 +10,7 @@
  *   "permanent" — 301 Moved Permanently to the current permalink (default)
  *   "parked"    — 302 Found (temporary redirect to the current permalink)
  *   "deleted"   — 410 Gone (no forwarding; the content was intentionally removed)
+ *   "none"      — no redirect emitted; the old URL simply 404s
  */
 struct PermalinkHistoryEntry {
     int     id           = 0;

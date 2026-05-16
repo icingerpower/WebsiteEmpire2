@@ -5,6 +5,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/commonblocs/commonblocs.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/theme/theme.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/perf/perf.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/translation/translation.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/review/review.cmake)
 
 set(WEBSITE_FILES
     ${CMAKE_CURRENT_LIST_DIR}/WebCodeAdder.h
@@ -27,4 +28,5 @@ set(WEBSITE_FILES
     ${THEME_FILES}
     ${PERF_FILES}
     ${TRANSLATION_FILES}
+    ${REVIEW_FILES}
 )

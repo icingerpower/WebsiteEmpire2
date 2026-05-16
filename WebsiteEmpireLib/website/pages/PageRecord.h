@@ -1,6 +1,7 @@
 #ifndef PAGERECORD_H
 #define PAGERECORD_H
 
+#include "website/pages/PageFlag.h"
 #include "website/pages/PageGenerationState.h"
 
 #include <QString>
@@ -28,6 +29,15 @@
  *                        set exclusively by the assessment step.  The generator
  *                        throws if a code is listed here but the translation is
  *                        incomplete.  Empty = author language only.
+ * flags               — PageFlag bitmask; see PageFlag.h.  Defaults to 0 (no
+ *                        flags set).  Managed via IPageRepository::setFlag().
+ * endPermalink        — URL slug suffix from the generation strategy, e.g. "genes-biomarkers".
+ *                        Empty for pages created without a strategy suffix.
+ *                        Set by LauncherGeneration via setEndPermalink() after create().
+ *                        Used by PageTranslator to identify pages needing full slug translation.
+ * publishedAt         — ISO 8601 UTC set by PaneDomains::deployLocally() on first deploy.
+ *                        NULL/empty until first deploy; once set, permalink changes create
+ *                        history entries for redirect rule generation.
  */
 struct PageRecord {
     int                  id              = 0;
@@ -41,6 +51,9 @@ struct PageRecord {
     QString              generatedAt;
     PageGenerationState  generationState = PageGenerationState::Pending;
     QStringList          langCodesToTranslate; ///< set by assessment step; drives generation
+    quint32              flags           = 0;  ///< PageFlag bitmask; see PageFlag.h
+    QString              endPermalink;   ///< URL slug suffix from strategy; empty = none
+    QString              publishedAt;    ///< ISO 8601 UTC; empty until first deploy
 };
 
 #endif // PAGERECORD_H

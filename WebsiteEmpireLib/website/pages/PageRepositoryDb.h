@@ -80,6 +80,11 @@ public:
                                                               PageGenerationState state) override;
     void                             invalidateTranslationImages(int pageId) override;
     QStringList                      pendingTranslationImageLangs(int pageId) const override;
+    void                             setFlag(int id, PageFlag flag, bool on) override;
+    QList<PageRecord>                findByFlag(PageFlag flag) const override;
+    void                             setEndPermalink(int id, const QString &value) override;
+    void                             setPublishedAt(int id, const QString &utcIso) override;
+    void                             markAllCompleteAsPublished() override;
 
     // Returns the number of generated pages (generated_at IS NOT NULL) whose
     // permalink is in expectedPermalinks.  Used by the GUI to cross-reference
@@ -87,6 +92,14 @@ public:
     // that have no matching topic are never counted as "done".
     int countGeneratedMatchingPermalinks(const QString      &typeId,
                                           const QSet<QString> &expectedPermalinks) const;
+
+    // Converts raw topic names to expected permalink strings using the same slug
+    // logic as LauncherGeneration, then appends a hyphen + endPermalink when set.
+    // E.g. ("Knee pain", "genes-biomarkers") → {"/knee-pain-genes-biomarkers"}.
+    // Used by PaneGeneration::computeRemainingToDo so the slug logic is shared
+    // with the tests.
+    static QSet<QString> buildExpectedPermalinks(const QStringList &topicNames,
+                                                  const QString     &endPermalink);
 
     static QString currentUtc();
 

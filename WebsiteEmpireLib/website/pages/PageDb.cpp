@@ -157,6 +157,30 @@ void PageDb::createSchema()
             "UPDATE pages SET generation_state = 3 WHERE generated_at IS NOT NULL"));
     }
 
+    // pages.flags — PageFlag bitmask; 0 = no flags set.
+    if (!columnExists(m_connectionName, QStringLiteral("pages"),
+                      QStringLiteral("flags"))) {
+        q.exec(QStringLiteral(
+            "ALTER TABLE pages ADD COLUMN flags INTEGER NOT NULL DEFAULT 0"));
+    }
+
+    // pages.end_permalink — URL slug suffix from the generation strategy.
+    // Empty string for pages created before this field existed or without a suffix.
+    if (!columnExists(m_connectionName, QStringLiteral("pages"),
+                      QStringLiteral("end_permalink"))) {
+        q.exec(QStringLiteral(
+            "ALTER TABLE pages ADD COLUMN end_permalink TEXT NOT NULL DEFAULT ''"));
+    }
+
+    // pages.published_at — ISO 8601 UTC; NULL until the page is first deployed
+    // via PaneDomains::deployLocally().  History entries are only created when
+    // this is non-NULL so that unpublished permalink changes leave no redirect trail.
+    if (!columnExists(m_connectionName, QStringLiteral("pages"),
+                      QStringLiteral("published_at"))) {
+        q.exec(QStringLiteral(
+            "ALTER TABLE pages ADD COLUMN published_at TEXT"));
+    }
+
     // page_translation_image_states — per-language social image generation state.
     // Pending (0): social SVGs / WebPs not yet translated for this language.
     // Complete (3): all social image variants translated and written to images.db.

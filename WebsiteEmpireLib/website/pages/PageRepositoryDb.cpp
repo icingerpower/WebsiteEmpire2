@@ -1,6 +1,9 @@
 #include "PageRepositoryDb.h"
 
+#include "website/pages/PageGenerationState.h"
+
 #include <QDateTime>
+#include <QRegularExpression>
 #include <QSqlError>
 #include <QSqlQuery>
 
@@ -38,13 +41,16 @@ static PageRecord rowToRecord(const QSqlQuery &q)
     }
     r.generationState = static_cast<PageGenerationState>(
         q.value(10).isNull() ? 0 : q.value(10).toInt());
+    r.flags        = q.value(11).isNull() ? 0 : static_cast<quint32>(q.value(11).toUInt());
+    r.endPermalink = q.value(12).isNull() ? QString() : q.value(12).toString();
+    r.publishedAt  = q.value(13).isNull() ? QString() : q.value(13).toString();
     return r;
 }
 
 static const QLatin1StringView SELECT_PAGES{
     "SELECT id, type_id, permalink, lang, created_at, updated_at,"
     "       translated_at, source_page_id, generated_at, langs_to_translate,"
-    "       generation_state"
+    "       generation_state, flags, end_permalink, published_at"
     " FROM pages"};
 
 // =============================================================================
@@ -248,14 +254,18 @@ void PageRepositoryDb::updatePermalink(int id, const QString &newPermalink)
 
     const QString &now = currentUtc();
 
-    QSqlQuery hist(db);
-    hist.prepare(QStringLiteral(
-        "INSERT INTO permalink_history (page_id, old_permalink, changed_at)"
-        " VALUES (:page_id, :old_permalink, :changed_at)"));
-    hist.bindValue(QStringLiteral(":page_id"),       id);
-    hist.bindValue(QStringLiteral(":old_permalink"), current->permalink);
-    hist.bindValue(QStringLiteral(":changed_at"),    now);
-    hist.exec();
+    // Only record history when the page has already been published.
+    // Unpublished permalink changes need no redirect trail.
+    if (!current->publishedAt.isEmpty()) {
+        QSqlQuery hist(db);
+        hist.prepare(QStringLiteral(
+            "INSERT INTO permalink_history (page_id, old_permalink, changed_at)"
+            " VALUES (:page_id, :old_permalink, :changed_at)"));
+        hist.bindValue(QStringLiteral(":page_id"),       id);
+        hist.bindValue(QStringLiteral(":old_permalink"), current->permalink);
+        hist.bindValue(QStringLiteral(":changed_at"),    now);
+        hist.exec();
+    }
 
     QSqlQuery upd(db);
     upd.prepare(QStringLiteral(
@@ -407,6 +417,25 @@ QStringList PageRepositoryDb::strategyAttempts(int pageId) const
     q.exec();
     while (q.next()) {
         result.append(q.value(0).toString());
+    }
+    return result;
+}
+
+QSet<QString> PageRepositoryDb::buildExpectedPermalinks(const QStringList &topicNames,
+                                                        const QString     &endPermalink)
+{
+    static const QRegularExpression s_reNonAlnum(QStringLiteral("[^a-z0-9]+"));
+    QSet<QString> result;
+    for (const QString &name : topicNames) {
+        QString slug = name.trimmed().toLower();
+        slug.replace(s_reNonAlnum, QStringLiteral("-"));
+        while (slug.startsWith(QLatin1Char('-'))) { slug.remove(0, 1); }
+        while (slug.endsWith(QLatin1Char('-')))   { slug.chop(1); }
+        if (slug.isEmpty()) { continue; }
+        if (!endPermalink.isEmpty()) {
+            slug += QLatin1Char('-') + endPermalink;
+        }
+        result.insert(QLatin1Char('/') + slug);
     }
     return result;
 }
@@ -711,4 +740,102 @@ QStringList PageRepositoryDb::pendingTranslationImageLangs(int pageId) const
         }
     }
     return pending;
+}
+
+// =============================================================================
+// Page flags
+// =============================================================================
+
+void PageRepositoryDb::setFlag(int id, PageFlag flag, bool on)
+{
+    QSqlDatabase db = m_db.database();
+    db.transaction();
+    QSqlQuery q(db);
+
+    if (on) {
+        q.prepare(QStringLiteral(
+            "UPDATE pages SET flags = (flags | :bit) WHERE id = :id"));
+        q.bindValue(QStringLiteral(":bit"), static_cast<quint32>(flag));
+        q.bindValue(QStringLiteral(":id"),  id);
+        q.exec();
+
+        // SocialMedia enabled on a Complete/SocialComplete page → reset to
+        // MainImageReady so the next --generation run runs the second pass.
+        if (flag == PageFlag::SocialMedia) {
+            q.prepare(QStringLiteral(
+                "UPDATE pages SET generation_state = :mir"
+                " WHERE id = :id"
+                "   AND generation_state IN (:complete, :socialcomplete)"));
+            q.bindValue(QStringLiteral(":mir"),
+                        static_cast<int>(PageGenerationState::MainImageReady));
+            q.bindValue(QStringLiteral(":id"), id);
+            q.bindValue(QStringLiteral(":complete"),
+                        static_cast<int>(PageGenerationState::Complete));
+            q.bindValue(QStringLiteral(":socialcomplete"),
+                        static_cast<int>(PageGenerationState::SocialComplete));
+            q.exec();
+        }
+    } else {
+        q.prepare(QStringLiteral(
+            "UPDATE pages SET flags = (flags & ~:bit) WHERE id = :id"));
+        q.bindValue(QStringLiteral(":bit"), static_cast<quint32>(flag));
+        q.bindValue(QStringLiteral(":id"),  id);
+        q.exec();
+    }
+
+    db.commit();
+}
+
+QList<PageRecord> PageRepositoryDb::findByFlag(PageFlag flag) const
+{
+    QList<PageRecord> result;
+    QSqlQuery q(m_db.database());
+    q.prepare(QString::fromLatin1(SELECT_PAGES)
+              + QStringLiteral(
+                  " WHERE source_page_id IS NULL"
+                  "   AND (flags & :bit) != 0"
+                  " ORDER BY id ASC"));
+    q.bindValue(QStringLiteral(":bit"), static_cast<quint32>(flag));
+    q.exec();
+    while (q.next()) {
+        result.append(rowToRecord(q));
+    }
+    return result;
+}
+
+// =============================================================================
+// setEndPermalink / setPublishedAt / markAllCompleteAsPublished
+// =============================================================================
+
+void PageRepositoryDb::setEndPermalink(int id, const QString &value)
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "UPDATE pages SET end_permalink = :v WHERE id = :id"));
+    q.bindValue(QStringLiteral(":v"),  value);
+    q.bindValue(QStringLiteral(":id"), id);
+    q.exec();
+}
+
+void PageRepositoryDb::setPublishedAt(int id, const QString &utcIso)
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "UPDATE pages SET published_at = :ts WHERE id = :id AND published_at IS NULL"));
+    q.bindValue(QStringLiteral(":ts"), utcIso);
+    q.bindValue(QStringLiteral(":id"), id);
+    q.exec();
+}
+
+void PageRepositoryDb::markAllCompleteAsPublished()
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "UPDATE pages SET published_at = :ts"
+        " WHERE generation_state IN (:complete, :socialcomplete)"
+        "   AND published_at IS NULL"));
+    q.bindValue(QStringLiteral(":ts"),            currentUtc());
+    q.bindValue(QStringLiteral(":complete"),      static_cast<int>(PageGenerationState::Complete));
+    q.bindValue(QStringLiteral(":socialcomplete"), static_cast<int>(PageGenerationState::SocialComplete));
+    q.exec();
 }
