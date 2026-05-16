@@ -11,6 +11,8 @@ set(PAGES_WIDGETS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageEditorDialog.h
     ${CMAKE_CURRENT_LIST_DIR}/PageEditorDialog.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageEditorDialog.ui
+    ${CMAKE_CURRENT_LIST_DIR}/PermalinkHistoryModel.h
+    ${CMAKE_CURRENT_LIST_DIR}/PermalinkHistoryModel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/DialogPermalinkHistory.h
     ${CMAKE_CURRENT_LIST_DIR}/DialogPermalinkHistory.cpp
     ${CMAKE_CURRENT_LIST_DIR}/DialogPermalinkHistory.ui

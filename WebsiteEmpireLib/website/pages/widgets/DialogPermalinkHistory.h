@@ -4,6 +4,7 @@
 #include <QDialog>
 
 class IPageRepository;
+class PermalinkHistoryModel;
 
 namespace Ui { class DialogPermalinkHistory; }
 
@@ -17,8 +18,9 @@ namespace Ui { class DialogPermalinkHistory; }
  *   Permanent 301  — default; the old URL 301-redirects to the current permalink
  *   Parked    302  — temporary redirect (content may return); 302
  *   Deleted   410  — content was intentionally removed; 410 Gone, no forwarding
+ *   No redirect    — no redirect emitted; old URL yields 404
  *
- * Changes are saved immediately on combo selection change.
+ * Changes are saved immediately on combo selection change (via PermalinkHistoryModel).
  *
  * The dialog holds a non-owning reference to IPageRepository; it must outlive
  * this dialog.
@@ -34,11 +36,8 @@ public:
     ~DialogPermalinkHistory() override;
 
 private:
-    void _populate();
-
     Ui::DialogPermalinkHistory *ui;
-    IPageRepository            &m_repo;
-    int                         m_pageId;
+    PermalinkHistoryModel      *m_model;
 };
 
 #endif // DIALOGPERMALINKHISTORY_H

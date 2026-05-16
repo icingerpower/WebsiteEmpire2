@@ -21,22 +21,16 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QTableWidget" name="tableWidget">
+    <widget class="QTableView" name="tableWidget">
      <property name="selectionBehavior">
       <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
      </property>
      <property name="editTriggers">
-      <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
+      <set>QAbstractItemView::EditTrigger::DoubleClicked|QAbstractItemView::EditTrigger::SelectedClicked</set>
      </property>
-     <column>
-      <property name="text"><string>Old Permalink</string></property>
-     </column>
-     <column>
-      <property name="text"><string>Changed At</string></property>
-     </column>
-     <column>
-      <property name="text"><string>Redirect Type</string></property>
-     </column>
+     <property name="sortingEnabled">
+      <bool>false</bool>
+     </property>
     </widget>
    </item>
    <item>
