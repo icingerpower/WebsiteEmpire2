@@ -8,8 +8,9 @@
 PageTypeCategory::PageTypeCategory(CategoryTable &categoryTable)
     : m_hubGridBloc(categoryTable)
 {
-    m_blocs.append(&m_hubGridBloc);
-    m_blocs.append(&m_socialBloc);
+    m_blocs.append(&m_hubGridBloc);    // 0
+    m_blocs.append(&m_socialTextBloc); // 1 — text metadata, first pass
+    m_blocs.append(&m_socialBloc);     // 2 — image variants, second pass
 }
 
 QString PageTypeCategory::getTypeId()      const { return QLatin1String(TYPE_ID); }
@@ -34,17 +35,17 @@ QString PageTypeCategory::buildHeadMetaTags(const QString &baseUrl) const
 
         QString title, desc;
         if (id == QLatin1String("opengraph")) {
-            title = m_socialBloc.facebookTitle();
-            desc  = m_socialBloc.facebookDesc();
+            title = m_socialTextBloc.facebookTitle();
+            desc  = m_socialTextBloc.facebookDesc();
         } else if (id == QLatin1String("twitter") || id == QLatin1String("twitter_summary")) {
-            title = m_socialBloc.twitterTitle();
-            desc  = m_socialBloc.twitterDesc();
+            title = m_socialTextBloc.twitterTitle();
+            desc  = m_socialTextBloc.twitterDesc();
         } else if (id == QLatin1String("pinterest")) {
-            title = m_socialBloc.pinterestTitle();
-            desc  = m_socialBloc.pinterestDesc();
+            title = m_socialTextBloc.pinterestTitle();
+            desc  = m_socialTextBloc.pinterestDesc();
         } else if (id == QLatin1String("linkedin")) {
-            title = m_socialBloc.linkedinTitle();
-            desc  = m_socialBloc.linkedinDesc();
+            title = m_socialTextBloc.linkedinTitle();
+            desc  = m_socialTextBloc.linkedinDesc();
         }
 
         QString webpFilename;

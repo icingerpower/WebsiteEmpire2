@@ -7,11 +7,12 @@ PageTypeArticle::PageTypeArticle(CategoryTable &categoryTable)
     : m_categoryBloc(new PageBlocCategory(categoryTable))
     , m_categoryLinksBloc(categoryTable)
 {
-    m_blocs.append(m_categoryBloc.data());
-    m_blocs.append(&m_textBloc);
-    m_blocs.append(&m_socialBloc);
-    m_blocs.append(&m_autoLinkBloc);
-    m_blocs.append(&m_categoryLinksBloc);
+    m_blocs.append(m_categoryBloc.data()); // 0
+    m_blocs.append(&m_textBloc);           // 1
+    m_blocs.append(&m_socialTextBloc);     // 2 — text metadata, first pass
+    m_blocs.append(&m_autoLinkBloc);       // 3
+    m_blocs.append(&m_categoryLinksBloc);  // 4
+    m_blocs.append(&m_socialBloc);         // 5 — image variants, second pass
 }
 
 PageTypeArticle::~PageTypeArticle() = default;
@@ -39,17 +40,17 @@ QString PageTypeArticle::buildHeadMetaTags(const QString &baseUrl) const
         // Select per-platform title and description.
         QString title, desc;
         if (id == QLatin1String("opengraph")) {
-            title = m_socialBloc.facebookTitle();
-            desc  = m_socialBloc.facebookDesc();
+            title = m_socialTextBloc.facebookTitle();
+            desc  = m_socialTextBloc.facebookDesc();
         } else if (id == QLatin1String("twitter") || id == QLatin1String("twitter_summary")) {
-            title = m_socialBloc.twitterTitle();
-            desc  = m_socialBloc.twitterDesc();
+            title = m_socialTextBloc.twitterTitle();
+            desc  = m_socialTextBloc.twitterDesc();
         } else if (id == QLatin1String("pinterest")) {
-            title = m_socialBloc.pinterestTitle();
-            desc  = m_socialBloc.pinterestDesc();
+            title = m_socialTextBloc.pinterestTitle();
+            desc  = m_socialTextBloc.pinterestDesc();
         } else if (id == QLatin1String("linkedin")) {
-            title = m_socialBloc.linkedinTitle();
-            desc  = m_socialBloc.linkedinDesc();
+            title = m_socialTextBloc.linkedinTitle();
+            desc  = m_socialTextBloc.linkedinDesc();
         }
 
         // Image URL: derive from the WebP filename stored after second-pass generation.

@@ -460,9 +460,11 @@ void PageTranslator::_processNextJob()
     // -------------------------------------------------------------------------
     // Text translation job
     // -------------------------------------------------------------------------
+
+    // Load source page record — needed for endPermalink slug translation.
+    const auto srcRec = m_repo.findById(m_currentJob.pageId);
     {
-        const auto &rec = m_repo.findById(m_currentJob.pageId);
-        const QString permalink = rec ? rec->permalink : QStringLiteral("?");
+        const QString permalink = srcRec ? srcRec->permalink : QStringLiteral("?");
         _log(QStringLiteral("Processing page %1 → %2  (%3)  job %4")
                  .arg(m_currentJob.targetLang, permalink)
                  .arg(m_currentJob.pageId)
@@ -497,6 +499,30 @@ void PageTranslator::_processNextJob()
 
     QList<TranslatableField> fields;
     m_currentPageType->collectTranslatables(QStringView{}, fields);
+
+    // If this page has an endPermalink suffix AND no translated slug yet, add the
+    // full URL slug as a translatable field so the generator can use a language-
+    // specific path (e.g. /fr/douleurs-genoux-genes-biomarqueurs).
+    const QString trSlugKey = QStringLiteral("tr:")
+                              + m_currentJob.targetLang
+                              + QStringLiteral(":_permalink_slug");
+    if (srcRec && !srcRec->endPermalink.isEmpty()
+            && !m_currentPageData.contains(trSlugKey)) {
+        // Derive the slug from the stored permalink (strip leading "/" only).
+        QString sourceSlug = srcRec->permalink;
+        if (sourceSlug.startsWith(QLatin1Char('/'))) {
+            sourceSlug.remove(0, 1);
+        }
+        TranslatableField slugField;
+        slugField.id = QStringLiteral("_permalink_slug");
+        slugField.sourceText =
+            QStringLiteral("[This field is a URL slug. "
+                           "Output a valid URL slug only: "
+                           "lowercase words separated by hyphens, "
+                           "no spaces, no special characters.]\n")
+            + sourceSlug;
+        fields.append(slugField);
+    }
 
     if (fields.isEmpty()) {
         _log(QStringLiteral("  Page %1 has no translatable content — skipping")
@@ -753,6 +779,30 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
             finalData.insert(it.key(), it.value());
         }
     }
+
+    // If a permalink slug translation was returned, normalize it to a valid URL
+    // slug and store it so PageGenerator can build the translated page path.
+    if (translations.contains(QStringLiteral("_permalink_slug"))) {
+        static const QRegularExpression reInvalidSlugChars(
+            QStringLiteral("[^a-z0-9-]"));
+        static const QRegularExpression reMultiHyphen(
+            QStringLiteral("-{2,}"));
+        QString trSlug = translations.value(QStringLiteral("_permalink_slug"))
+                             .toLower()
+                             .replace(QLatin1Char(' '), QLatin1Char('-'));
+        trSlug.replace(reInvalidSlugChars, QString{});
+        trSlug.replace(reMultiHyphen, QStringLiteral("-"));
+        while (trSlug.startsWith(QLatin1Char('-'))) { trSlug.remove(0, 1); }
+        while (trSlug.endsWith(QLatin1Char('-')))   { trSlug.chop(1); }
+        if (!trSlug.isEmpty()) {
+            const QString key = QStringLiteral("tr:")
+                                + m_currentJob.targetLang
+                                + QStringLiteral(":_permalink_slug");
+            finalData.insert(key, trSlug);
+            _log(QStringLiteral("  Slug translated: %1").arg(trSlug));
+        }
+    }
+
     m_repo.saveData(m_currentJob.pageId, finalData);
 
     m_processOutput.clear();

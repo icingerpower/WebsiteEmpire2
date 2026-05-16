@@ -6,54 +6,45 @@
 class PageRecord;
 
 /**
- * Stores social media text metadata (first pass) and orchestrates the
- * generation of social image variants (second pass).
+ * Second-pass bloc that generates social-media image variants for an article.
  *
- * First pass (metadata JSON — same session as article text):
- *   Per-platform title and description fields, populated by Claude alongside
- *   other metadata blocs.  Keys follow the pattern <platform>_title /
- *   <platform>_desc so the AI schema prompt can carry per-field constraints.
+ * This bloc is purely responsible for the opt-in image second pass — text
+ * metadata (titles and descriptions) is handled by the sibling PageBlocSocial
+ * which always runs in the first pass.
  *
  * Second pass (AbstractSecondaryPageBloc):
- *   After the article and its primary [IMGFIX] SVG are saved, LauncherGeneration
- *   calls buildSecondPassPrompts() to obtain one prompt per image variant.
- *   Claude returns raw SVG; validateSecondPassResult() checks basic structure.
- *   The launcher rasterises each validated SVG to WebP via QSvgRenderer and
- *   stores both blob types in images.db.
+ *   LauncherGeneration calls buildSecondPassPrompts() once the SocialMedia flag
+ *   is set on the page.  Claude returns one raw SVG per variant;
+ *   validateSecondPassResult() checks basic structure.  The launcher rasterises
+ *   each validated SVG to WebP via QSvgRenderer and stores both blob types in
+ *   images.db.
  *
- * Stored keys
- * -----------
- * First-pass text:
- *   facebook_title, facebook_desc
- *   twitter_title,  twitter_desc
- *   google_title    (Google does not use a title meta; reserved for future use)
- *   pinterest_title, pinterest_desc
- *   linkedin_title,  linkedin_desc
- *
- * Second-pass image filenames (set after generation, read by PageGenerator):
+ * Stored keys (set after generation, read by PageGenerator):
  *   img_og        — landscape WebP filename (e.g. "article-og.webp")
  *   img_wide      — wide WebP filename
  *   img_square    — square WebP filename
  *   img_portrait  — portrait WebP filename
  *
- * addCode() is a no-op: all output is injected into <head> by PageGenerator,
- * which iterates AbstractSocialMedia::all() and reads this bloc's accessors.
+ * addCode() is a no-op: image tags are injected into <head> by PageGenerator.
  */
 class PageBlocSocialMedia : public AbstractSecondaryPageBloc
 {
 public:
-    static constexpr const char *KEY_FB_TITLE  = "facebook_title";
-    static constexpr const char *KEY_FB_DESC   = "facebook_desc";
-    static constexpr const char *KEY_TW_TITLE  = "twitter_title";
-    static constexpr const char *KEY_TW_DESC   = "twitter_desc";
-    static constexpr const char *KEY_PT_TITLE  = "pinterest_title";
-    static constexpr const char *KEY_PT_DESC   = "pinterest_desc";
-    static constexpr const char *KEY_LI_TITLE  = "linkedin_title";
-    static constexpr const char *KEY_LI_DESC   = "linkedin_desc";
+    // Image filename keys (set after second-pass generation)
     static constexpr const char *KEY_IMG_OG       = "img_og";
     static constexpr const char *KEY_IMG_WIDE     = "img_wide";
     static constexpr const char *KEY_IMG_SQUARE   = "img_square";
     static constexpr const char *KEY_IMG_PORTRAIT = "img_portrait";
+
+    // Text metadata keys — same names as PageBlocSocial; stored for context but NOT translated.
+    static constexpr const char *KEY_FB_TITLE = "facebook_title";
+    static constexpr const char *KEY_FB_DESC  = "facebook_desc";
+    static constexpr const char *KEY_TW_TITLE = "twitter_title";
+    static constexpr const char *KEY_TW_DESC  = "twitter_desc";
+    static constexpr const char *KEY_PT_TITLE = "pinterest_title";
+    static constexpr const char *KEY_PT_DESC  = "pinterest_desc";
+    static constexpr const char *KEY_LI_TITLE = "linkedin_title";
+    static constexpr const char *KEY_LI_DESC  = "linkedin_desc";
 
     PageBlocSocialMedia() = default;
     ~PageBlocSocialMedia() override = default;
@@ -62,7 +53,10 @@ public:
     // AbstractPageBloc
     // -------------------------------------------------------------------------
     QString getName() const override;
+
+    /** Returns an empty map — no AI metadata keys in the first pass. */
     QHash<QString, QString> getAiKeyClues() const override;
+
     void load(const QHash<QString, QString> &values) override;
     void save(QHash<QString, QString> &values) const override;
     void addCode(QStringView origContent, AbstractEngine &engine, int websiteIndex,
@@ -81,24 +75,11 @@ public:
     QString variantDataKey(int variantIndex) const override;
 
     // -------------------------------------------------------------------------
-    // Accessors for PageGenerator
+    // Accessors for PageGenerator (image filenames, empty until second pass)
     // -------------------------------------------------------------------------
-    QString facebookTitle()  const;
-    QString facebookDesc()   const;
-    QString twitterTitle()   const;
-    QString twitterDesc()    const;
-    QString pinterestTitle() const;
-    QString pinterestDesc()  const;
-    QString linkedinTitle()  const;
-    QString linkedinDesc()   const;
-
-    /** Filename of the landscape (OG) WebP, empty until second pass completes. */
     QString imgOg()       const;
-    /** Filename of the wide (Google) WebP, empty until second pass completes. */
     QString imgWide()     const;
-    /** Filename of the square (Twitter summary) WebP, empty until second pass completes. */
     QString imgSquare()   const;
-    /** Filename of the portrait (Pinterest) WebP, empty until second pass completes. */
     QString imgPortrait() const;
 
     /**
@@ -108,14 +89,6 @@ public:
     void setImgFileName(AbstractSocialMedia::ImageSize size, const QString &fileName);
 
 private:
-    QString m_fbTitle;
-    QString m_fbDesc;
-    QString m_twTitle;
-    QString m_twDesc;
-    QString m_ptTitle;
-    QString m_ptDesc;
-    QString m_liTitle;
-    QString m_liDesc;
     QString m_imgOg;
     QString m_imgWide;
     QString m_imgSquare;

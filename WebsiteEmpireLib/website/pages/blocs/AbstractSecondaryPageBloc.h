@@ -46,6 +46,19 @@ public:
     bool isSecondTimeGeneration() const final { return true; }
 
     /**
+     * Minimum number of page impressions (from --review stats) required before
+     * the social-media second pass is automatically enabled for this bloc.
+     *
+     * LauncherReview reads this threshold via the page type's secondary blocs
+     * and sets PageFlag::SocialMedia when the page's display count reaches it.
+     * The default (100) means the second pass is only triggered once the page
+     * has been seen at least 100 times in search results.
+     *
+     * Override to 0 to always enable the second pass regardless of stats.
+     */
+    virtual int getDisplayThreshold() const;
+
+    /**
      * Returns one AI prompt per required ImageSize variant, in the order
      * returned by requiredImageSizes().
      *

@@ -1,5 +1,10 @@
 #include "AbstractSecondaryPageBloc.h"
 
+int AbstractSecondaryPageBloc::getDisplayThreshold() const
+{
+    return 100;
+}
+
 QList<AbstractSocialMedia::ImageSize> AbstractSecondaryPageBloc::requiredImageSizes() const
 {
     return {

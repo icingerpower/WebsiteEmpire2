@@ -4,6 +4,7 @@
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/blocs/PageBlocAutoLink.h"
 #include "website/pages/blocs/PageBlocCategoryLinks.h"
+#include "website/pages/blocs/PageBlocSocial.h"
 #include "website/pages/blocs/PageBlocSocialMedia.h"
 #include "website/pages/blocs/PageBlocText.h"
 
@@ -13,12 +14,13 @@ class CategoryTable;
 class PageBlocCategory;
 
 /**
- * A page type composed of five blocs (in order):
+ * A page type composed of six blocs (in order):
  *   0 — PageBlocCategory      : primary breadcrumb category
  *   1 — PageBlocText           : main article body
- *   2 — PageBlocSocialMedia    : social-media text metadata + image variants (second pass)
+ *   2 — PageBlocSocial         : social-media text metadata (title + desc, first pass)
  *   3 — PageBlocAutoLink       : keywords that auto-link to this page
  *   4 — PageBlocCategoryLinks  : cross-reference category links (body parts, etc.)
+ *   5 — PageBlocSocialMedia    : social-media image variants (second pass, opt-in)
  *
  * Registered in the AbstractPageType registry under TYPE_ID = "article".
  *
@@ -54,7 +56,10 @@ public:
      */
     void setPageUrl(const QString &url);
 
-    /** Returns the social-media bloc for direct access by the page generator. */
+    /** Returns the social text bloc (first-pass titles/descs) for the page generator. */
+    const PageBlocSocial &socialTextBloc() const { return m_socialTextBloc; }
+
+    /** Returns the social image bloc (second-pass WebP variants) for the page generator. */
     const PageBlocSocialMedia &socialBloc() const { return m_socialBloc; }
 
     /** Returns the auto-link bloc for direct access by the page generator. */
@@ -72,9 +77,10 @@ public:
 private:
     QScopedPointer<PageBlocCategory> m_categoryBloc;
     PageBlocText                     m_textBloc;
-    PageBlocSocialMedia              m_socialBloc;
+    PageBlocSocial                   m_socialTextBloc;
     PageBlocAutoLink                 m_autoLinkBloc;
     PageBlocCategoryLinks            m_categoryLinksBloc;
+    PageBlocSocialMedia              m_socialBloc;
     QList<const AbstractPageBloc *>  m_blocs;
 };
 

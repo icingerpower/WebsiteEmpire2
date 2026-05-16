@@ -14,33 +14,16 @@
 
 QString PageBlocSocialMedia::getName() const
 {
-    return QCoreApplication::translate("PageBlocSocialMedia", "Social Media");
+    return QCoreApplication::translate("PageBlocSocialMedia", "Social Media Images");
 }
 
 // =============================================================================
-// getAiKeyClues
+// getAiKeyClues — no first-pass AI keys; text metadata lives in PageBlocSocial
 // =============================================================================
 
 QHash<QString, QString> PageBlocSocialMedia::getAiKeyClues() const
 {
-    return {
-        {QLatin1String(KEY_FB_TITLE),
-         QCoreApplication::translate("PageBlocSocialMedia", "Facebook / Open Graph title, max 60 chars")},
-        {QLatin1String(KEY_FB_DESC),
-         QCoreApplication::translate("PageBlocSocialMedia", "Facebook / Open Graph description, max 160 chars")},
-        {QLatin1String(KEY_TW_TITLE),
-         QCoreApplication::translate("PageBlocSocialMedia", "Twitter/X title, max 70 chars")},
-        {QLatin1String(KEY_TW_DESC),
-         QCoreApplication::translate("PageBlocSocialMedia", "Twitter/X description, max 200 chars")},
-        {QLatin1String(KEY_PT_TITLE),
-         QCoreApplication::translate("PageBlocSocialMedia", "Pinterest title, max 100 chars")},
-        {QLatin1String(KEY_PT_DESC),
-         QCoreApplication::translate("PageBlocSocialMedia", "Pinterest description, max 500 chars")},
-        {QLatin1String(KEY_LI_TITLE),
-         QCoreApplication::translate("PageBlocSocialMedia", "LinkedIn title, max 150 chars")},
-        {QLatin1String(KEY_LI_DESC),
-         QCoreApplication::translate("PageBlocSocialMedia", "LinkedIn description, max 300 chars")},
-    };
+    return {};
 }
 
 // =============================================================================
@@ -49,38 +32,22 @@ QHash<QString, QString> PageBlocSocialMedia::getAiKeyClues() const
 
 void PageBlocSocialMedia::load(const QHash<QString, QString> &values)
 {
-    m_fbTitle      = values.value(QLatin1String(KEY_FB_TITLE));
-    m_fbDesc       = values.value(QLatin1String(KEY_FB_DESC));
-    m_twTitle      = values.value(QLatin1String(KEY_TW_TITLE));
-    m_twDesc       = values.value(QLatin1String(KEY_TW_DESC));
-    m_ptTitle      = values.value(QLatin1String(KEY_PT_TITLE));
-    m_ptDesc       = values.value(QLatin1String(KEY_PT_DESC));
-    m_liTitle      = values.value(QLatin1String(KEY_LI_TITLE));
-    m_liDesc       = values.value(QLatin1String(KEY_LI_DESC));
-    m_imgOg        = values.value(QLatin1String(KEY_IMG_OG));
-    m_imgWide      = values.value(QLatin1String(KEY_IMG_WIDE));
-    m_imgSquare    = values.value(QLatin1String(KEY_IMG_SQUARE));
-    m_imgPortrait  = values.value(QLatin1String(KEY_IMG_PORTRAIT));
+    m_imgOg       = values.value(QLatin1String(KEY_IMG_OG));
+    m_imgWide     = values.value(QLatin1String(KEY_IMG_WIDE));
+    m_imgSquare   = values.value(QLatin1String(KEY_IMG_SQUARE));
+    m_imgPortrait = values.value(QLatin1String(KEY_IMG_PORTRAIT));
 }
 
 void PageBlocSocialMedia::save(QHash<QString, QString> &values) const
 {
-    values.insert(QLatin1String(KEY_FB_TITLE),      m_fbTitle);
-    values.insert(QLatin1String(KEY_FB_DESC),       m_fbDesc);
-    values.insert(QLatin1String(KEY_TW_TITLE),      m_twTitle);
-    values.insert(QLatin1String(KEY_TW_DESC),       m_twDesc);
-    values.insert(QLatin1String(KEY_PT_TITLE),      m_ptTitle);
-    values.insert(QLatin1String(KEY_PT_DESC),       m_ptDesc);
-    values.insert(QLatin1String(KEY_LI_TITLE),      m_liTitle);
-    values.insert(QLatin1String(KEY_LI_DESC),       m_liDesc);
-    values.insert(QLatin1String(KEY_IMG_OG),        m_imgOg);
-    values.insert(QLatin1String(KEY_IMG_WIDE),      m_imgWide);
-    values.insert(QLatin1String(KEY_IMG_SQUARE),    m_imgSquare);
-    values.insert(QLatin1String(KEY_IMG_PORTRAIT),  m_imgPortrait);
+    values.insert(QLatin1String(KEY_IMG_OG),       m_imgOg);
+    values.insert(QLatin1String(KEY_IMG_WIDE),     m_imgWide);
+    values.insert(QLatin1String(KEY_IMG_SQUARE),   m_imgSquare);
+    values.insert(QLatin1String(KEY_IMG_PORTRAIT), m_imgPortrait);
 }
 
 // =============================================================================
-// addCode — no-op; PageGenerator injects social tags into <head>
+// addCode — no-op; PageGenerator injects image tags into <head>
 // =============================================================================
 
 void PageBlocSocialMedia::addCode(QStringView      /*origContent*/,
@@ -183,18 +150,10 @@ QString PageBlocSocialMedia::variantDataKey(int variantIndex) const
 // Accessors
 // =============================================================================
 
-QString PageBlocSocialMedia::facebookTitle()  const { return m_fbTitle; }
-QString PageBlocSocialMedia::facebookDesc()   const { return m_fbDesc;  }
-QString PageBlocSocialMedia::twitterTitle()   const { return m_twTitle; }
-QString PageBlocSocialMedia::twitterDesc()    const { return m_twDesc;  }
-QString PageBlocSocialMedia::pinterestTitle() const { return m_ptTitle; }
-QString PageBlocSocialMedia::pinterestDesc()  const { return m_ptDesc;  }
-QString PageBlocSocialMedia::linkedinTitle()  const { return m_liTitle; }
-QString PageBlocSocialMedia::linkedinDesc()   const { return m_liDesc;  }
-QString PageBlocSocialMedia::imgOg()          const { return m_imgOg;      }
-QString PageBlocSocialMedia::imgWide()        const { return m_imgWide;    }
-QString PageBlocSocialMedia::imgSquare()      const { return m_imgSquare;  }
-QString PageBlocSocialMedia::imgPortrait()    const { return m_imgPortrait;}
+QString PageBlocSocialMedia::imgOg()       const { return m_imgOg;      }
+QString PageBlocSocialMedia::imgWide()     const { return m_imgWide;    }
+QString PageBlocSocialMedia::imgSquare()   const { return m_imgSquare;  }
+QString PageBlocSocialMedia::imgPortrait() const { return m_imgPortrait;}
 
 void PageBlocSocialMedia::setImgFileName(AbstractSocialMedia::ImageSize size,
                                           const QString                  &fileName)

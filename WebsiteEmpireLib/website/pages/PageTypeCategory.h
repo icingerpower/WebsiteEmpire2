@@ -3,6 +3,7 @@
 
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/blocs/PageBlocHubGrid.h"
+#include "website/pages/blocs/PageBlocSocial.h"
 #include "website/pages/blocs/PageBlocSocialMedia.h"
 
 class CategoryTable;
@@ -12,8 +13,9 @@ class CategoryTable;
  * from one or more selected categories.
  *
  * Blocs (in order):
- *   0 — PageBlocHubGrid  : grid of article cards, sorted by CTR → views → recency
- *   1 — PageBlocSocialMedia : social-media text metadata + image variants
+ *   0 — PageBlocHubGrid    : grid of article cards, sorted by CTR → views → recency
+ *   1 — PageBlocSocial     : social-media text metadata (title + desc, first pass)
+ *   2 — PageBlocSocialMedia : social-media image variants (second pass, opt-in)
  *
  * Registered under TYPE_ID = "category_hub".
  *
@@ -37,13 +39,17 @@ public:
 
     void bindGenerationContext(IPageRepository &repo, const QDir &workingDir) override;
 
-    /** Returns the social-media bloc for direct access by the page generator. */
+    /** Returns the social text bloc (first-pass titles/descs) for the page generator. */
+    const PageBlocSocial &socialTextBloc() const { return m_socialTextBloc; }
+
+    /** Returns the social image bloc (second-pass WebP variants) for the page generator. */
     const PageBlocSocialMedia &socialBloc() const { return m_socialBloc; }
 
     QString buildHeadMetaTags(const QString &baseUrl) const override;
 
 private:
     PageBlocHubGrid                 m_hubGridBloc;
+    PageBlocSocial                  m_socialTextBloc;
     PageBlocSocialMedia             m_socialBloc;
     QList<const AbstractPageBloc *> m_blocs;
 };

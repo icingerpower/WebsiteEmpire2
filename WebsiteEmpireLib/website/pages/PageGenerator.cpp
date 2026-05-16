@@ -156,6 +156,9 @@ bool PageGenerator::_writePage(AbstractPageType &type,
 
     const QList<PermalinkHistoryEntry> &history = m_pageRepo.permalinkHistory(record.id);
     for (const PermalinkHistoryEntry &entry : std::as_const(history)) {
+        if (entry.redirectType == QStringLiteral("none")) {
+            continue; // no redirect row emitted; old URL yields 404
+        }
         QSqlQuery redirect(db);
         if (entry.redirectType == QStringLiteral("deleted")) {
             redirect.prepare(QStringLiteral(
@@ -255,7 +258,24 @@ int PageGenerator::generateAll(const QDir     &workingDir,
             ex.raise();
         }
 
-        if (_writePage(*type, record, connName, domain, engine, websiteIndex)) {
+        // For translated pages of strategies that carry an endPermalink suffix,
+        // use the AI-translated slug stored in page data as the output path.
+        // Falls back to the source permalink (with lang prefix) when not set.
+        PageRecord effectiveRecord = record;
+        if (isTargetLang && !record.endPermalink.isEmpty()) {
+            const QString trSlugKey = QStringLiteral("tr:")
+                                      + currentLang
+                                      + QStringLiteral(":_permalink_slug");
+            const QString &trSlug = data.value(trSlugKey);
+            if (!trSlug.isEmpty()) {
+                effectiveRecord.permalink = QLatin1Char('/')
+                                            + currentLang
+                                            + QLatin1Char('/')
+                                            + trSlug;
+            }
+        }
+
+        if (_writePage(*type, effectiveRecord, connName, domain, engine, websiteIndex)) {
             ++count;
         }
     }
@@ -328,7 +348,21 @@ int PageGenerator::generateSubset(const QList<int> &pageIds,
             continue;
         }
 
-        if (_writePage(*type, record, connName, domain, engine, websiteIndex)) {
+        PageRecord effectiveRecord = record;
+        if (isTargetLang && !record.endPermalink.isEmpty()) {
+            const QString trSlugKey = QStringLiteral("tr:")
+                                      + currentLang
+                                      + QStringLiteral(":_permalink_slug");
+            const QString &trSlug = data.value(trSlugKey);
+            if (!trSlug.isEmpty()) {
+                effectiveRecord.permalink = QLatin1Char('/')
+                                            + currentLang
+                                            + QLatin1Char('/')
+                                            + trSlug;
+            }
+        }
+
+        if (_writePage(*type, effectiveRecord, connName, domain, engine, websiteIndex)) {
             ++count;
         }
     }
