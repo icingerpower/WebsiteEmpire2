@@ -3,17 +3,24 @@
 
 #include "GenStrategyTable.h"
 #include "../dialogs/DialogAddGeneration.h"
+#include "../dialogs/DialogGeneratePhase2.h"
 #include "../dialogs/DialogShowCommand.h"
 #include "launcher/LauncherGeneration.h"
 #include "website/AbstractEngine.h"
 #include "website/WebsiteSettingsTable.h"
 #include "website/pages/PageDb.h"
+#include "website/pages/PageFlag.h"
+#include "website/pages/PageGenerationState.h"
+#include "website/pages/PageRecord.h"
 #include "website/pages/PageRepositoryDb.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
+
+#include <algorithm>
 
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileDialog>
+#include <QInputDialog>
 #include <QMessageBox>
 #include <QProcess>
 #include <QPushButton>
@@ -24,17 +31,6 @@
 #include <QTableWidgetItem>
 #include <QTextEdit>
 
-// Mirrors the slug logic in LauncherGeneration: lower-case, collapse non-alnum to '-',
-// strip leading/trailing dashes.  Must stay in sync with the launcher.
-static QString makeTopicSlug(const QString &name)
-{
-    static const QRegularExpression s_reNonAlnum(QStringLiteral("[^a-z0-9]+"));
-    QString slug = name.toLower();
-    slug.replace(s_reNonAlnum, QStringLiteral("-"));
-    while (slug.startsWith(QLatin1Char('-'))) { slug.remove(0, 1); }
-    while (slug.endsWith(QLatin1Char('-')))   { slug.chop(1); }
-    return slug;
-}
 
 PaneGeneration::PaneGeneration(QWidget *parent)
     : QWidget(parent)
@@ -72,6 +68,7 @@ void PaneGeneration::setup(const QDir           &workingDir,
                         ? settingsTable->editingLangCode()
                         : QStringLiteral("en");
     m_isSetup = true;
+    ui->buttonGeneratePhase2->setEnabled(true);
 }
 
 void PaneGeneration::setVisible(bool visible)
@@ -95,7 +92,7 @@ void PaneGeneration::addGeneration()
     }
     m_strategies->addRow(dialog.name(), dialog.pageTypeId(), dialog.themeId(),
                          dialog.customInstructions(), dialog.nonSvgImages(),
-                         dialog.primaryAttrId());
+                         dialog.primaryAttrId(), dialog.endPermalink());
 }
 
 void PaneGeneration::removeGeneration()
@@ -115,28 +112,147 @@ void PaneGeneration::generateOne()
     if (!m_isSetup) {
         return;
     }
-
-    const QString exe = QCoreApplication::applicationFilePath();
-    const QStringList args = {
+    // --new-only ensures retries (SVG failures, social-media second pass) do not
+    // consume the single slot — the button is for testing a fresh article.
+    _startProcess({
         QStringLiteral("--") + AbstractLauncher::OPTION_WORKING_DIR,
         m_workingDir.absolutePath(),
         QStringLiteral("--") + LauncherGeneration::OPTION_NAME,
-        QStringLiteral("--") + LauncherGeneration::OPTION_SESSIONS,
-        QStringLiteral("1"),
-        QStringLiteral("--") + LauncherGeneration::OPTION_LIMIT,
-        QStringLiteral("1")
+        QStringLiteral("--") + LauncherGeneration::OPTION_SESSIONS, QStringLiteral("1"),
+        QStringLiteral("--") + LauncherGeneration::OPTION_LIMIT,    QStringLiteral("1"),
+        QStringLiteral("--") + LauncherGeneration::OPTION_NEW_ONLY
+    });
+}
+
+void PaneGeneration::generateCustomTopic()
+{
+    if (!m_isSetup) {
+        return;
+    }
+    const QModelIndex idx = ui->tableViewStrategies->currentIndex();
+    if (!idx.isValid()) {
+        QMessageBox::warning(this, tr("No strategy selected"),
+                             tr("Select a strategy before generating custom topics."));
+        return;
+    }
+
+    bool ok = false;
+    const QString text = QInputDialog::getMultiLineText(
+        this,
+        tr("Generate custom topics"),
+        tr("Enter one topic per line:"),
+        {}, &ok);
+    if (!ok || text.trimmed().isEmpty()) {
+        return;
+    }
+
+    const QStringList lines = text.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    QStringList topics;
+    for (const QString &line : lines) {
+        const QString t = line.trimmed();
+        if (!t.isEmpty()) {
+            topics.append(t);
+        }
+    }
+    if (topics.isEmpty()) {
+        return;
+    }
+
+    const QString strategyId = m_strategies->idForRow(idx.row());
+    QStringList args = {
+        QStringLiteral("--") + AbstractLauncher::OPTION_WORKING_DIR,
+        m_workingDir.absolutePath(),
+        QStringLiteral("--") + LauncherGeneration::OPTION_NAME,
+        QStringLiteral("--") + LauncherGeneration::OPTION_SESSIONS, QStringLiteral("1"),
+        QStringLiteral("--") + LauncherGeneration::OPTION_STRATEGY, strategyId,
+        QStringLiteral("--") + LauncherGeneration::OPTION_DELAY, QStringLiteral("30")
     };
+    for (const QString &topic : std::as_const(topics)) {
+        args << QStringLiteral("--") + LauncherGeneration::OPTION_TOPIC << topic;
+    }
+    _startProcess(args);
+}
+
+void PaneGeneration::generatePhase2()
+{
+    if (!m_isSetup) {
+        return;
+    }
+
+    PageDb           pageDb(m_workingDir);
+    PageRepositoryDb pageRepo(pageDb);
+
+    QList<PageRecord> candidates;
+    QSet<int>         seenIds;
+    const int rowCount = m_strategies->rowCount();
+    for (int row = 0; row < rowCount; ++row) {
+        const QString typeId = m_strategies->data(
+            m_strategies->index(row, GenStrategyTable::COL_PAGE_TYPE)).toString();
+        const QList<PageRecord> pages =
+            pageRepo.findByGenerationState(typeId, PageGenerationState::Complete);
+        for (const PageRecord &p : std::as_const(pages)) {
+            if (!seenIds.contains(p.id)) {
+                seenIds.insert(p.id);
+                candidates.append(p);
+            }
+        }
+    }
+
+    std::sort(candidates.begin(), candidates.end(),
+              [](const PageRecord &a, const PageRecord &b) {
+                  return a.id < b.id;
+              });
+
+    if (candidates.isEmpty()) {
+        QMessageBox::information(
+            this,
+            tr("Generate Phase 2"),
+            tr("No Complete pages found. Run the first-pass generation before phase 2."));
+        return;
+    }
+
+    DialogGeneratePhase2 dlg(candidates, this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const QList<int> selectedIds = dlg.selectedPageIds();
+    if (selectedIds.isEmpty()) {
+        return;
+    }
+
+    for (int id : std::as_const(selectedIds)) {
+        pageRepo.setFlag(id, PageFlag::SocialMedia, true);
+    }
+
+    _startProcess({
+        QStringLiteral("--") + AbstractLauncher::OPTION_WORKING_DIR,
+        m_workingDir.absolutePath(),
+        QStringLiteral("--") + LauncherGeneration::OPTION_NAME,
+        QStringLiteral("--") + LauncherGeneration::OPTION_SESSIONS, QStringLiteral("1"),
+        QStringLiteral("--") + LauncherGeneration::OPTION_RETRY_ONLY
+    });
+}
+
+void PaneGeneration::_startProcess(const QStringList &args)
+{
+    if (m_activeProcess) {
+        return; // already running
+    }
+
+    const QString exe = QCoreApplication::applicationFilePath();
 
     m_lastOkPermalink.clear();
-
     ui->textEditOutput->clear();
     ui->textEditOutput->append(tr("Running: %1 %2\n").arg(exe, args.join(QLatin1Char(' '))));
-
     ui->progressBarGeneration->setVisible(true);
     ui->buttonGenOne->setEnabled(false);
+    ui->buttonGenCustomTopic->setEnabled(false);
+    ui->buttonGeneratePhase2->setEnabled(false);
 
     auto *process = new QProcess(this);
     m_activeProcess = process;
+
     connect(process, &QProcess::readyReadStandardOutput, this, [this, process]() {
         const QString text = QString::fromUtf8(process->readAllStandardOutput());
         ui->textEditOutput->insertPlainText(text);
@@ -159,6 +275,8 @@ void PaneGeneration::generateOne()
                 m_activeProcess = nullptr;
                 ui->progressBarGeneration->setVisible(false);
                 ui->buttonGenOne->setEnabled(true);
+                ui->buttonGenCustomTopic->setEnabled(true);
+                ui->buttonGeneratePhase2->setEnabled(true);
                 const QString statusMsg = (exitStatus == QProcess::CrashExit)
                     ? tr("\nProcess CRASHED (signal %1) — run the generation command in a "
                          "terminal for a backtrace.").arg(exitCode)
@@ -178,6 +296,7 @@ void PaneGeneration::generateOne()
                 }
                 process->deleteLater();
             });
+
     process->start(exe, args);
 }
 
@@ -233,8 +352,9 @@ void PaneGeneration::computeRemainingToDo()
             // then count only generated pages whose permalink matches a topic.
             // This ensures manually-added pages that have no corresponding DB topic
             // are never counted as "done".
+            const QString endPermalink = m_strategies->endPermalinkForRow(row);
             const QString conn = QStringLiteral("pane_count_row_") + QString::number(row);
-            QSet<QString> expectedPermalinks;
+            QStringList topicNames;
             int dbCount = 0;
             {
                 QSqlDatabase db =
@@ -263,20 +383,15 @@ void PaneGeneration::computeRemainingToDo()
                         topicQ.exec(QStringLiteral("SELECT ") + nameColumn
                                     + QStringLiteral(" FROM records"));
                         while (topicQ.next()) {
-                            const QString name = topicQ.value(0).toString().trimmed();
-                            if (!name.isEmpty()) {
-                                const QString slug = makeTopicSlug(name);
-                                if (!slug.isEmpty()) {
-                                    expectedPermalinks.insert(
-                                        QLatin1Char('/') + slug);
-                                }
-                            }
+                            topicNames.append(topicQ.value(0).toString());
                         }
                     }
                 }
             }
             QSqlDatabase::removeDatabase(conn);
 
+            const QSet<QString> expectedPermalinks =
+                PageRepositoryDb::buildExpectedPermalinks(topicNames, endPermalink);
             nTotal = dbCount;
             done   = pageRepo.countGeneratedMatchingPermalinks(typeId,
                                                                 expectedPermalinks);
@@ -337,6 +452,7 @@ void PaneGeneration::_onStrategySelectionChanged(const QModelIndex &current,
 
     if (!hasSelection) {
         ui->buttonGenOne->setEnabled(false);
+        ui->buttonGenCustomTopic->setEnabled(false);
         ui->buttonCommandGen->setEnabled(false);
         ui->buttonLinkDb->setEnabled(false);
         ui->textEditPrompt->clear();
@@ -352,6 +468,7 @@ void PaneGeneration::_onStrategySelectionChanged(const QModelIndex &current,
     const bool dbReady = !needsDb || !resolvedDb.isEmpty();
 
     ui->buttonGenOne->setEnabled(dbReady);
+    ui->buttonGenCustomTopic->setEnabled(true); // no DB required: topic is supplied by the user
     ui->buttonCommandGen->setEnabled(dbReady);
     ui->buttonLinkDb->setEnabled(true); // always allow picking/changing the linked DB
 
@@ -367,12 +484,13 @@ void PaneGeneration::_onStrategySelectionChanged(const QModelIndex &current,
         return m_strategies->data(m_strategies->index(row, c)).toString();
     };
 
-    paramRows.append({ tr("Name"),         colVal(GenStrategyTable::COL_NAME) });
-    paramRows.append({ tr("Page type"),    colVal(GenStrategyTable::COL_PAGE_TYPE) });
-    paramRows.append({ tr("Theme"),        colVal(GenStrategyTable::COL_THEME) });
-    paramRows.append({ tr("Images"),       colVal(GenStrategyTable::COL_NON_SVG_IMAGES) });
-    paramRows.append({ tr("Source table"), colVal(GenStrategyTable::COL_PRIMARY_ATTR_ID) });
-    paramRows.append({ tr("Priority"),     colVal(GenStrategyTable::COL_PRIORITY) });
+    paramRows.append({ tr("Name"),              colVal(GenStrategyTable::COL_NAME) });
+    paramRows.append({ tr("Page type"),         colVal(GenStrategyTable::COL_PAGE_TYPE) });
+    paramRows.append({ tr("Theme"),             colVal(GenStrategyTable::COL_THEME) });
+    paramRows.append({ tr("Images"),            colVal(GenStrategyTable::COL_NON_SVG_IMAGES) });
+    paramRows.append({ tr("Source table"),      colVal(GenStrategyTable::COL_PRIMARY_ATTR_ID) });
+    paramRows.append({ tr("Priority"),          colVal(GenStrategyTable::COL_PRIORITY) });
+    paramRows.append({ tr("Post permalink"),    colVal(GenStrategyTable::COL_END_PERMALINK) });
     {
         const QString done  = colVal(GenStrategyTable::COL_N_DONE);
         const QString total = colVal(GenStrategyTable::COL_N_TOTAL);
@@ -425,10 +543,18 @@ void PaneGeneration::_connectSlots()
             &QPushButton::clicked,
             this,
             &PaneGeneration::generateOne);
+    connect(ui->buttonGenCustomTopic,
+            &QPushButton::clicked,
+            this,
+            &PaneGeneration::generateCustomTopic);
     connect(ui->buttonCommandGen,
             &QPushButton::clicked,
             this,
             &PaneGeneration::viewGenCommand);
+    connect(ui->buttonGeneratePhase2,
+            &QPushButton::clicked,
+            this,
+            &PaneGeneration::generatePhase2);
     connect(ui->buttonComputeRemaining,
             &QPushButton::clicked,
             this,

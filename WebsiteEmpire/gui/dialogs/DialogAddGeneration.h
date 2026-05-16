@@ -24,7 +24,7 @@ class DialogAddGeneration;
 // table is selected by default.  The user can always change the selection.
 //
 // After accept(), read the result via name(), pageTypeId(), themeId(),
-// nonSvgImages(), primaryAttrId(), and customInstructions().
+// nonSvgImages(), primaryAttrId(), endPermalink(), and customInstructions().
 class DialogAddGeneration : public QDialog
 {
     Q_OBJECT
@@ -37,6 +37,7 @@ public:
     QString pageTypeId()         const;
     QString themeId()            const; // empty = all themes
     QString primaryAttrId()      const; // empty = no source table linked
+    QString endPermalink()       const; // empty = no suffix
     QString customInstructions() const; // empty = use generic prompt
     bool    nonSvgImages()       const;
 

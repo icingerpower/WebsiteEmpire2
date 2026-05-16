@@ -16,6 +16,9 @@ namespace Ui { class PaneGeneration; }
  *
  * "Generate one" and "View gen. command" require both a selected strategy and
  * a valid linked aspire DB (when the strategy has a source table configured).
+ * "Custom topic" bypasses the source DB: the user types any topic name, the
+ * launcher slugifies it (applying the strategy's endPermalink suffix) and
+ * generates exactly one page.  Requires a selected strategy but not a linked DB.
  * "Link to DB" opens a file picker and persists the path in strategies.json so
  * the launcher can find it without GUI interaction.
  * The DB path validity is re-checked on every strategy selection, so a file
@@ -45,6 +48,8 @@ public slots:
     void addGeneration();
     void removeGeneration();
     void generateOne();
+    void generateCustomTopic();
+    void generatePhase2();
     void viewGenCommand();
     void computeRemainingToDo();
     void linkDb();
@@ -55,6 +60,13 @@ private slots:
 
 private:
     void _connectSlots();
+
+    /**
+     * Shared subprocess launcher used by generateOne() and generateCustomTopic().
+     * Disables the generation buttons, streams output to textEditOutput, and
+     * re-enables them on completion.  Calls computeRemainingToDo() when done.
+     */
+    void _startProcess(const QStringList &args);
 
     /**
      * Reads textEditPrompt and persists it to the currently selected strategy row.

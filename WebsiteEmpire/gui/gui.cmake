@@ -42,6 +42,9 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddGeneration.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddGeneration.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddGeneration.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogGeneratePhase2.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogGeneratePhase2.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogGeneratePhase2.ui
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddUpdateStrategy.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddUpdateStrategy.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogAddUpdateStrategy.ui

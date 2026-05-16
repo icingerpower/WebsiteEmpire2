@@ -5,11 +5,12 @@
 
 #include <QFile>
 #include <QJsonArray>
+#include <QRegularExpression>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUuid>
 
-static constexpr int COLUMN_COUNT = 8;
+static constexpr int COLUMN_COUNT = 9;
 
 static const QString JSON_KEY_ID                   = QStringLiteral("id");
 static const QString JSON_KEY_NAME                 = QStringLiteral("name");
@@ -18,6 +19,7 @@ static const QString JSON_KEY_THEME_ID             = QStringLiteral("themeId");
 static const QString JSON_KEY_CUSTOM_INSTRUCTIONS  = QStringLiteral("customInstructions");
 static const QString JSON_KEY_PRIMARY_ATTR_ID      = QStringLiteral("primaryAttrId");
 static const QString JSON_KEY_PRIMARY_DB_PATH      = QStringLiteral("primaryDbPath");
+static const QString JSON_KEY_END_PERMALINK        = QStringLiteral("endPermalink");
 static const QString JSON_KEY_NON_SVG_IMAGES       = QStringLiteral("nonSvgImages");
 static const QString JSON_KEY_PRIORITY             = QStringLiteral("priority");
 static const QString JSON_KEY_N_DONE               = QStringLiteral("nDone");
@@ -38,6 +40,7 @@ QString GenStrategyTable::addRow(const QString &name,
                                   const QString &customInstructions,
                                   bool           nonSvgImages,
                                   const QString &primaryAttrId,
+                                  const QString &endPermalink,
                                   int            priority)
 {
     const int row = m_rows.size();
@@ -49,6 +52,7 @@ QString GenStrategyTable::addRow(const QString &name,
     newRow.themeId            = themeId;
     newRow.customInstructions = customInstructions;
     newRow.primaryAttrId      = primaryAttrId;
+    newRow.endPermalink       = endPermalink.trimmed().toLower();
     newRow.nonSvgImages       = nonSvgImages;
     newRow.priority           = qMax(1, priority);
     m_rows.append(newRow);
@@ -115,6 +119,32 @@ void GenStrategyTable::setPrimaryDbPath(int row, const QString &path)
         return;
     }
     m_rows[row].primaryDbPath = path;
+    _save();
+}
+
+QString GenStrategyTable::endPermalinkForRow(int row) const
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return {};
+    }
+    // Normalise: trim, collapse runs of whitespace/hyphens to a single hyphen,
+    // lowercase — so "Genes Biomarkers" and "genes-biomarkers" both work.
+    QString v = m_rows.at(row).endPermalink.trimmed().toLower();
+    v.replace(QRegularExpression(QStringLiteral("[\\s\\-]+")), QStringLiteral("-"));
+    return v;
+}
+
+void GenStrategyTable::setEndPermalink(int row, const QString &value)
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return;
+    }
+    if (m_rows.at(row).endPermalink == value) {
+        return;
+    }
+    m_rows[row].endPermalink = value;
+    const QModelIndex idx = index(row, COL_END_PERMALINK);
+    emit dataChanged(idx, idx, {Qt::DisplayRole, Qt::EditRole});
     _save();
 }
 
@@ -196,6 +226,10 @@ QVariant GenStrategyTable::data(const QModelIndex &index, int role) const
         return row.id;
     }
 
+    if (role == Qt::EditRole && index.column() == COL_END_PERMALINK) {
+        return row.endPermalink;
+    }
+
     if (role == Qt::DisplayRole) {
         switch (index.column()) {
         case COL_NAME:      return row.name;
@@ -223,6 +257,7 @@ QVariant GenStrategyTable::data(const QModelIndex &index, int role) const
             }
             return row.primaryAttrId; // fallback: raw id
         }
+        case COL_END_PERMALINK: return row.endPermalink;
         case COL_N_DONE:  return row.nDone;
         case COL_N_TOTAL: return row.nTotal;
         default:          break;
@@ -244,6 +279,7 @@ QVariant GenStrategyTable::headerData(int section, Qt::Orientation orientation, 
     case COL_NON_SVG_IMAGES:  return tr("Non-svg images");
     case COL_PRIMARY_ATTR_ID: return tr("Source table");
     case COL_PRIORITY:        return tr("Priority");
+    case COL_END_PERMALINK:   return tr("End permalink");
     case COL_N_DONE:          return tr("N done");
     case COL_N_TOTAL:         return tr("N total");
     default:                  return {};
@@ -255,7 +291,23 @@ Qt::ItemFlags GenStrategyTable::flags(const QModelIndex &index) const
     if (!index.isValid()) {
         return Qt::NoItemFlags;
     }
-    return QAbstractItemModel::flags(index);
+    Qt::ItemFlags f = QAbstractItemModel::flags(index);
+    if (index.column() == COL_END_PERMALINK) {
+        f |= Qt::ItemIsEditable;
+    }
+    return f;
+}
+
+bool GenStrategyTable::setData(const QModelIndex &index, const QVariant &value, int role)
+{
+    if (!index.isValid() || role != Qt::EditRole) {
+        return false;
+    }
+    if (index.column() == COL_END_PERMALINK) {
+        setEndPermalink(index.row(), value.toString().trimmed().toLower());
+        return true;
+    }
+    return false;
 }
 
 bool GenStrategyTable::removeRows(int row, int count, const QModelIndex &parent)
@@ -303,6 +355,7 @@ void GenStrategyTable::_load()
         row.customInstructions = obj.value(JSON_KEY_CUSTOM_INSTRUCTIONS).toString();
         row.primaryAttrId      = obj.value(JSON_KEY_PRIMARY_ATTR_ID).toString();
         row.primaryDbPath      = obj.value(JSON_KEY_PRIMARY_DB_PATH).toString();
+        row.endPermalink       = obj.value(JSON_KEY_END_PERMALINK).toString();
         row.nonSvgImages       = obj.value(JSON_KEY_NON_SVG_IMAGES).toBool(false);
         row.priority           = obj.value(JSON_KEY_PRIORITY).toInt(1);
         row.nDone              = obj.value(JSON_KEY_N_DONE).toInt(0);
@@ -329,6 +382,7 @@ void GenStrategyTable::_save() const
         obj.insert(JSON_KEY_CUSTOM_INSTRUCTIONS, row.customInstructions);
         obj.insert(JSON_KEY_PRIMARY_ATTR_ID,     row.primaryAttrId);
         obj.insert(JSON_KEY_PRIMARY_DB_PATH,     row.primaryDbPath);
+        obj.insert(JSON_KEY_END_PERMALINK,       row.endPermalink);
         obj.insert(JSON_KEY_NON_SVG_IMAGES,      row.nonSvgImages);
         obj.insert(JSON_KEY_PRIORITY,            row.priority);
         obj.insert(JSON_KEY_N_DONE,              row.nDone);

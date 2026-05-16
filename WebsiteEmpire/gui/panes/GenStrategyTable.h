@@ -26,8 +26,9 @@ public:
     static constexpr int COL_NON_SVG_IMAGES   = 3;
     static constexpr int COL_PRIMARY_ATTR_ID  = 4; // AbstractPageAttributes::getId() of the aspire primary table
     static constexpr int COL_PRIORITY         = 5; // generation priority: 1 = first (normal), 2+ = improvement passes
-    static constexpr int COL_N_DONE           = 6;
-    static constexpr int COL_N_TOTAL          = 7;
+    static constexpr int COL_END_PERMALINK    = 6; // URL slug suffix appended to every generated page (e.g. "genes-biomarkers")
+    static constexpr int COL_N_DONE           = 7;
+    static constexpr int COL_N_TOTAL          = 8;
 
     explicit GenStrategyTable(const QDir &workingDir, QObject *parent = nullptr);
 
@@ -42,7 +43,8 @@ public:
                    const QString &themeId,
                    const QString &customInstructions,
                    bool           nonSvgImages,
-                   const QString &primaryAttrId = QString{},
+                   const QString &primaryAttrId  = QString{},
+                   const QString &endPermalink   = QString{},
                    int            priority = 1);
 
     // Updates the progress counters for a row and saves.  Used by
@@ -63,6 +65,15 @@ public:
     // Replaces the custom instructions for visual row and saves strategies.json.
     // No-op when the value has not changed or the row is out of range.
     void setCustomInstructions(int row, const QString &instructions);
+
+    // Returns the endPermalink slug suffix for visual row (empty = no suffix).
+    // The value is appended with a hyphen to the generated page slug,
+    // e.g. endPermalink "genes-biomarkers" + page slug "knee-pain" → "knee-pain-genes-biomarkers".
+    QString endPermalinkForRow(int row) const;
+
+    // Replaces the endPermalink for visual row and saves strategies.json.
+    // No-op when the value has not changed or the row is out of range.
+    void setEndPermalink(int row, const QString &value);
 
     // Returns the primaryAttrId for visual row (empty = no source table linked).
     QString primaryAttrIdForRow(int row) const;
@@ -87,6 +98,7 @@ public:
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
     Qt::ItemFlags flags(const QModelIndex &index) const override;
+    bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override;
     bool removeRows(int row, int count, const QModelIndex &parent = QModelIndex()) override;
 
 private:
@@ -98,6 +110,7 @@ private:
         QString customInstructions;  // empty = use generic prompt
         QString primaryAttrId;       // AbstractPageAttributes::getId() of the aspire primary table; empty = none
         QString primaryDbPath;       // absolute path to the aspire DB file; empty = use results_db/ convention
+        QString endPermalink;        // URL slug suffix appended to generated pages; empty = no suffix
         bool    nonSvgImages = false;
         int     priority = 1;
         int     nDone  = 0;

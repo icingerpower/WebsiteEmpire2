@@ -110,6 +110,11 @@ QString DialogAddGeneration::primaryAttrId() const
     return ui->comboBoxPrimaryTable->currentData().toString();
 }
 
+QString DialogAddGeneration::endPermalink() const
+{
+    return ui->lineEditEndPermalink->text().trimmed().toLower();
+}
+
 QString DialogAddGeneration::customInstructions() const
 {
     return ui->plainTextEditInstructions->toPlainText().trimmed();

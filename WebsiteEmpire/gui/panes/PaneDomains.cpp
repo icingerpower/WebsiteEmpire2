@@ -399,6 +399,10 @@ void PaneDomains::deployLocally()
         // dirty set so the Generated Pages pane reflects "Ready" on next open.
         hubDirtySet.clear();
 
+        // Mark all fully-generated pages as published so that subsequent
+        // permalink changes create history entries for redirect generation.
+        pageRepo.markAllCompleteAsPublished();
+
         // Copy content.db to the deploy folder
         _deployLocallyImpl();
 

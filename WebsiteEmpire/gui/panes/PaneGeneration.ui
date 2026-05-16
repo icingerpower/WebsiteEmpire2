@@ -159,6 +159,19 @@
           </widget>
          </item>
          <item>
+          <widget class="QPushButton" name="buttonGenCustomTopic">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="toolTip">
+            <string>Generate one page for a topic you type — bypasses the source database</string>
+           </property>
+           <property name="text">
+            <string>Custom topic</string>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QPushButton" name="buttonCommandGen">
            <property name="enabled">
             <bool>false</bool>
@@ -168,6 +181,19 @@
            </property>
            <property name="text">
             <string>View gen. command</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="buttonGeneratePhase2">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="toolTip">
+            <string>Run the social-media second pass on selected Complete articles</string>
+           </property>
+           <property name="text">
+            <string>Generate phase 2</string>
            </property>
           </widget>
          </item>
