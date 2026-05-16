@@ -60,6 +60,11 @@ void PageController::servePage(const drogon::HttpRequestPtr                     
                 auto resp = drogon::HttpResponse::newHttpResponse();
                 resp->setStatusCode(static_cast<drogon::HttpStatusCode>(410));
                 callback(resp);
+            } else if (redirectOpt->statusCode == 302) {
+                auto resp = drogon::HttpResponse::newHttpResponse();
+                resp->setStatusCode(drogon::k302Found);
+                resp->addHeader("Location", redirectOpt->newPath);
+                callback(resp);
             } else {
                 auto resp = drogon::HttpResponse::newHttpResponse();
                 resp->setStatusCode(drogon::k301MovedPermanently);
