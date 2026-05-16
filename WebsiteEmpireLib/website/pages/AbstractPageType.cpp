@@ -253,8 +253,50 @@ void AbstractPageType::addCode(QStringView     origContent,
         baseCss += primary;
         baseCss += QStringLiteral("}");
         baseCss += QStringLiteral(".page-content img{max-width:100%;height:auto}");
+
+        // Lightbox — cursor hint on images inside page content
+        baseCss += QStringLiteral(".page-content img[src]{cursor:zoom-in}");
+        // Native <dialog> lightbox overlay
+        baseCss += QStringLiteral("#img-lightbox{"
+            "padding:0;background:transparent;border:none;"
+            "max-width:100vw;max-height:100vh}");
+        baseCss += QStringLiteral("#img-lightbox::backdrop{"
+            "background:rgba(0,0,0,.85);cursor:zoom-out}");
+        baseCss += QStringLiteral("#img-lightbox img{"
+            "display:block;max-width:min(90vw,1200px);max-height:90vh;"
+            "object-fit:contain;cursor:zoom-out;border-radius:4px}");
+        baseCss += QStringLiteral("#img-lightbox__close{"
+            "position:fixed;top:1rem;right:1.25rem;"
+            "background:none;border:none;color:#fff;"
+            "font-size:2rem;line-height:1;cursor:pointer;padding:.25rem .5rem;"
+            "opacity:.8;transition:opacity .15s}"
+            "#img-lightbox__close:hover{opacity:1}");
+
         innerCss = baseCss + innerCss;
     }
+
+    // Lightbox HTML + JS — injected once per page at the page-type level.
+    bodyHtml += QStringLiteral(
+        "<dialog id=\"img-lightbox\" aria-label=\"Image zoom\">"
+        "<button id=\"img-lightbox__close\" aria-label=\"Close\">×</button>"
+        "<img id=\"img-lightbox__img\" src=\"\" alt=\"\">"
+        "</dialog>");
+    innerJs += QStringLiteral("(function(){"
+        "var dlg=document.getElementById('img-lightbox');"
+        "var img=document.getElementById('img-lightbox__img');"
+        "var btn=document.getElementById('img-lightbox__close');"
+        "if(!dlg||!img)return;"
+        "document.querySelectorAll('.page-content img[src]').forEach(function(el){"
+            "el.addEventListener('click',function(){"
+                "img.src=el.src;img.alt=el.alt||'';"
+                "dlg.showModal()"
+            "})"
+        "});"
+        "function close(){dlg.close();img.src=''}"
+        "dlg.addEventListener('click',function(e){if(e.target===dlg)close()});"
+        "img.addEventListener('click',close);"
+        "if(btn)btn.addEventListener('click',close)"
+        "})();");
 
     // <head> extras: viewport meta + optional web font stylesheet
     QString headExtra = QStringLiteral("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
