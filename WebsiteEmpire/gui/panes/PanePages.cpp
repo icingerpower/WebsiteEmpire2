@@ -8,7 +8,10 @@
 #include "website/pages/PageTypeCategory.h"
 #include "website/pages/PageTypeHome.h"
 #include "website/pages/PageTypeLegal.h"
+#include "website/pages/PageFlag.h"
+#include "website/pages/PageGenerationState.h"
 #include "website/pages/PageRecord.h"
+#include "website/pages/PageStateFormatter.h"
 #include "website/WebsiteSettingsTable.h"
 #include "website/pages/PageDb.h"
 #include "website/pages/PageRepositoryDb.h"
@@ -42,6 +45,22 @@ public:
     Qt::ItemFlags flags(const QModelIndex &index) const override
     {
         return QSortFilterProxyModel::flags(index) | Qt::ItemIsEditable;
+    }
+
+    QVariant data(const QModelIndex &index, int role) const override
+    {
+        if (role == Qt::DisplayRole) {
+            const int col = index.column();
+            if (col == 5) {
+                return PageStateFormatter::formatGenerationState(
+                    QSortFilterProxyModel::data(index, role).toInt());
+            }
+            if (col == 6) {
+                return PageStateFormatter::formatFlags(
+                    static_cast<quint32>(QSortFilterProxyModel::data(index, role).toInt()));
+            }
+        }
+        return QSortFilterProxyModel::data(index, role);
     }
 };
 
@@ -245,6 +264,7 @@ void PanePages::generateLegalPages()
                 data.insert(QLatin1String(AbstractLegalPageDef::PAGE_DATA_KEY_DEF_ID), defId);
                 data.insert(QStringLiteral("1_text"), def->generateTextContent(legalInfo));
                 m_pageRepo->saveData(pid, data);
+                m_pageRepo->setGenerationState(pid, PageGenerationState::Complete);
             }
         } else {
             // New page: create, stamp with the def ID, and populate with generated content.
@@ -257,6 +277,7 @@ void PanePages::generateLegalPages()
             // "1_text" = bloc index 1 (PageBlocText), key PageBlocText::KEY_TEXT = "text".
             data.insert(QStringLiteral("1_text"), def->generateTextContent(legalInfo));
             m_pageRepo->saveData(newId, data);
+            m_pageRepo->setGenerationState(newId, PageGenerationState::Complete);
         }
     }
 
@@ -365,6 +386,42 @@ void PanePages::copyUrl()
     QGuiApplication::clipboard()->setText(url);
 }
 
+void PanePages::toggleSocialMedia()
+{
+    const QList<int> ids = _selectedPageIds();
+    if (ids.isEmpty()) {
+        QMessageBox::warning(this, tr("No selection"), tr("Please select at least one page."));
+        return;
+    }
+    if (!m_pageRepo) {
+        return;
+    }
+
+    // Determine the toggle direction: enable for all if any are missing the flag,
+    // disable for all if every selected page already has it.
+    bool anyWithout = false;
+    for (int id : std::as_const(ids)) {
+        const auto &rec = m_pageRepo->findById(id);
+        if (rec && !(rec->flags & static_cast<quint32>(PageFlag::SocialMedia))) {
+            anyWithout = true;
+            break;
+        }
+    }
+    const bool enable = anyWithout;
+
+    for (int id : std::as_const(ids)) {
+        m_pageRepo->setFlag(id, PageFlag::SocialMedia, enable);
+    }
+
+    _refreshModel();
+
+    const QString msg = enable
+        ? tr("Social-media flag enabled for %n page(s). The next --generation run will "
+             "generate social-media image variants.", nullptr, ids.size())
+        : tr("Social-media flag disabled for %n page(s).", nullptr, ids.size());
+    QMessageBox::information(this, tr("Social Media"), msg);
+}
+
 void PanePages::viewCommandTranslate()
 {
     const QString cmd = QStringLiteral("WebsiteEmpire --%1 \"%2\" --%3")
@@ -405,7 +462,8 @@ void PanePages::_connectSlots()
     connect(ui->buttonTranslate,    &QPushButton::clicked, this, &PanePages::translate);
     connect(ui->buttonViewCommandTranslate,    &QPushButton::clicked, this, &PanePages::viewCommandTranslate);
     connect(ui->buttonFilter,      &QPushButton::clicked, this, &PanePages::_applyTypeFilter);
-    connect(ui->buttonCopyUrl,     &QPushButton::clicked, this, &PanePages::copyUrl);
+    connect(ui->buttonCopyUrl,          &QPushButton::clicked, this, &PanePages::copyUrl);
+    connect(ui->buttonToggleSocialMedia, &QPushButton::clicked, this, &PanePages::toggleSocialMedia);
     connect(ui->buttonResetFilter, &QPushButton::clicked, this, [this]() {
         ui->comboBoxPageType->setCurrentIndex(0);
         _applyTypeFilter();
@@ -448,7 +506,7 @@ void PanePages::_refreshModel()
     }
     m_model->setQuery(
         QStringLiteral(
-            "SELECT id, type_id, permalink, lang, updated_at FROM pages"
+            "SELECT id, type_id, permalink, lang, updated_at, generation_state, flags FROM pages"
             " WHERE type_id != 'category_hub' ORDER BY id"),
         m_pageDb->database());
     m_model->setHeaderData(0, Qt::Horizontal, tr("ID"));
@@ -456,6 +514,8 @@ void PanePages::_refreshModel()
     m_model->setHeaderData(2, Qt::Horizontal, tr("Permalink"));
     m_model->setHeaderData(3, Qt::Horizontal, tr("Lang"));
     m_model->setHeaderData(4, Qt::Horizontal, tr("Updated"));
+    m_model->setHeaderData(5, Qt::Horizontal, tr("State"));
+    m_model->setHeaderData(6, Qt::Horizontal, tr("Flags"));
     if (m_model->rowCount() > 0 && !m_resizedOnce) {
         ui->tableViewPages->resizeColumnsToContents();
         m_resizedOnce = true;

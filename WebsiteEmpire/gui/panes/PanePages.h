@@ -53,6 +53,7 @@ public slots:
     void translate();
     void viewCommandTranslate();
     void copyUrl();
+    void toggleSocialMedia();
 
     void setVisible(bool visible) override;
 

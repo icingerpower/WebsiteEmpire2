@@ -127,6 +127,16 @@
       </widget>
      </item>
      <item>
+      <widget class="QPushButton" name="buttonToggleSocialMedia">
+       <property name="toolTip">
+        <string>Enable or disable the social-media second-pass flag for the selected page(s). When enabled, the next --generation run will generate social-media image variants.</string>
+       </property>
+       <property name="text">
+        <string>Toggle social media</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <spacer name="horizontalSpacerFilter">
        <property name="orientation">
         <enum>Qt::Orientation::Horizontal</enum>
