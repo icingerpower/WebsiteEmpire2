@@ -51,6 +51,7 @@ void CommonBlocMenuBottom::addCode(QStringView     origContent,
             "color:inherit;font-size:.875em}");
         css += QStringLiteral(".nav-bottom__link:hover,.nav-bottom__link:focus{"
             "text-decoration:underline}");
+        css += QStringLiteral(".nav-bottom__link--important{font-weight:700}");
     }
 
     // -------------------------------------------------------------------------
@@ -60,7 +61,9 @@ void CommonBlocMenuBottom::addCode(QStringView     origContent,
                            " aria-label=\"Footer navigation\">");
     html += QStringLiteral("<ul class=\"nav-bottom__list\">");
     for (const auto &item : std::as_const(m_items)) {
-        html += QStringLiteral("<li><a class=\"nav-bottom__link\" href=\"");
+        html += item.important
+            ? QStringLiteral("<li><a class=\"nav-bottom__link nav-bottom__link--important\" href=\"")
+            : QStringLiteral("<li><a class=\"nav-bottom__link\" href=\"");
         html += item.url.toHtmlEscaped();
         html += QStringLiteral("\"");
         const QString itemRel = buildRel(item.rel, item.newTab);
