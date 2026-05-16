@@ -8,15 +8,19 @@
 #include "website/pages/attributes/CategoryTable.h"
 
 #include <QBuffer>
+#include <QDesktopServices>
 #include <QFile>
 #include <QImage>
 #include <QListWidgetItem>
 #include <QPainter>
+#include <QPushButton>
 #include <QRegularExpression>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QSvgRenderer>
+#include <QTextStream>
+#include <QUrl>
 
 DialogPreviewPage::DialogPreviewPage(IPageRepository &repo,
                                      CategoryTable   &categoryTable,
@@ -34,7 +38,8 @@ DialogPreviewPage::DialogPreviewPage(IPageRepository &repo,
     ui->setupUi(this);
     ui->splitter->setSizes({150, 950});
 
-    connect(ui->buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(ui->buttonBox,    &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(ui->btnOpenBrowser, &QPushButton::clicked, this, &DialogPreviewPage::_onOpenInBrowser);
     connect(ui->listLanguages, &QListWidget::currentRowChanged,
             this, &DialogPreviewPage::_onLanguageSelected);
 
@@ -231,6 +236,27 @@ void DialogPreviewPage::_renderPage(const PreviewEntry &entry)
 
     setWindowTitle(tr("Preview — %1 [%2]").arg(rec->permalink, entry.lang));
     ui->textBrowser->setHtml(fullHtml);
+
+    // Write to temp file so "Open in browser" can show accurate CSS rendering.
+    m_tempHtmlPath = QDir::tempPath()
+                   + QStringLiteral("/website_empire_preview_")
+                   + entry.lang
+                   + QStringLiteral(".html");
+    QFile f(m_tempHtmlPath);
+    if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&f);
+        out << fullHtml;
+    } else {
+        m_tempHtmlPath.clear();
+    }
+    ui->btnOpenBrowser->setEnabled(!m_tempHtmlPath.isEmpty());
+}
+
+void DialogPreviewPage::_onOpenInBrowser()
+{
+    if (!m_tempHtmlPath.isEmpty()) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(m_tempHtmlPath));
+    }
 }
 
 void DialogPreviewPage::_inlineSvgs(QString &html, const QString &lang)

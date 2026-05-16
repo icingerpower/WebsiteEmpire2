@@ -32,11 +32,35 @@
     </widget>
    </item>
    <item>
-    <widget class="QDialogButtonBox" name="buttonBox">
-     <property name="standardButtons">
-      <set>QDialogButtonBox::StandardButton::Close</set>
-     </property>
-    </widget>
+    <layout class="QHBoxLayout" name="hboxBottom">
+     <item>
+      <widget class="QPushButton" name="btnOpenBrowser">
+       <property name="text">
+        <string>Open in browser</string>
+       </property>
+       <property name="toolTip">
+        <string>Open current page in the system browser for accurate CSS rendering</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="hspacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size><width>40</width><height>20</height></size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QDialogButtonBox" name="buttonBox">
+       <property name="standardButtons">
+        <set>QDialogButtonBox::StandardButton::Close</set>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
   </layout>
  </widget>

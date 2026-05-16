@@ -54,6 +54,7 @@ public:
 
 private slots:
     void _onLanguageSelected(int row);
+    void _onOpenInBrowser();
 
 private:
     struct PreviewEntry {
@@ -75,6 +76,7 @@ private:
     CategoryTable         &m_categoryTable;
     AbstractEngine        &m_engine;
     QDir                   m_workingDir;
+    QString                m_tempHtmlPath; ///< last HTML written for "Open in browser"
 
     QList<PreviewEntry> m_entries; // parallel to listLanguages rows
 };
