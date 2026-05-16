@@ -30,7 +30,7 @@ class WidgetCommonBlocMenu : public AbstractCommonBlocWidget
 {
     Q_OBJECT
 
-    enum Column { COL_LABEL = 0, COL_URL = 1, COL_NEWTAB = 2, COL_REL = 3 };
+    enum Column { COL_LABEL = 0, COL_URL = 1, COL_NEWTAB = 2, COL_REL = 3, COL_IMPORTANT = 4 };
 
 public:
     explicit WidgetCommonBlocMenu(QWidget *parent = nullptr);
@@ -53,7 +53,8 @@ private:
     void setupLegalPagesMenu();
     void addLegalPageItem(const QString &label, const QString &url);
     void populateTreeItem(QTreeWidgetItem *treeItem, const QString &label,
-                          const QString &url, bool newTab, const QString &rel);
+                          const QString &url, bool newTab, const QString &rel,
+                          bool important);
     MenuItem extractMenuItem(QTreeWidgetItem *treeItem) const;
 
     Ui::WidgetCommonBlocMenu *ui;

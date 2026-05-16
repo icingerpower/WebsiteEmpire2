@@ -42,6 +42,11 @@
        <string>Rel</string>
       </property>
      </column>
+     <column>
+      <property name="text">
+       <string>Important</string>
+      </property>
+     </column>
     </widget>
    </item>
    <item>

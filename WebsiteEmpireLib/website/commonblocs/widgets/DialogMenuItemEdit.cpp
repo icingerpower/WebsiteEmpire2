@@ -1,12 +1,17 @@
 #include "DialogMenuItemEdit.h"
 #include "ui_DialogMenuItemEdit.h"
 
+#include "DialogPickPage.h"
+
+#include <QToolButton>
+
 DialogMenuItemEdit::DialogMenuItemEdit(QWidget *parent)
     : QDialog(parent)
     , ui(new Ui::DialogMenuItemEdit)
 {
     ui->setupUi(this);
     setupRelCombo();
+    connect(ui->btnPickPage, &QToolButton::clicked, this, &DialogMenuItemEdit::onPickPage);
 }
 
 DialogMenuItemEdit::~DialogMenuItemEdit()
@@ -19,6 +24,7 @@ void DialogMenuItemEdit::setItem(const MenuItem &item)
     ui->lineEditLabel->setText(item.label);
     ui->lineEditUrl->setText(item.url);
     ui->checkNewTab->setChecked(item.newTab);
+    ui->checkImportant->setChecked(item.important);
 
     const int idx = ui->comboRel->findText(item.rel);
     if (idx >= 0) {
@@ -31,11 +37,24 @@ void DialogMenuItemEdit::setItem(const MenuItem &item)
 MenuItem DialogMenuItemEdit::item() const
 {
     MenuItem result;
-    result.label  = ui->lineEditLabel->text().trimmed();
-    result.url    = ui->lineEditUrl->text().trimmed();
-    result.rel    = ui->comboRel->currentText().trimmed();
-    result.newTab = ui->checkNewTab->isChecked();
+    result.label     = ui->lineEditLabel->text().trimmed();
+    result.url       = ui->lineEditUrl->text().trimmed();
+    result.rel       = ui->comboRel->currentText().trimmed();
+    result.newTab    = ui->checkNewTab->isChecked();
+    result.important = ui->checkImportant->isChecked();
     return result;
+}
+
+void DialogMenuItemEdit::onPickPage()
+{
+    DialogPickPage dlg(this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+    const QString &permalink = dlg.selectedPermalink();
+    if (!permalink.isEmpty()) {
+        ui->lineEditUrl->setText(permalink);
+    }
 }
 
 void DialogMenuItemEdit::setupRelCombo()

@@ -11,8 +11,9 @@
 struct MenuSubItem {
     QString label;
     QString url;
-    QString rel;       ///< space-separated rel tokens, e.g. "nofollow noopener"; empty = no attr
-    bool    newTab = false;
+    QString rel;        ///< space-separated rel tokens, e.g. "nofollow noopener"; empty = no attr
+    bool    newTab     = false;
+    bool    important  = false; ///< emits --important BEM modifier for visual highlighting
 };
 
 /**
@@ -26,8 +27,9 @@ struct MenuItem {
     QString            label;
     QString            url;
     QString            rel;
-    bool               newTab   = false;
-    QList<MenuSubItem> children; ///< Optional sub-menu entries; they cannot nest further
+    bool               newTab    = false;
+    bool               important = false; ///< emits --important BEM modifier for visual highlighting
+    QList<MenuSubItem> children;          ///< Optional sub-menu entries; they cannot nest further
 };
 
 #endif // MENUITEM_H

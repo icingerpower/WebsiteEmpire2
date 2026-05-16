@@ -11,6 +11,9 @@ set(COMMONBLOCS_WIDGETS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/DialogMenuItemEdit.h
     ${CMAKE_CURRENT_LIST_DIR}/DialogMenuItemEdit.cpp
     ${CMAKE_CURRENT_LIST_DIR}/DialogMenuItemEdit.ui
+    ${CMAKE_CURRENT_LIST_DIR}/DialogPickPage.h
+    ${CMAKE_CURRENT_LIST_DIR}/DialogPickPage.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/DialogPickPage.ui
     ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocMenu.h
     ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocMenu.cpp
     ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocMenu.ui

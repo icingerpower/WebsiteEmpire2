@@ -26,17 +26,19 @@ QVariantMap AbstractCommonBlocMenu::toMap() const
     QJsonArray arr;
     for (const auto &item : std::as_const(m_items)) {
         QJsonObject obj;
-        obj[QStringLiteral("label")]  = item.label;
-        obj[QStringLiteral("url")]    = item.url;
-        obj[QStringLiteral("rel")]    = item.rel;
-        obj[QStringLiteral("newTab")] = item.newTab;
+        obj[QStringLiteral("label")]     = item.label;
+        obj[QStringLiteral("url")]       = item.url;
+        obj[QStringLiteral("rel")]       = item.rel;
+        obj[QStringLiteral("newTab")]    = item.newTab;
+        obj[QStringLiteral("important")] = item.important;
         QJsonArray children;
         for (const auto &sub : std::as_const(item.children)) {
             QJsonObject subObj;
-            subObj[QStringLiteral("label")]  = sub.label;
-            subObj[QStringLiteral("url")]    = sub.url;
-            subObj[QStringLiteral("rel")]    = sub.rel;
-            subObj[QStringLiteral("newTab")] = sub.newTab;
+            subObj[QStringLiteral("label")]     = sub.label;
+            subObj[QStringLiteral("url")]       = sub.url;
+            subObj[QStringLiteral("rel")]       = sub.rel;
+            subObj[QStringLiteral("newTab")]    = sub.newTab;
+            subObj[QStringLiteral("important")] = sub.important;
             children.append(subObj);
         }
         obj[QStringLiteral("children")] = children;
@@ -58,18 +60,20 @@ void AbstractCommonBlocMenu::fromMap(const QVariantMap &map)
     for (const QJsonValue &val : arr) {
         const QJsonObject obj = val.toObject();
         MenuItem item;
-        item.label  = obj[QStringLiteral("label")].toString();
-        item.url    = obj[QStringLiteral("url")].toString();
-        item.rel    = obj[QStringLiteral("rel")].toString();
-        item.newTab = obj[QStringLiteral("newTab")].toBool();
+        item.label     = obj[QStringLiteral("label")].toString();
+        item.url       = obj[QStringLiteral("url")].toString();
+        item.rel       = obj[QStringLiteral("rel")].toString();
+        item.newTab    = obj[QStringLiteral("newTab")].toBool();
+        item.important = obj[QStringLiteral("important")].toBool();
         const QJsonArray children = obj[QStringLiteral("children")].toArray();
         for (const QJsonValue &cv : children) {
             const QJsonObject cObj = cv.toObject();
             MenuSubItem sub;
-            sub.label  = cObj[QStringLiteral("label")].toString();
-            sub.url    = cObj[QStringLiteral("url")].toString();
-            sub.rel    = cObj[QStringLiteral("rel")].toString();
-            sub.newTab = cObj[QStringLiteral("newTab")].toBool();
+            sub.label     = cObj[QStringLiteral("label")].toString();
+            sub.url       = cObj[QStringLiteral("url")].toString();
+            sub.rel       = cObj[QStringLiteral("rel")].toString();
+            sub.newTab    = cObj[QStringLiteral("newTab")].toBool();
+            sub.important = cObj[QStringLiteral("important")].toBool();
             item.children.append(sub);
         }
         m_items.append(item);

@@ -16,10 +16,11 @@ WidgetCommonBlocMenu::WidgetCommonBlocMenu(QWidget *parent)
 {
     ui->setupUi(this);
 
-    ui->treeWidget->header()->setSectionResizeMode(COL_LABEL,  QHeaderView::Stretch);
-    ui->treeWidget->header()->setSectionResizeMode(COL_URL,    QHeaderView::Stretch);
-    ui->treeWidget->header()->setSectionResizeMode(COL_NEWTAB, QHeaderView::ResizeToContents);
-    ui->treeWidget->header()->setSectionResizeMode(COL_REL,    QHeaderView::ResizeToContents);
+    ui->treeWidget->header()->setSectionResizeMode(COL_LABEL,     QHeaderView::Stretch);
+    ui->treeWidget->header()->setSectionResizeMode(COL_URL,       QHeaderView::Stretch);
+    ui->treeWidget->header()->setSectionResizeMode(COL_NEWTAB,    QHeaderView::ResizeToContents);
+    ui->treeWidget->header()->setSectionResizeMode(COL_REL,       QHeaderView::ResizeToContents);
+    ui->treeWidget->header()->setSectionResizeMode(COL_IMPORTANT, QHeaderView::ResizeToContents);
 
     connect(ui->btnAdd,      &QPushButton::clicked, this, &WidgetCommonBlocMenu::onAddItem);
     connect(ui->btnAddSub,   &QPushButton::clicked, this, &WidgetCommonBlocMenu::onAddSubItem);
@@ -53,10 +54,10 @@ void WidgetCommonBlocMenu::loadFrom(const AbstractCommonBloc &bloc)
     ui->treeWidget->clear();
     for (const auto &item : std::as_const(menu.items())) {
         auto *topItem = new QTreeWidgetItem(ui->treeWidget);
-        populateTreeItem(topItem, item.label, item.url, item.newTab, item.rel);
+        populateTreeItem(topItem, item.label, item.url, item.newTab, item.rel, item.important);
         for (const auto &sub : std::as_const(item.children)) {
             auto *subItem = new QTreeWidgetItem(topItem);
-            populateTreeItem(subItem, sub.label, sub.url, sub.newTab, sub.rel);
+            populateTreeItem(subItem, sub.label, sub.url, sub.newTab, sub.rel, sub.important);
         }
         topItem->setExpanded(true);
     }
@@ -74,10 +75,11 @@ void WidgetCommonBlocMenu::saveTo(AbstractCommonBloc &bloc) const
         for (int j = 0; j < childCount; ++j) {
             QTreeWidgetItem *childItem = topItem->child(j);
             MenuSubItem sub;
-            sub.label  = childItem->text(COL_LABEL);
-            sub.url    = childItem->text(COL_URL);
-            sub.newTab = childItem->data(COL_LABEL, Qt::UserRole).toBool();
-            sub.rel    = childItem->text(COL_REL);
+            sub.label     = childItem->text(COL_LABEL);
+            sub.url       = childItem->text(COL_URL);
+            sub.newTab    = childItem->data(COL_LABEL,     Qt::UserRole).toBool();
+            sub.rel       = childItem->text(COL_REL);
+            sub.important = childItem->data(COL_IMPORTANT, Qt::UserRole).toBool();
             item.children.append(sub);
         }
         items.append(item);
@@ -94,7 +96,7 @@ void WidgetCommonBlocMenu::onAddItem()
     }
     const MenuItem item = dlg.item();
     auto *topItem = new QTreeWidgetItem(ui->treeWidget);
-    populateTreeItem(topItem, item.label, item.url, item.newTab, item.rel);
+    populateTreeItem(topItem, item.label, item.url, item.newTab, item.rel, item.important);
     ui->treeWidget->setCurrentItem(topItem);
     updateButtonStates();
     emit changed();
@@ -115,7 +117,7 @@ void WidgetCommonBlocMenu::onAddSubItem()
     }
     const MenuItem item = dlg.item();
     auto *subItem = new QTreeWidgetItem(parentItem);
-    populateTreeItem(subItem, item.label, item.url, item.newTab, item.rel);
+    populateTreeItem(subItem, item.label, item.url, item.newTab, item.rel, item.important);
     parentItem->setExpanded(true);
     ui->treeWidget->setCurrentItem(subItem);
     emit changed();
@@ -134,7 +136,7 @@ void WidgetCommonBlocMenu::onEditItem()
         return;
     }
     const MenuItem item = dlg.item();
-    populateTreeItem(selected, item.label, item.url, item.newTab, item.rel);
+    populateTreeItem(selected, item.label, item.url, item.newTab, item.rel, item.important);
     emit changed();
 }
 
@@ -238,7 +240,7 @@ void WidgetCommonBlocMenu::setupLegalPagesMenu()
 void WidgetCommonBlocMenu::addLegalPageItem(const QString &label, const QString &url)
 {
     auto *topItem = new QTreeWidgetItem(ui->treeWidget);
-    populateTreeItem(topItem, label, url, false, QString());
+    populateTreeItem(topItem, label, url, false, QString(), false);
     ui->treeWidget->setCurrentItem(topItem);
     updateButtonStates();
     emit changed();
@@ -248,21 +250,25 @@ void WidgetCommonBlocMenu::populateTreeItem(QTreeWidgetItem *treeItem,
                                             const QString   &label,
                                             const QString   &url,
                                             bool             newTab,
-                                            const QString   &rel)
+                                            const QString   &rel,
+                                            bool             important)
 {
-    treeItem->setText(COL_LABEL,  label);
-    treeItem->setText(COL_URL,    url);
-    treeItem->setText(COL_NEWTAB, newTab ? tr("Yes") : QString());
-    treeItem->setText(COL_REL,    rel);
-    treeItem->setData(COL_LABEL, Qt::UserRole, newTab);
+    treeItem->setText(COL_LABEL,     label);
+    treeItem->setText(COL_URL,       url);
+    treeItem->setText(COL_NEWTAB,    newTab    ? tr("Yes") : QString());
+    treeItem->setText(COL_REL,       rel);
+    treeItem->setText(COL_IMPORTANT, important ? QStringLiteral("★") : QString());
+    treeItem->setData(COL_LABEL,     Qt::UserRole, newTab);
+    treeItem->setData(COL_IMPORTANT, Qt::UserRole, important);
 }
 
 MenuItem WidgetCommonBlocMenu::extractMenuItem(QTreeWidgetItem *treeItem) const
 {
     MenuItem item;
-    item.label  = treeItem->text(COL_LABEL);
-    item.url    = treeItem->text(COL_URL);
-    item.newTab = treeItem->data(COL_LABEL, Qt::UserRole).toBool();
-    item.rel    = treeItem->text(COL_REL);
+    item.label     = treeItem->text(COL_LABEL);
+    item.url       = treeItem->text(COL_URL);
+    item.newTab    = treeItem->data(COL_LABEL,     Qt::UserRole).toBool();
+    item.rel       = treeItem->text(COL_REL);
+    item.important = treeItem->data(COL_IMPORTANT, Qt::UserRole).toBool();
     return item;
 }

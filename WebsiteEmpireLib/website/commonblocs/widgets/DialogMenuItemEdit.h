@@ -42,6 +42,9 @@ public:
      */
     MenuItem item() const;
 
+private slots:
+    void onPickPage();
+
 private:
     void setupRelCombo();
 

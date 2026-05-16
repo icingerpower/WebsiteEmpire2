@@ -33,6 +33,7 @@ MainWindow::~MainWindow()
 void MainWindow::_init()
 {
     const QDir workingDir = WorkingDirectoryManager::instance()->workingDir();
+    qApp->setProperty("workingDirPath", workingDir.absolutePath());
 
     m_hostTable.reset(new HostTable(workingDir));
     m_settingsTable.reset(new WebsiteSettingsTable(workingDir));
