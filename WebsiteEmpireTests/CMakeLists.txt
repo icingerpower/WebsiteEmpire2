@@ -51,6 +51,8 @@ add_empire_test(Test_Website_GenerationCoroutine             test_generation_cor
 add_empire_test(Test_Website_CategoryHub_DirtySet            test_category_hub_dirty_set.cpp)
 add_empire_test(Test_Website_CategoryHub_Syncer              test_category_hub_syncer.cpp)
 add_empire_test(Test_Website_SocialMedia                     test_social_media.cpp)
+add_empire_test(Test_Website_ReviewAction                    test_website_review_action.cpp)
+add_empire_test(Test_Website_PageStateFormatter              test_website_page_state_formatter.cpp)
 
 # LauncherTranslate modes test compiles launcher code directly (no app binary needed).
 add_executable(Test_Website_LauncherTranslate_Modes

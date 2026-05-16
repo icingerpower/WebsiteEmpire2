@@ -2,6 +2,7 @@
 #include <QTemporaryDir>
 
 #include "website/pages/PageDb.h"
+#include "website/pages/PageFlag.h"
 #include "website/pages/PageGenerationState.h"
 #include "website/pages/PageRecord.h"
 #include "website/pages/PageRepositoryDb.h"
@@ -119,6 +120,21 @@ private slots:
     void test_pagerepo_translimgstate_invalidate_resets_all_langs();
     void test_pagerepo_translimgstate_pending_langs_returns_incomplete();
     void test_pagerepo_translimgstate_pending_langs_empty_when_all_complete();
+
+    // --- setFlag / findByFlag ---
+    void test_pagerepo_setflag_socialmedia_sets_bit();
+    void test_pagerepo_setflag_socialmedia_resets_complete_to_mainimageready();
+    void test_pagerepo_setflag_socialmedia_does_not_reset_non_complete_state();
+    void test_pagerepo_setflag_clear_clears_bit();
+    void test_pagerepo_findbyflag_returns_flagged_pages();
+    void test_pagerepo_findbyflag_excludes_unflagged();
+    void test_pagerepo_findbyflag_excludes_translations();
+
+    // --- buildExpectedPermalinks ---
+    void test_pagerepo_build_expected_with_end_permalink_appends_suffix();
+    void test_pagerepo_build_expected_without_end_permalink_no_suffix();
+    void test_pagerepo_build_expected_skips_empty_and_whitespace_names();
+    void test_pagerepo_build_expected_slugifies_uppercase_and_special_chars();
 };
 
 // ---------------------------------------------------------------------------
@@ -753,6 +769,119 @@ void Test_PageRepository::test_pagerepo_translimgstate_pending_langs_empty_when_
     f.repo.setTranslationImageState(id, QStringLiteral("fr"), PageGenerationState::Complete);
     f.repo.setTranslationImageState(id, QStringLiteral("de"), PageGenerationState::Complete);
     QVERIFY(f.repo.pendingTranslationImageLangs(id).isEmpty());
+}
+
+// =============================================================================
+// setFlag / findByFlag
+// =============================================================================
+
+void Test_PageRepository::test_pagerepo_setflag_socialmedia_sets_bit()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/k.html"), QStringLiteral("en"));
+    QCOMPARE(f.repo.findById(id)->flags, 0u);
+    f.repo.setFlag(id, PageFlag::SocialMedia, true);
+    QVERIFY(f.repo.findById(id)->flags & static_cast<quint32>(PageFlag::SocialMedia));
+}
+
+void Test_PageRepository::test_pagerepo_setflag_socialmedia_resets_complete_to_mainimageready()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/l.html"), QStringLiteral("en"));
+    f.repo.setGenerationState(id, PageGenerationState::Complete);
+    f.repo.setFlag(id, PageFlag::SocialMedia, true);
+    QCOMPARE(f.repo.findById(id)->generationState, PageGenerationState::MainImageReady);
+}
+
+void Test_PageRepository::test_pagerepo_setflag_socialmedia_does_not_reset_non_complete_state()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/m.html"), QStringLiteral("en"));
+    f.repo.setGenerationState(id, PageGenerationState::ContentReady);
+    f.repo.setFlag(id, PageFlag::SocialMedia, true);
+    QCOMPARE(f.repo.findById(id)->generationState, PageGenerationState::ContentReady);
+}
+
+void Test_PageRepository::test_pagerepo_setflag_clear_clears_bit()
+{
+    Fixture f;
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/n.html"), QStringLiteral("en"));
+    f.repo.setFlag(id, PageFlag::SocialMedia, true);
+    QVERIFY(f.repo.findById(id)->flags & static_cast<quint32>(PageFlag::SocialMedia));
+    f.repo.setFlag(id, PageFlag::SocialMedia, false);
+    QVERIFY(!(f.repo.findById(id)->flags & static_cast<quint32>(PageFlag::SocialMedia)));
+}
+
+void Test_PageRepository::test_pagerepo_findbyflag_returns_flagged_pages()
+{
+    Fixture f;
+    const int id1 = f.repo.create(QStringLiteral("article"), QStringLiteral("/o1.html"), QStringLiteral("en"));
+    f.repo.create(QStringLiteral("article"), QStringLiteral("/o2.html"), QStringLiteral("en"));
+    f.repo.setFlag(id1, PageFlag::SocialMedia, true);
+    const auto &pages = f.repo.findByFlag(PageFlag::SocialMedia);
+    QCOMPARE(pages.size(), 1);
+    QCOMPARE(pages.at(0).id, id1);
+}
+
+void Test_PageRepository::test_pagerepo_findbyflag_excludes_unflagged()
+{
+    Fixture f;
+    f.repo.create(QStringLiteral("article"), QStringLiteral("/p2.html"), QStringLiteral("en"));
+    QVERIFY(f.repo.findByFlag(PageFlag::SocialMedia).isEmpty());
+}
+
+void Test_PageRepository::test_pagerepo_findbyflag_excludes_translations()
+{
+    Fixture f;
+    const int srcId = f.repo.create(QStringLiteral("article"), QStringLiteral("/q.html"), QStringLiteral("en"));
+    const int trId  = f.repo.createTranslation(srcId, QStringLiteral("article"),
+                                                QStringLiteral("/q-fr.html"), QStringLiteral("fr"));
+    f.repo.setFlag(srcId, PageFlag::SocialMedia, true);
+    f.repo.setFlag(trId,  PageFlag::SocialMedia, true);
+    const auto &pages = f.repo.findByFlag(PageFlag::SocialMedia);
+    QCOMPARE(pages.size(), 1);
+    QCOMPARE(pages.at(0).id, srcId);
+}
+
+// ---------------------------------------------------------------------------
+// buildExpectedPermalinks
+// ---------------------------------------------------------------------------
+
+void Test_PageRepository::test_pagerepo_build_expected_with_end_permalink_appends_suffix()
+{
+    // Reproduces the "Done/Total doesn't update" bug: computeRemainingToDo built
+    // the expected permalink set without the endPermalink suffix, so pages like
+    // /knee-pain-genes-biomarkers were never counted as done.
+    const QSet<QString> result = PageRepositoryDb::buildExpectedPermalinks(
+        {QStringLiteral("Knee pain"), QStringLiteral("Back pain")},
+        QStringLiteral("genes-biomarkers"));
+    QVERIFY2(result.contains(QStringLiteral("/knee-pain-genes-biomarkers")),
+             "suffix missing from permalink — endPermalink not appended");
+    QVERIFY2(result.contains(QStringLiteral("/back-pain-genes-biomarkers")),
+             "suffix missing from permalink — endPermalink not appended");
+    QCOMPARE(result.size(), 2);
+}
+
+void Test_PageRepository::test_pagerepo_build_expected_without_end_permalink_no_suffix()
+{
+    const QSet<QString> result = PageRepositoryDb::buildExpectedPermalinks(
+        {QStringLiteral("Knee pain")}, QString{});
+    QCOMPARE(result.size(), 1);
+    QVERIFY(result.contains(QStringLiteral("/knee-pain")));
+}
+
+void Test_PageRepository::test_pagerepo_build_expected_skips_empty_and_whitespace_names()
+{
+    const QSet<QString> result = PageRepositoryDb::buildExpectedPermalinks(
+        {QStringLiteral(""), QStringLiteral("   ")}, QStringLiteral("genes-biomarkers"));
+    QVERIFY(result.isEmpty());
+}
+
+void Test_PageRepository::test_pagerepo_build_expected_slugifies_uppercase_and_special_chars()
+{
+    const QSet<QString> result = PageRepositoryDb::buildExpectedPermalinks(
+        {QStringLiteral("Dopamine & Drive")}, QStringLiteral("genes-biomarkers"));
+    QVERIFY(result.contains(QStringLiteral("/dopamine-drive-genes-biomarkers")));
 }
 
 QTEST_MAIN(Test_PageRepository)

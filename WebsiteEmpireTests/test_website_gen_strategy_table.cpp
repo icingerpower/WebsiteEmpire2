@@ -405,7 +405,7 @@ private slots:
         QVERIFY(dir.isValid());
         GenStrategyTable table(QDir(dir.path()));
         table.addRow(QStringLiteral("A"), QStringLiteral("article"),
-                     QString{}, QString{}, false, QString{}, 3);
+                     QString{}, QString{}, false, QString{}, QString{}, 3);
         QCOMPARE(table.priorityForRow(0), 3);
     }
 
@@ -985,7 +985,7 @@ private slots:
         {
             GenStrategyTable t(QDir(dir.path()));
             t.addRow(QStringLiteral("A"), QStringLiteral("article"),
-                     QString{}, QString{}, false, QString{}, 2);
+                     QString{}, QString{}, false, QString{}, QString{}, 2);
         }
         GenStrategyTable t2(QDir(dir.path()));
         QCOMPARE(t2.priorityForRow(0), 2);

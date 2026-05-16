@@ -74,6 +74,11 @@ public:
     void setTranslationImageState(int, const QString &, PageGenerationState) override {}
     void invalidateTranslationImages(int) override {}
     QStringList pendingTranslationImageLangs(int) const override { return {}; }
+    void setFlag(int, PageFlag, bool) override {}
+    QList<PageRecord> findByFlag(PageFlag) const override { return {}; }
+    void setEndPermalink(int, const QString &) override {}
+    void setPublishedAt(int, const QString &) override {}
+    void markAllCompleteAsPublished() override {}
 
 private:
     QList<PageRecord>                    m_records;
