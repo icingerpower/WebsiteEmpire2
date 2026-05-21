@@ -215,8 +215,11 @@ void PaneTranslations::_viewCommands()
 
     // Common blocs — separate launcher.
     sections.append(
-        tr("# Translate common blocs (header, footer, …):\n")
+        tr("# Translate common blocs (header, footer, …):\n"
+           "#   --language  restrict to one target language (optional)\n")
         + prefix + QStringLiteral(" --") + LauncherTranslateCommon::OPTION_NAME
+        + QStringLiteral(" --") + LauncherTranslateCommon::OPTION_LANGUAGE
+        + QStringLiteral(" ") + exampleLang
     );
 
     const QString text = sections.join(QStringLiteral("\n\n"));

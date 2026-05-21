@@ -26,6 +26,7 @@ QString TranslationProtocol::buildPrompt(const QList<TranslatableField> &fields,
                "- Preserve any HTML tags; translate only the text content\n"
                "- Keep proper nouns, brand names, and technical terms appropriate\n"
                "- Never translate shortcode tag names or attribute names\n"
+               "- When a field value is a JSON object, preserve all keys verbatim and translate only the string values\n"
                "- Output the full translation of every field — do not summarise or truncate\n\n"
                "Respond using this EXACT format — one block per field, nothing else:\n\n"
                "===BEGIN <id>===\n"

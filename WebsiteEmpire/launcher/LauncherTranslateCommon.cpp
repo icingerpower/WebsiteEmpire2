@@ -10,8 +10,10 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QSet>
+#include <QStringList>
 
-const QString LauncherTranslateCommon::OPTION_NAME = QStringLiteral("translateCommon");
+const QString LauncherTranslateCommon::OPTION_NAME     = QStringLiteral("translateCommon");
+const QString LauncherTranslateCommon::OPTION_LANGUAGE = QStringLiteral("language");
 
 DECLARE_LAUNCHER(LauncherTranslateCommon)
 
@@ -70,21 +72,34 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
     }
 
     // -------------------------------------------------------------------------
-    // Collect unique target languages from the engine (excluding source lang)
+    // Collect target languages: --language <code> narrows to one; otherwise all
+    // engine languages except the source lang are used.
     // -------------------------------------------------------------------------
-    QSet<QString> seen;
+    const QStringList args = QCoreApplication::arguments();
+    const int langIdx = args.indexOf(QStringLiteral("--") + OPTION_LANGUAGE);
+    const QString languageFilter = (langIdx >= 0 && langIdx + 1 < args.size())
+                                   ? args.at(langIdx + 1)
+                                   : QString();
+
     QStringList targetLangs;
-    const int rowCount = engine->rowCount();
-    for (int i = 0; i < rowCount; ++i) {
-        const QString lang = engine->getLangCode(i);
-        if (!lang.isEmpty() && lang != sourceLang && !seen.contains(lang)) {
-            seen.insert(lang);
-            targetLangs.append(lang);
+    if (!languageFilter.isEmpty()) {
+        if (languageFilter != sourceLang) {
+            targetLangs.append(languageFilter);
+        }
+    } else {
+        QSet<QString> seen;
+        const int rowCount = engine->rowCount();
+        for (int i = 0; i < rowCount; ++i) {
+            const QString lang = engine->getLangCode(i);
+            if (!lang.isEmpty() && lang != sourceLang && !seen.contains(lang)) {
+                seen.insert(lang);
+                targetLangs.append(lang);
+            }
         }
     }
 
     if (targetLangs.isEmpty()) {
-        qDebug() << "LauncherTranslateCommon: no target languages in engine.";
+        qDebug() << "LauncherTranslateCommon: no target languages to translate.";
         holder->deleteLater();
         QCoreApplication::quit();
         return;

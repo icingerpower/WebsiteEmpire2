@@ -122,9 +122,13 @@ void PageTranslator::startSvgJobs(const QString &editingLang,
         return;
     }
 
-    // Load the set of (domain, filename) pairs already in images.db so we can
-    // skip SVGs that are already translated.
+    // Load two sets from images.db in one pass:
+    //   translatedPairs  — (lang, filename) pairs that are already translated
+    //   sourceSvgNames   — SVG filenames that have a source blob (domain='')
+    // Only SVGs present in sourceSvgNames can be translated; the rest are
+    // silently skipped rather than counted as errors.
     QSet<QString> translatedPairs; // encoded as "lang\nfilename"
+    QSet<QString> sourceSvgNames;
     const QString dbPath = m_workingDir.filePath(QStringLiteral("images.db"));
     if (QFile::exists(dbPath)) {
         const QString connName = QStringLiteral("svgjobs_check_%1")
@@ -135,12 +139,15 @@ void PageTranslator::startSvgJobs(const QString &editingLang,
             if (db.open()) {
                 QSqlQuery q(db);
                 if (q.exec(QStringLiteral(
-                        "SELECT domain, filename FROM image_names WHERE domain != ''"))) {
+                        "SELECT domain, filename FROM image_names"))) {
                     while (q.next()) {
-                        translatedPairs.insert(
-                            q.value(0).toString()
-                            + QLatin1Char('\n')
-                            + q.value(1).toString());
+                        const QString domain   = q.value(0).toString();
+                        const QString filename = q.value(1).toString();
+                        if (domain.isEmpty()) {
+                            sourceSvgNames.insert(filename);
+                        } else {
+                            translatedPairs.insert(domain + QLatin1Char('\n') + filename);
+                        }
                     }
                 }
             }
@@ -190,6 +197,9 @@ void PageTranslator::startSvgJobs(const QString &editingLang,
                 }
                 if (translatedPairs.contains(targetLang + QLatin1Char('\n') + fn)) {
                     continue;
+                }
+                if (!sourceSvgNames.contains(fn)) {
+                    continue; // source blob not yet in images.db — skip silently
                 }
                 TranslationJob job;
                 job.pageId      = src.id;
@@ -388,8 +398,7 @@ void PageTranslator::_processNextJob()
         }
         if (sourceBlob.isEmpty()) {
             _log(QStringLiteral("  SVG %1: no source blob in images.db — skipping")
-                     .arg(m_currentJob.svgFilename), true);
-            ++m_errors;
+                     .arg(m_currentJob.svgFilename));
             _processNextJob();
             return;
         }
@@ -445,6 +454,7 @@ void PageTranslator::_processNextJob()
                                   QStringLiteral("--tools"), QStringLiteral(""),
                                   QStringLiteral("--output-format"), QStringLiteral("stream-json"),
                                   QStringLiteral("--verbose")});
+        m_process->setWorkingDirectory(m_tempDir->path());
         m_process->setStandardInputFile(promptPath);
 
         connect(m_process, &QProcess::readyReadStandardOutput,
@@ -531,55 +541,52 @@ void PageTranslator::_processNextJob()
         return;
     }
 
-    m_currentSingleFieldId = (fields.size() == 1) ? fields.first().id : QString{};
-
-    const QString prompt = TranslationProtocol::buildPrompt(fields, m_currentJob.sourceLang, m_currentJob.targetLang);
-    _log(QStringLiteral("  Sending %1 field(s) to claude, prompt size: %2 chars")
-             .arg(fields.size()).arg(prompt.size()));
-
-    // Write prompt to a temp file and launch the claude CLI.
-    m_tempDir = std::make_unique<QTemporaryDir>();
-    if (!m_tempDir->isValid()) {
-        _log(QStringLiteral("  Failed to create temp dir for page %1 → %2")
-                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
-        ++m_errors;
-        m_tempDir.reset();
-        _processNextJob();
-        return;
-    }
-
-    const QString promptPath = m_tempDir->path() + QStringLiteral("/prompt.txt");
-    {
-        QFile f(promptPath);
-        if (!f.open(QIODevice::WriteOnly)) {
-            _log(QStringLiteral("  Failed to write prompt file for page %1 → %2")
-                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
-            ++m_errors;
-            m_tempDir.reset();
-            _processNextJob();
-            return;
+    // -------------------------------------------------------------------------
+    // Detect whether any field is too large to translate in a single call.
+    // If so, split it into MAX_CHUNK_CHARS-sized pieces and translate each
+    // piece with a separate claude call, reassembling the results at the end.
+    // -------------------------------------------------------------------------
+    m_chunkState.reset();
+    for (const TranslatableField &f : std::as_const(fields)) {
+        if (f.id == QStringLiteral("_permalink_slug")) {
+            continue; // slug is always tiny — never needs chunking
         }
-        f.write(prompt.toUtf8());
+        if (f.sourceText.size() > MAX_CHUNK_CHARS) {
+            const QStringList chunks = _splitAtBlocks(f.sourceText, MAX_CHUNK_CHARS);
+            if (chunks.size() > 1) {
+                ChunkState cs;
+                cs.fieldId      = f.id;
+                cs.totalChunks  = chunks.size();
+                cs.chunkIndex   = 0;
+                cs.pendingChunks = chunks;  // all chunks; first taken below
+                m_chunkState = std::move(cs);
+                break; // only the first oversized field triggers chunking
+            }
+        }
     }
 
-    m_processOutput.clear();
+    if (m_chunkState.has_value()) {
+        auto &cs = m_chunkState.value();
+        _log(QStringLiteral("  Page %1: field '%2' is large — splitting into %3 chunk(s)")
+                 .arg(m_currentJob.pageId).arg(cs.fieldId).arg(cs.totalChunks));
 
-    m_process = new QProcess(this);
-    m_process->setProgram(QStringLiteral("claude"));
-    m_process->setArguments({QStringLiteral("-p"), QStringLiteral("-"),
-                              QStringLiteral("--dangerously-skip-permissions"),
-                              QStringLiteral("--tools"), QStringLiteral(""),
-                              QStringLiteral("--output-format"), QStringLiteral("stream-json"),
-                              QStringLiteral("--verbose")});
-    m_process->setStandardInputFile(promptPath);
+        // Build the first call: non-chunk fields (e.g. slug) + first chunk.
+        QList<TranslatableField> firstBatch;
+        for (const TranslatableField &f : std::as_const(fields)) {
+            if (f.id != cs.fieldId) {
+                firstBatch.append(f);
+            }
+        }
+        TranslatableField chunkField;
+        chunkField.id         = cs.fieldId;
+        chunkField.sourceText = cs.pendingChunks.takeFirst();
+        firstBatch.append(chunkField);
+        cs.chunkIndex = 1;
 
-    connect(m_process, &QProcess::readyReadStandardOutput,
-            this, &PageTranslator::_onProcessReadyRead);
-    connect(m_process,
-            QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            this, &PageTranslator::_onProcessFinished);
-
-    m_process->start();
+        _launchTextTranslation(firstBatch);
+    } else {
+        _launchTextTranslation(fields);
+    }
 }
 
 // =============================================================================
@@ -596,11 +603,28 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
                  .arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
         hasError = true;
     } else if (exitCode != 0) {
+        // Drain remaining stdout — Claude may have produced a valid response before
+        // the error (e.g. hitting max output tokens while still generating).
+        m_processOutput += m_process->readAllStandardOutput();
+
         const QString err = QString::fromUtf8(m_process->readAllStandardError()).trimmed();
-        _log(QStringLiteral("  claude error for page %1 → %2: %3")
+        _log(QStringLiteral("  claude error for page %1 → %2: %3  (stdout: %4 bytes)")
                  .arg(m_currentJob.pageId).arg(m_currentJob.targetLang,
-                      err.isEmpty() ? QStringLiteral("exit code %1").arg(exitCode) : err),
-             true);
+                      err.isEmpty() ? QStringLiteral("exit code %1").arg(exitCode) : err)
+                 .arg(m_processOutput.size()), true);
+
+        // Save raw stdout so the cause can be diagnosed offline.
+        {
+            const QString rawPath = m_workingDir.filePath(
+                QStringLiteral("translation_error_p%1_%2.bin")
+                    .arg(m_currentJob.pageId).arg(m_currentJob.targetLang));
+            QFile rf(rawPath);
+            if (rf.open(QIODevice::WriteOnly)) {
+                rf.write(m_processOutput);
+                _log(QStringLiteral("  Stdout dump saved to: %1").arg(rawPath));
+            }
+        }
+
         hasError = true;
     } else {
         // Drain any remaining bytes not yet delivered via readyReadStandardOutput.
@@ -671,6 +695,7 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
 
     if (hasError) {
         m_processOutput.clear();
+        m_chunkState.reset();
         ++m_errors;
         _processNextJob();
         return;
@@ -720,25 +745,7 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
         return;
     }
 
-    QHash<QString, QString> translations = TranslationProtocol::parseResponse(translatedJson);
-
-    // Single-field fallback: Claude sometimes omits the ===BEGIN header for very
-    // long responses. When only one field was sent and parsing finds nothing, strip
-    // any trailing ===END=== marker and treat the entire response as that field's
-    // translation.
-    if (translations.isEmpty() && !m_currentSingleFieldId.isEmpty() && !translatedJson.isEmpty()) {
-        static const QRegularExpression reStripEnd(
-            QStringLiteral(R"(\s*===END===\s*$)"),
-            QRegularExpression::DotMatchesEverythingOption);
-        QString cleaned = translatedJson;
-        cleaned.remove(reStripEnd);
-        cleaned = cleaned.trimmed();
-        if (!cleaned.isEmpty()) {
-            translations.insert(m_currentSingleFieldId, cleaned);
-            _log(QStringLiteral("  Page %1 → %2: ===BEGIN missing — using full response as single-field translation (%3 chars)")
-                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang).arg(cleaned.size()));
-        }
-    }
+    const QHash<QString, QString> translations = TranslationProtocol::parseResponse(translatedJson);
 
     if (translations.isEmpty()) {
         const QString preview = translatedJson.left(300).replace(QLatin1Char('\n'), QStringLiteral("↵"));
@@ -760,11 +767,194 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
         }
 
         m_processOutput.clear();
+        m_chunkState.reset();
         ++m_errors;
         _processNextJob();
         return;
     }
 
+    m_processOutput.clear();
+
+    // -------------------------------------------------------------------------
+    // Chunk mode: accumulate the result and dispatch the next chunk (or finalize).
+    // -------------------------------------------------------------------------
+    if (m_chunkState.has_value()) {
+        auto &cs = m_chunkState.value();
+
+        for (auto it = translations.cbegin(); it != translations.cend(); ++it) {
+            if (it.key() == cs.fieldId) {
+                if (!cs.assembledText.isEmpty()) {
+                    cs.assembledText += QStringLiteral("\n\n");
+                }
+                cs.assembledText += it.value();
+            } else {
+                cs.otherTranslations.insert(it.key(), it.value());
+            }
+        }
+
+        if (!cs.pendingChunks.isEmpty()) {
+            _log(QStringLiteral("  Page %1 → %2: chunk %3/%4 done, continuing…")
+                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang)
+                     .arg(cs.chunkIndex).arg(cs.totalChunks));
+
+            QList<TranslatableField> nextBatch;
+            TranslatableField chunkField;
+            chunkField.id         = cs.fieldId;
+            chunkField.sourceText = cs.pendingChunks.takeFirst();
+            nextBatch.append(chunkField);
+            cs.chunkIndex++;
+
+            _launchTextTranslation(nextBatch);
+            return;
+        }
+
+        // All chunks done — assemble final translations and save.
+        QHash<QString, QString> finalTranslations = cs.otherTranslations;
+        finalTranslations.insert(cs.fieldId, cs.assembledText);
+        m_chunkState.reset();
+
+        _log(QStringLiteral("  Page %1 → %2: all chunks assembled")
+                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang));
+        _finalizeTextTranslations(finalTranslations);
+        return;
+    }
+
+    _finalizeTextTranslations(translations);
+}
+
+void PageTranslator::_onProcessReadyRead()
+{
+    if (m_process) {
+        m_processOutput += m_process->readAllStandardOutput();
+    }
+}
+
+void PageTranslator::_emitFinished(int translated, int errors)
+{
+    QMetaObject::invokeMethod(this, [this, translated, errors]() {
+        emit finished(translated, errors);
+    }, Qt::QueuedConnection);
+}
+
+void PageTranslator::_log(const QString &msg, bool errorLevel)
+{
+    emit logMessage(msg);
+
+    if (m_logFile && m_logFile->isOpen()) {
+        QTextStream ts(m_logFile);
+        ts << QDateTime::currentDateTimeUtc().toString(Qt::ISODate)
+           << (errorLevel ? QStringLiteral(" [ERROR] ") : QStringLiteral(" [INFO]  "))
+           << msg << QStringLiteral("\n");
+        m_logFile->flush();
+    }
+}
+
+// =============================================================================
+// Private: _splitAtBlocks
+// =============================================================================
+
+QStringList PageTranslator::_splitAtBlocks(const QString &text, int maxChars)
+{
+    QStringList chunks;
+    if (text.size() <= maxChars) {
+        chunks.append(text);
+        return chunks;
+    }
+
+    const QStringList paragraphs = text.split(QStringLiteral("\n\n"));
+    QString current;
+
+    for (const QString &para : std::as_const(paragraphs)) {
+        const int candidate = current.size() + (current.isEmpty() ? 0 : 2) + para.size();
+        if (!current.isEmpty() && candidate > maxChars) {
+            // Only split here if shortcode brackets are balanced in current.
+            const int opens  = current.count(QLatin1Char('['));
+            const int closes = current.count(QLatin1Char(']'));
+            if (opens <= closes) {
+                chunks.append(current.trimmed());
+                current = para;
+                continue;
+            }
+        }
+        if (!current.isEmpty()) {
+            current += QStringLiteral("\n\n");
+        }
+        current += para;
+    }
+    if (!current.trimmed().isEmpty()) {
+        chunks.append(current.trimmed());
+    }
+    return chunks.isEmpty() ? QStringList{text} : chunks;
+}
+
+// =============================================================================
+// Private: _launchTextTranslation
+// =============================================================================
+
+void PageTranslator::_launchTextTranslation(const QList<TranslatableField> &fields)
+{
+    const QString prompt = TranslationProtocol::buildPrompt(
+        fields, m_currentJob.sourceLang, m_currentJob.targetLang);
+    _log(QStringLiteral("  Sending %1 field(s) to claude, prompt size: %2 chars")
+             .arg(fields.size()).arg(prompt.size()));
+
+    m_tempDir = std::make_unique<QTemporaryDir>();
+    if (!m_tempDir->isValid()) {
+        _log(QStringLiteral("  Failed to create temp dir for page %1 → %2")
+                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
+        m_chunkState.reset();
+        ++m_errors;
+        m_tempDir.reset();
+        _processNextJob();
+        return;
+    }
+
+    const QString promptPath = m_tempDir->path() + QStringLiteral("/prompt.txt");
+    {
+        QFile f(promptPath);
+        if (!f.open(QIODevice::WriteOnly)) {
+            _log(QStringLiteral("  Failed to write prompt file for page %1 → %2")
+                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
+            m_chunkState.reset();
+            ++m_errors;
+            m_tempDir.reset();
+            _processNextJob();
+            return;
+        }
+        f.write(prompt.toUtf8());
+    }
+
+    m_processOutput.clear();
+
+    m_process = new QProcess(this);
+    m_process->setProgram(QStringLiteral("claude"));
+    m_process->setArguments({QStringLiteral("-p"), QStringLiteral("-"),
+                              QStringLiteral("--dangerously-skip-permissions"),
+                              QStringLiteral("--tools"), QStringLiteral(""),
+                              QStringLiteral("--output-format"), QStringLiteral("stream-json"),
+                              QStringLiteral("--verbose")});
+    // Use the temp dir as cwd so the claude CLI finds no project context (no
+    // CLAUDE.md, no session history).  Without this, the CLI can inherit the
+    // translation project's session history and "continue" a previously
+    // interrupted response instead of translating the current prompt fresh.
+    m_process->setWorkingDirectory(m_tempDir->path());
+    m_process->setStandardInputFile(promptPath);
+
+    connect(m_process, &QProcess::readyReadStandardOutput,
+            this, &PageTranslator::_onProcessReadyRead);
+    connect(m_process,
+            QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, &PageTranslator::_onProcessFinished);
+
+    m_process->start();
+}
+
+// =============================================================================
+// Private: _finalizeTextTranslations
+// =============================================================================
+
+void PageTranslator::_finalizeTextTranslations(const QHash<QString, QString> &translations)
+{
     for (auto it = translations.cbegin(); it != translations.cend(); ++it) {
         m_currentPageType->applyTranslation(QStringView{},
                                              it.key(),
@@ -780,8 +970,7 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
         }
     }
 
-    // If a permalink slug translation was returned, normalize it to a valid URL
-    // slug and store it so PageGenerator can build the translated page path.
+    // Normalize and store the translated permalink slug if one was provided.
     if (translations.contains(QStringLiteral("_permalink_slug"))) {
         static const QRegularExpression reInvalidSlugChars(
             QStringLiteral("[^a-z0-9-]"));
@@ -804,8 +993,6 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
     }
 
     m_repo.saveData(m_currentJob.pageId, finalData);
-
-    m_processOutput.clear();
 
     _log(QStringLiteral("  Page %1 → %2: done (%3 field(s) translated)")
              .arg(m_currentJob.pageId).arg(m_currentJob.targetLang).arg(translations.size()));
@@ -840,7 +1027,8 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
                     m_queue.prepend(svgJobs.at(i));
                 }
                 _log(QStringLiteral("  Queued %1 SVG translation job(s) for page %2 → %3")
-                         .arg(svgJobs.size()).arg(m_currentJob.pageId).arg(m_currentJob.targetLang));
+                         .arg(svgJobs.size()).arg(m_currentJob.pageId)
+                         .arg(m_currentJob.targetLang));
             }
         }
     }
@@ -848,33 +1036,7 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
     _processNextJob();
 }
 
-void PageTranslator::_onProcessReadyRead()
-{
-    if (m_process) {
-        m_processOutput += m_process->readAllStandardOutput();
-    }
-}
-
-void PageTranslator::_emitFinished(int translated, int errors)
-{
-    QMetaObject::invokeMethod(this, [this, translated, errors]() {
-        emit finished(translated, errors);
-    }, Qt::QueuedConnection);
-}
-
-void PageTranslator::_log(const QString &msg, bool errorLevel)
-{
-    emit logMessage(msg);
-
-    if (m_logFile && m_logFile->isOpen()) {
-        QTextStream ts(m_logFile);
-        ts << QDateTime::currentDateTimeUtc().toString(Qt::ISODate)
-           << (errorLevel ? QStringLiteral(" [ERROR] ") : QStringLiteral(" [INFO]  "))
-           << msg << QStringLiteral("\n");
-        m_logFile->flush();
-    }
-}
-
+// =============================================================================
 void PageTranslator::_saveSvgTranslation(const QString    &filename,
                                           const QString    &lang,
                                           const QByteArray &svgData)

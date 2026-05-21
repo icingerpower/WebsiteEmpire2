@@ -5,12 +5,11 @@
 
 // Headless launcher that runs CommonBlocTranslator from the CLI.
 //
-// Triggered by: WebsiteEmpire --workingDir <dir> --translateCommon
+// Triggered by: WebsiteEmpire --workingDir <dir> --translateCommon [--language <code>]
 //
-// Reads the engine id and theme id from settings.ini, loads the theme's common
-// blocs, and translates every field that is missing a translation for any of
-// the engine's configured target languages.  Exits when complete (or on a
-// fatal error).
+// --language <code>  Optional filter: only translate into this BCP-47 language
+//                    code (e.g. "fr", "de").  When omitted, all configured
+//                    target languages are translated.
 //
 // Source language is taken from the theme's stored source_lang (set by
 // MainWindow whenever a domain row is added); falls back to the engine's
@@ -22,6 +21,8 @@ class LauncherTranslateCommon : public AbstractLauncher
 public:
     // Option name (without "--") used to trigger this launcher.
     static const QString OPTION_NAME;
+
+    static const QString OPTION_LANGUAGE;
 
     QString getOptionName() const override;
     bool    isFlag()        const override;

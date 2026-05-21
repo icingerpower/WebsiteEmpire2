@@ -10,6 +10,7 @@
 #include <QString>
 
 #include <memory>
+#include <optional>
 
 #include <QProcess>
 
@@ -155,6 +156,19 @@ private:
                                const QByteArray &svgData,
                                const QString    &lang);
 
+    // Splits text at paragraph (double-newline) boundaries, respecting shortcode
+    // bracket balance.  Returns a single-element list if text <= maxChars.
+    static QStringList _splitAtBlocks(const QString &text, int maxChars);
+
+    // Writes the prompt to a temp file and launches the claude process.
+    // Must be called with m_currentJob, m_currentPageType, m_currentPageData
+    // all already populated.
+    void _launchTextTranslation(const QList<TranslatableField> &fields);
+
+    // Applies translations from a completed text job (or assembled chunks),
+    // saves to the repository, queues SVG sub-jobs, and calls _processNextJob().
+    void _finalizeTextTranslations(const QHash<QString, QString> &translations);
+
     IPageRepository &m_repo;
     CategoryTable   &m_categoryTable;
     QDir             m_workingDir;
@@ -170,7 +184,22 @@ private:
     // State kept alive across the async process call.
     std::unique_ptr<AbstractPageType> m_currentPageType;
     QHash<QString, QString>           m_currentPageData;
-    QString                           m_currentSingleFieldId; ///< set iff the current job has exactly one field
+
+    // Chunk-mode state — non-null while processing a job whose main field was
+    // too large to translate in a single call and has been split into pieces.
+    // Cleared (reset) when the chunked job succeeds or fails.
+    struct ChunkState {
+        QString  fieldId;          ///< id of the field being split
+        int      chunkIndex = 0;   ///< index of the chunk just dispatched
+        int      totalChunks = 0;  ///< total number of chunks
+        QStringList pendingChunks; ///< chunks not yet dispatched (front = next)
+        QString  assembledText;    ///< translated content accumulated so far
+        QHash<QString, QString> otherTranslations; ///< non-chunked field results
+    };
+    std::optional<ChunkState> m_chunkState;
+
+    /// Fields per chunk; >45 k chars in a single field triggers chunking.
+    static constexpr int MAX_CHUNK_CHARS = 45'000;
 
     QFile *m_logFile = nullptr;
 };
