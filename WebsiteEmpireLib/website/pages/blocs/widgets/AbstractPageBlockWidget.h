@@ -2,8 +2,11 @@
 #define ABSTRACTPAGEBLOCKWIDGET_H
 
 #include <QHash>
+#include <QStringList>
 #include <QString>
 #include <QWidget>
+
+class ImageWriter;
 
 /**
  * Base widget for editing a page bloc's content.
@@ -17,6 +20,10 @@
  *
  * - load()  populates the widget from the flat key→value map.
  * - save()  serialises the widget state back into the map.
+ *
+ * Widgets that support image upload override setImageContext().  The default
+ * implementation is a no-op so all other widgets are unaffected.
+ * PageEditorDialog calls this after creating widgets via createEditWidget().
  */
 class AbstractPageBlockWidget : public QWidget
 {
@@ -28,6 +35,8 @@ public:
 
     virtual void load(const QHash<QString, QString> &values) = 0;
     virtual void save(QHash<QString, QString> &values) const = 0;
+
+    virtual void setImageContext(ImageWriter *imageWriter, const QStringList &domains);
 };
 
 #endif // ABSTRACTPAGEBLOCKWIDGET_H

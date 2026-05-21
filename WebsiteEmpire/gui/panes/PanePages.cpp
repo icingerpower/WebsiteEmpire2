@@ -3,6 +3,7 @@
 
 #include "../dialogs/DialogPreviewPage.h"
 #include "website/AbstractEngine.h"
+#include "website/ImageWriter.h"
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/AbstractLegalPageDef.h"
 #include "website/pages/PageTypeCategory.h"
@@ -112,7 +113,19 @@ void PanePages::addPage()
         return;
     }
     const QString langCode = m_settingsTable ? m_settingsTable->editingLangCode() : QString();
+    QStringList domains;
+    if (m_engine) {
+        for (int i = 0; i < m_engine->rowCount(); ++i) {
+            const QString &d = m_engine->data(
+                m_engine->index(i, AbstractEngine::COL_DOMAIN)).toString();
+            if (!d.isEmpty() && !domains.contains(d)) {
+                domains.append(d);
+            }
+        }
+    }
+    ImageWriter imageWriter(m_workingDir);
     PageEditorDialog dlg(*m_pageRepo, *m_categoryTable, -1, langCode, this);
+    dlg.setImageContext(&imageWriter, domains);
     if (dlg.exec() == QDialog::Accepted) {
         _refreshModel();
     }
@@ -125,7 +138,19 @@ void PanePages::editPage()
         QMessageBox::warning(this, tr("No selection"), tr("Please select a page to edit."));
         return;
     }
+    QStringList domains;
+    if (m_engine) {
+        for (int i = 0; i < m_engine->rowCount(); ++i) {
+            const QString &d = m_engine->data(
+                m_engine->index(i, AbstractEngine::COL_DOMAIN)).toString();
+            if (!d.isEmpty() && !domains.contains(d)) {
+                domains.append(d);
+            }
+        }
+    }
+    ImageWriter imageWriter(m_workingDir);
     PageEditorDialog dlg(*m_pageRepo, *m_categoryTable, id, {}, this);
+    dlg.setImageContext(&imageWriter, domains);
     if (dlg.exec() == QDialog::Accepted) {
         _refreshModel();
     }

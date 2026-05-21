@@ -2,6 +2,7 @@
 #include "ui_PagesListWidget.h"
 
 #include "website/AbstractEngine.h"
+#include "website/ImageWriter.h"
 #include "website/WebsiteSettingsTable.h"
 #include "website/pages/IPageRepository.h"
 #include "website/pages/PageGenerator.h"
@@ -97,7 +98,9 @@ void PagesListWidget::_onSelectionChanged()
 void PagesListWidget::_onNewClicked()
 {
     const QString langCode = m_settingsTable ? m_settingsTable->editingLangCode() : QString();
+    ImageWriter imageWriter(m_workingDir);
     PageEditorDialog dlg(m_repo, m_categoryTable, -1, langCode, this);
+    dlg.setImageContext(&imageWriter, {m_domain});
     if (dlg.exec() == QDialog::Accepted) {
         _refreshModel();
     }
@@ -109,7 +112,9 @@ void PagesListWidget::_onEditClicked()
     if (id < 0) {
         return;
     }
+    ImageWriter imageWriter(m_workingDir);
     PageEditorDialog dlg(m_repo, m_categoryTable, id, {}, this);
+    dlg.setImageContext(&imageWriter, {m_domain});
     if (dlg.exec() == QDialog::Accepted) {
         _refreshModel();
     }

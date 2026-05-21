@@ -1,10 +1,17 @@
 #include "PageBlocImageLinksWidget.h"
 #include "ui_PageBlocImageLinksWidget.h"
 
+#include "website/ImageWriter.h"
 #include "website/pages/blocs/PageBlocImageLinks.h"
 
 #include <QComboBox>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QHeaderView>
+#include <QImage>
+#include <QInputDialog>
+#include <QMessageBox>
+#include <QSettings>
 
 // =============================================================================
 // Construction / Destruction
@@ -18,6 +25,8 @@ PageBlocImageLinksWidget::PageBlocImageLinksWidget(QWidget *parent)
 
     // QHeaderView::Stretch on the last section (in case .ui cannot express it).
     ui->tableItems->horizontalHeader()->setStretchLastSection(true);
+
+    ui->btnUpload->setEnabled(false);
 
     connect(ui->btnAdd, &QPushButton::clicked, this, [this]() {
         addRow();
@@ -36,6 +45,9 @@ PageBlocImageLinksWidget::PageBlocImageLinksWidget(QWidget *parent)
             ui->tableItems->removeRow(row);
         }
     });
+
+    connect(ui->btnUpload, &QPushButton::clicked,
+            this, &PageBlocImageLinksWidget::_onUploadImage);
 }
 
 PageBlocImageLinksWidget::~PageBlocImageLinksWidget()
@@ -87,6 +99,8 @@ void PageBlocImageLinksWidget::load(const QHash<QString, QString> &values)
             values.value(prefix + QStringLiteral("target")));
         ui->tableItems->item(row, 3)->setText(
             values.value(prefix + QStringLiteral("alt")));
+        ui->tableItems->item(row, 4)->setText(
+            values.value(prefix + QStringLiteral("label")));
     }
 }
 
@@ -115,6 +129,7 @@ void PageBlocImageLinksWidget::save(QHash<QString, QString> &values) const
         const auto *imgItem    = ui->tableItems->item(i, 0);
         const auto *targetItem = ui->tableItems->item(i, 2);
         const auto *altItem    = ui->tableItems->item(i, 3);
+        const auto *labelItem  = ui->tableItems->item(i, 4);
 
         values.insert(prefix + QStringLiteral("img"),
                       imgItem ? imgItem->text() : QString());
@@ -122,10 +137,99 @@ void PageBlocImageLinksWidget::save(QHash<QString, QString> &values) const
                       targetItem ? targetItem->text() : QString());
         values.insert(prefix + QStringLiteral("alt"),
                       altItem ? altItem->text() : QString());
+        values.insert(prefix + QStringLiteral("label"),
+                      labelItem ? labelItem->text() : QString());
 
         auto *combo = qobject_cast<QComboBox *>(ui->tableItems->cellWidget(i, 1));
         values.insert(prefix + QStringLiteral("type"),
                       combo ? combo->currentData().toString() : QString());
+    }
+}
+
+// =============================================================================
+// setImageContext
+// =============================================================================
+
+void PageBlocImageLinksWidget::setImageContext(ImageWriter *imageWriter,
+                                               const QStringList &domains)
+{
+    m_imageWriter = imageWriter;
+    m_domains     = domains;
+    ui->btnUpload->setEnabled(imageWriter != nullptr);
+}
+
+// =============================================================================
+// _onUploadImage  (private slot)
+// =============================================================================
+
+void PageBlocImageLinksWidget::_onUploadImage()
+{
+    if (!m_imageWriter) {
+        return;
+    }
+
+    QSettings settings;
+    const QString lastFolder = settings.value(QStringLiteral("ImageUpload/lastFolder")).toString();
+
+    const QString filePath = QFileDialog::getOpenFileName(
+        this,
+        tr("Select Image"),
+        lastFolder,
+        tr("Images (*.png *.jpg *.jpeg *.gif *.webp *.bmp)"));
+    if (filePath.isEmpty()) {
+        return;
+    }
+    settings.setValue(QStringLiteral("ImageUpload/lastFolder"),
+                      QFileInfo(filePath).absolutePath());
+
+    const QImage image(filePath);
+    if (image.isNull()) {
+        QMessageBox::warning(this, tr("Upload Failed"),
+                             tr("Could not load the selected image file."));
+        return;
+    }
+
+    const QFileInfo fi(filePath);
+    const QString suggested = fi.baseName().toLower().replace(QLatin1Char(' '), QLatin1Char('-'))
+                              + QStringLiteral(".webp");
+    bool ok = false;
+    const QString filename = QInputDialog::getText(
+        this,
+        tr("Image Filename"),
+        tr("Filename to register in images.db (e.g. hero.webp):"),
+        QLineEdit::Normal,
+        suggested,
+        &ok).trimmed();
+    if (!ok || filename.isEmpty()) {
+        return;
+    }
+
+    // Register the image for all configured domains.
+    // If no domains are configured yet, store with an empty domain string —
+    // consistent with how SVG images are stored before the engine has a domain.
+    // ImageRepositorySQLite falls back to domain="" when a domain-specific
+    // entry is not found, so images remain serveable after domains are configured.
+    const QStringList &domains = m_domains.isEmpty() ? QStringList{QString()} : m_domains;
+
+    const qint64 imageId = m_imageWriter->writeQImage(image, domains.first(), filename);
+    if (imageId < 0) {
+        QMessageBox::warning(this, tr("Upload Failed"),
+                             tr("WebP encoding failed — is the Qt WebP image plugin installed?"));
+        return;
+    }
+    for (int i = 1; i < domains.size(); ++i) {
+        m_imageWriter->linkName(imageId, domains.at(i), filename);
+    }
+
+    const QString imgdbUrl = QStringLiteral("imgdb:") + filename;
+
+    // Fill the selected row if one is selected; otherwise append a new row.
+    const auto &selected = ui->tableItems->selectionModel()->selectedRows();
+    if (!selected.isEmpty()) {
+        ui->tableItems->item(selected.first().row(), 0)->setText(imgdbUrl);
+    } else {
+        const int row = addRow();
+        ui->tableItems->item(row, 0)->setText(imgdbUrl);
     }
 }
 
@@ -138,10 +242,11 @@ int PageBlocImageLinksWidget::addRow()
     const int row = ui->tableItems->rowCount();
     ui->tableItems->insertRow(row);
 
-    // Columns 0, 2, 3 are plain text items.
+    // Columns 0, 2, 3, 4 are plain text items.
     ui->tableItems->setItem(row, 0, new QTableWidgetItem);
     ui->tableItems->setItem(row, 2, new QTableWidgetItem);
     ui->tableItems->setItem(row, 3, new QTableWidgetItem);
+    ui->tableItems->setItem(row, 4, new QTableWidgetItem);
 
     // Column 1: QComboBox for link type.
     auto *combo = new QComboBox;

@@ -1,6 +1,8 @@
 #include "PageBlocImageLinks.h"
 #include "website/pages/blocs/widgets/PageBlocImageLinksWidget.h"
 
+#include "website/AbstractEngine.h"
+
 #include <QCoreApplication>
 
 // =============================================================================
@@ -36,6 +38,7 @@ void PageBlocImageLinks::load(const QHash<QString, QString> &values)
         item.linkType   = values.value(prefix + QStringLiteral("type"));
         item.linkTarget = values.value(prefix + QStringLiteral("target"));
         item.altText    = values.value(prefix + QStringLiteral("alt"));
+        item.label      = values.value(prefix + QStringLiteral("label"));
         m_items.append(std::move(item));
     }
 }
@@ -58,6 +61,7 @@ void PageBlocImageLinks::save(QHash<QString, QString> &values) const
         values.insert(prefix + QStringLiteral("type"),   item.linkType);
         values.insert(prefix + QStringLiteral("target"), item.linkTarget);
         values.insert(prefix + QStringLiteral("alt"),    item.altText);
+        values.insert(prefix + QStringLiteral("label"),  item.label);
     }
 }
 
@@ -66,8 +70,8 @@ void PageBlocImageLinks::save(QHash<QString, QString> &values) const
 // =============================================================================
 
 void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
-                                  AbstractEngine &/*engine*/,
-                                  int             /*websiteIndex*/,
+                                  AbstractEngine &engine,
+                                  int             websiteIndex,
                                   QString        &html,
                                   QString        &css,
                                   QString        &js,
@@ -86,6 +90,10 @@ void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
         return;
     }
 
+    // Resolve the domain once for imgdb: URLs.
+    const QString domain = engine.data(
+        engine.index(websiteIndex, AbstractEngine::COL_DOMAIN)).toString();
+
     // ── HTML ────────────────────────────────────────────────────────────
     html += QStringLiteral("<section class=\"image-links-grid\" style=\"--cols-d:");
     html += QString::number(m_colsDesktop);
@@ -101,15 +109,32 @@ void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
             continue;
         }
         const auto &href = resolveHref(item.linkType, item.linkTarget);
+
+        // imgdb:<filename> → /images/<domain>/<filename>
+        QString resolvedUrl;
+        if (item.imageUrl.startsWith(QLatin1String("imgdb:"))) {
+            resolvedUrl = QStringLiteral("/images/") + domain
+                          + QStringLiteral("/") + item.imageUrl.mid(6);
+        } else {
+            resolvedUrl = item.imageUrl;
+        }
+
         html += QStringLiteral("<a href=\"");
         html += href;
         html += QStringLiteral("\" class=\"image-link\" data-link-id=\"");
         html += QString::number(visibleIndex);
         html += QStringLiteral("\"><img src=\"");
-        html += item.imageUrl;
+        html += resolvedUrl;
         html += QStringLiteral("\" alt=\"");
         html += item.altText;
-        html += QStringLiteral("\" loading=\"lazy\"></a>");
+        html += QStringLiteral("\" loading=\"lazy\">");
+        html += QStringLiteral("<span class=\"image-link-label\">");
+        if (!item.label.isEmpty()) {
+            html += item.label;
+            html += QStringLiteral(" ");
+        }
+        html += QStringLiteral("&#8594;</span>");
+        html += QStringLiteral("</a>");
         ++visibleIndex;
     }
 
@@ -122,8 +147,12 @@ void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
             ".image-links-grid{display:grid;grid-template-columns:repeat(var(--cols-d,4),1fr);gap:1rem;margin:0;padding:0}"
             "@media(max-width:1023px){.image-links-grid{grid-template-columns:repeat(var(--cols-t,2),1fr)}}"
             "@media(max-width:639px){.image-links-grid{grid-template-columns:repeat(var(--cols-m,1),1fr)}}"
-            ".image-link{display:block;overflow:hidden;text-decoration:none}"
-            ".image-link img{width:100%;height:auto;display:block;object-fit:cover}");
+            ".image-link{display:block;overflow:hidden;text-decoration:none;border-radius:4px;transition:transform .18s,box-shadow .18s}"
+            ".image-link:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.35)}"
+            ".image-link img{width:100%;height:auto;display:block;object-fit:cover;cursor:pointer;transition:opacity .18s}"
+            ".image-link:hover img{opacity:.88}"
+            ".image-link-label{display:block;padding:.4rem .6rem;background:#0a1628;color:#cce4f7;font-size:.82rem;font-weight:500;text-align:center;letter-spacing:.02em;transition:background .18s,color .18s}"
+            ".image-link:hover .image-link-label{background:#0e2244;color:#fff}");
     }
 
     // ── JS (once per page) ──────────────────────────────────────────────

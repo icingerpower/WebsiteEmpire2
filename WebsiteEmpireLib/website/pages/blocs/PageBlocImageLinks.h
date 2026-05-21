@@ -50,6 +50,7 @@ public:
         QString linkType;   ///< one of the LINK_TYPE_* constants
         QString linkTarget;
         QString altText;
+        QString label;      ///< optional caption shown below the image tile
     };
 
     PageBlocImageLinks() = default;

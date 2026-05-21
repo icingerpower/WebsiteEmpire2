@@ -287,6 +287,7 @@ void AbstractPageType::addCode(QStringView     origContent,
         "var btn=document.getElementById('img-lightbox__close');"
         "if(!dlg||!img)return;"
         "document.querySelectorAll('.page-content img[src]').forEach(function(el){"
+            "if(el.closest('.image-link'))return;"
             "el.addEventListener('click',function(){"
                 "img.src=el.src;img.alt=el.alt||'';"
                 "dlg.showModal()"

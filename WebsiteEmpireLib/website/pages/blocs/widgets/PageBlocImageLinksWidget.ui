@@ -160,6 +160,13 @@
       </widget>
      </item>
      <item>
+      <widget class="QPushButton" name="btnUpload">
+       <property name="text">
+        <string>Upload Image…</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <spacer name="buttonSpacer">
        <property name="orientation">
         <enum>Qt::Orientation::Horizontal</enum>
@@ -200,6 +207,11 @@
      <column>
       <property name="text">
        <string>Alt Text</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Label</string>
       </property>
      </column>
     </widget>

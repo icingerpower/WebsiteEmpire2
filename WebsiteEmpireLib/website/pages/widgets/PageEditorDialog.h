@@ -3,11 +3,13 @@
 
 #include <QDialog>
 #include <QList>
+#include <QStringList>
 #include <memory>
 
 class AbstractPageBlockWidget;
 class AbstractPageType;
 class CategoryTable;
+class ImageWriter;
 class IPageRepository;
 
 namespace Ui { class PageEditorDialog; }
@@ -55,6 +57,17 @@ public:
                               QWidget         *parent = nullptr);
     ~PageEditorDialog() override;
 
+    /**
+     * Supplies image upload context to bloc widgets that support it.
+     * Must be called before exec() — widgets are created in the constructor.
+     * imageWriter must remain valid for the lifetime of this dialog.
+     * No-op when imageWriter is nullptr or domains is empty.
+     */
+    void setImageContext(ImageWriter *imageWriter, const QStringList &domains);
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private slots:
     void _onTypeChanged(int index);
     void _onAccepted();
@@ -70,6 +83,9 @@ private:
     int                   m_pageId;          // -1 = create mode
     QString               m_editingLangCode; // used in create mode only
     bool                  m_locked = false;  // translation not yet done
+
+    ImageWriter *m_imageWriter = nullptr;
+    QStringList  m_imageDomains;
 
     std::unique_ptr<AbstractPageType>   m_pageType;
     QList<AbstractPageBlockWidget *>    m_blocWidgets;

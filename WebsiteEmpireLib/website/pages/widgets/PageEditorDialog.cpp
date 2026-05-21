@@ -8,7 +8,9 @@
 #include "website/pages/blocs/AbstractPageBloc.h"
 #include "website/pages/blocs/widgets/AbstractPageBlockWidget.h"
 
+#include <QCloseEvent>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QToolBox>
 #include <QVBoxLayout>
@@ -123,6 +125,46 @@ PageEditorDialog::~PageEditorDialog()
 }
 
 // =============================================================================
+// Public
+// =============================================================================
+
+void PageEditorDialog::setImageContext(ImageWriter *imageWriter, const QStringList &domains)
+{
+    m_imageWriter   = imageWriter;
+    m_imageDomains  = domains;
+    for (AbstractPageBlockWidget *w : std::as_const(m_blocWidgets)) {
+        w->setImageContext(imageWriter, domains);
+    }
+}
+
+void PageEditorDialog::closeEvent(QCloseEvent *event)
+{
+    // Already saved or locked (nothing to lose) — close immediately.
+    if (result() == QDialog::Accepted || m_locked) {
+        event->accept();
+        return;
+    }
+
+    const QMessageBox::StandardButton btn = QMessageBox::question(
+        this,
+        tr("Close without saving?"),
+        tr("Your changes have not been saved. What would you like to do?"),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+        QMessageBox::Cancel);
+
+    if (btn == QMessageBox::Save) {
+        // _onAccepted() calls accept() internally, which re-triggers closeEvent
+        // with result() == Accepted and passes through immediately.
+        _onAccepted();
+        event->ignore();
+    } else if (btn == QMessageBox::Discard) {
+        event->accept();
+    } else {
+        event->ignore();
+    }
+}
+
+// =============================================================================
 // Private helpers
 // =============================================================================
 
@@ -149,6 +191,7 @@ void PageEditorDialog::_loadBlocs(const QString &typeId)
     for (const AbstractPageBloc *cbloc : blocs) {
         AbstractPageBloc *bloc = const_cast<AbstractPageBloc *>(cbloc);
         AbstractPageBlockWidget *w = bloc->createEditWidget();
+        w->setImageContext(m_imageWriter, m_imageDomains);
 
         auto *container = new QWidget;
         auto *containerLayout = new QVBoxLayout(container);
