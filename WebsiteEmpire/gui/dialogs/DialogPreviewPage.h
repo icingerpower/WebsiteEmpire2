@@ -67,6 +67,10 @@ private:
     // from the SVG blobs in images.db.  Prefers the blob stored under domain=lang
     // and falls back to domain="" (source).  No-op if images.db does not exist.
     void _inlineSvgs(QString &html, const QString &lang);
+    // Replaces <img src="/images/{domain}/{file}"> tags with base64 data URIs
+    // loaded from images.db.  Falls back to domain="" when no domain-specific
+    // entry exists.  No-op if images.db does not exist.
+    void _inlineRasterImages(QString &html, const QString &domain);
 
     // Returns the engine row index whose lang code matches lang, or 0 as fallback.
     int _engineIndexForLang(const QString &lang) const;

@@ -7,6 +7,8 @@
 #include "website/pages/PageRecord.h"
 #include "website/pages/attributes/CategoryTable.h"
 
+#include "ExceptionWithTitleText.h"
+
 #include <QBuffer>
 #include <QDesktopServices>
 #include <QFile>
@@ -221,9 +223,18 @@ void DialogPreviewPage::_renderPage(const PreviewEntry &entry)
 
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    type->addCode(QStringView{}, m_engine, engineIdx, html, css, js, cssDoneIds, jsDoneIds);
+    try {
+        type->addCode(QStringView{}, m_engine, engineIdx, html, css, js, cssDoneIds, jsDoneIds);
+    } catch (const ExceptionWithTitleText &ex) {
+        ui->textBrowser->setPlainText(ex.errorTitle() + QStringLiteral("\n\n") + ex.errorText());
+        ui->btnOpenBrowser->setEnabled(false);
+        return;
+    }
 
     _inlineSvgs(html, entry.lang);
+    const QString domain = m_engine.data(
+        m_engine.index(engineIdx, AbstractEngine::COL_DOMAIN)).toString();
+    _inlineRasterImages(html, domain);
 
     QString fullHtml;
     fullHtml.reserve(css.size() + html.size() + 64);
@@ -360,6 +371,101 @@ void DialogPreviewPage::_inlineSvgs(QString &html, const QString &lang)
         tag.replace(QStringLiteral("src=\"/") + fn + QStringLiteral("\""),
                     QStringLiteral("src=\"") + dataUri + QStringLiteral("\""));
         result += tag;
+    }
+    result += html.mid(pos);
+    html = result;
+}
+
+void DialogPreviewPage::_inlineRasterImages(QString &html, const QString &domain)
+{
+    const QString dbPath = m_workingDir.filePath(QStringLiteral("images.db"));
+    if (!QFile::exists(dbPath)) {
+        return;
+    }
+
+    // Match any src="/images/..." attribute.  The domain segment may be empty
+    // (producing a double slash like /images//file.webp) when no domain is
+    // configured in the engine, so we extract the filename from the last path
+    // component rather than trying to parse out a specific domain slot.
+    static const QRegularExpression reSrc(
+        QStringLiteral("src=\"(/images/[^\"]*)\""),
+        QRegularExpression::CaseInsensitiveOption);
+
+    QStringList filenames;
+    {
+        auto it = reSrc.globalMatch(html);
+        while (it.hasNext()) {
+            const QString path = it.next().captured(1);
+            const int lastSlash = path.lastIndexOf(QLatin1Char('/'));
+            const QString fn = (lastSlash >= 0) ? path.mid(lastSlash + 1) : path;
+            if (!fn.isEmpty() && !filenames.contains(fn)) {
+                filenames.append(fn);
+            }
+        }
+    }
+    if (filenames.isEmpty()) {
+        return;
+    }
+
+    // Load blobs: prefer exact domain, fall back to domain="".
+    QHash<QString, QPair<QByteArray, QString>> blobs; // filename → (blob, mimeType)
+    const QString connName = QStringLiteral("preview_raster_")
+                           + QString::number(reinterpret_cast<quintptr>(this));
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+        db.setDatabaseName(dbPath);
+        if (db.open()) {
+            for (const QString &fn : std::as_const(filenames)) {
+                QSqlQuery q(db);
+                q.prepare(QStringLiteral(
+                    "SELECT i.blob, i.mime_type FROM images i"
+                    " JOIN image_names n ON n.image_id = i.id"
+                    " WHERE n.filename = :fn AND (n.domain = :domain OR n.domain = '')"
+                    " ORDER BY CASE WHEN n.domain = :domain THEN 0 ELSE 1 END"
+                    " LIMIT 1"));
+                q.bindValue(QStringLiteral(":fn"),     fn);
+                q.bindValue(QStringLiteral(":domain"), domain);
+                if (q.exec() && q.next()) {
+                    blobs.insert(fn, {q.value(0).toByteArray(),
+                                      q.value(1).toString()});
+                }
+            }
+        }
+    }
+    QSqlDatabase::removeDatabase(connName);
+
+    if (blobs.isEmpty()) {
+        return;
+    }
+
+    // Replace each src="/images/..." with the corresponding data URI.
+    QString result;
+    result.reserve(html.size());
+    int pos = 0;
+    auto it = reSrc.globalMatch(html);
+    while (it.hasNext()) {
+        const auto m = it.next();
+        result += html.mid(pos, m.capturedStart() - pos);
+        pos = m.capturedEnd();
+
+        const QString path = m.captured(1);
+        const int lastSlash = path.lastIndexOf(QLatin1Char('/'));
+        const QString fn = (lastSlash >= 0) ? path.mid(lastSlash + 1) : path;
+
+        const auto blobIt = blobs.constFind(fn);
+        if (blobIt == blobs.cend()) {
+            result += m.captured(0);
+            continue;
+        }
+
+        const QString dataUri = QStringLiteral("data:")
+                              + blobIt->second
+                              + QStringLiteral(";base64,")
+                              + QString::fromLatin1(blobIt->first.toBase64());
+
+        result += QStringLiteral("src=\"");
+        result += dataUri;
+        result += QStringLiteral("\"");
     }
     result += html.mid(pos);
     html = result;
