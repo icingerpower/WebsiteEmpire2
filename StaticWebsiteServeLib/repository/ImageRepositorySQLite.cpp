@@ -9,13 +9,19 @@ std::optional<ImageRecord> ImageRepositorySQLite::findByDomainAndFilename(
     const std::string &domain,
     const std::string &filename) const
 {
+    // Try the exact (domain, filename) match first, then fall back to
+    // domain="" for images uploaded before a domain was configured in the engine.
     SQLite::Statement q(m_db.database(),
         "SELECT i.id, i.blob, i.mime_type"
         " FROM images i"
         " JOIN image_names n ON n.image_id = i.id"
-        " WHERE n.domain = ? AND n.filename = ?");
-    q.bind(1, domain);
-    q.bind(2, filename);
+        " WHERE n.filename = ?"
+        "   AND (n.domain = ? OR n.domain = '')"
+        " ORDER BY CASE WHEN n.domain = ? THEN 0 ELSE 1 END"
+        " LIMIT 1");
+    q.bind(1, filename);
+    q.bind(2, domain);
+    q.bind(3, domain);
     if (!q.executeStep()) {
         return std::nullopt;
     }

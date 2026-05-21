@@ -1,8 +1,10 @@
 #include "ImageWriter.h"
 
 #include <QBuffer>
+#include <QDebug>
 #include <QImage>
 #include <QSqlDatabase>
+#include <QSqlError>
 #include <QSqlQuery>
 
 #include <atomic>
@@ -19,7 +21,10 @@ ImageWriter::ImageWriter(const QDir &workingDir)
 {
     QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), m_connName);
     db.setDatabaseName(workingDir.filePath(QLatin1StringView(FILENAME)));
-    db.open();
+    if (!db.open()) {
+        qWarning() << "ImageWriter: failed to open" << db.databaseName()
+                   << "-" << db.lastError().text();
+    }
     _ensureSchema();
 }
 
@@ -44,23 +49,31 @@ qint64 ImageWriter::writeImage(const QByteArray &blob, const QString &mimeType)
         "INSERT INTO images (blob, mime_type) VALUES (:blob, :mime_type)"));
     q.bindValue(QStringLiteral(":blob"),      blob);
     q.bindValue(QStringLiteral(":mime_type"), mimeType);
-    q.exec();
+    if (!q.exec()) {
+        qWarning() << "ImageWriter::writeImage INSERT failed:" << q.lastError().text();
+        return -1;
+    }
     const QVariant insertId = q.lastInsertId();
-    return insertId.toLongLong();
+    return insertId.isValid() ? insertId.toLongLong() : -1;
 }
 
 void ImageWriter::linkName(qint64 imageId, const QString &domain, const QString &filename)
 {
+    // Qt SQL binds null QString as SQL NULL, which violates the NOT NULL constraint.
+    // Coerce null to empty string so domain="" is stored correctly.
+    const QString &safeDomain = domain.isNull() ? QStringLiteral("") : domain;
+
     QSqlDatabase db = QSqlDatabase::database(m_connName);
     QSqlQuery q(db);
     q.prepare(QStringLiteral(
-        "INSERT INTO image_names (domain, filename, image_id)"
-        " VALUES (:domain, :filename, :image_id)"
-        " ON CONFLICT(domain, filename) DO UPDATE SET image_id = excluded.image_id"));
-    q.bindValue(QStringLiteral(":domain"),   domain);
+        "INSERT OR REPLACE INTO image_names (domain, filename, image_id)"
+        " VALUES (:domain, :filename, :image_id)"));
+    q.bindValue(QStringLiteral(":domain"),   safeDomain);
     q.bindValue(QStringLiteral(":filename"), filename);
     q.bindValue(QStringLiteral(":image_id"), imageId);
-    q.exec();
+    if (!q.exec()) {
+        qWarning() << "ImageWriter::linkName INSERT failed:" << q.lastError().text();
+    }
 }
 
 qint64 ImageWriter::writeQImage(const QImage  &image,
@@ -74,13 +87,12 @@ qint64 ImageWriter::writeQImage(const QImage  &image,
                  "is the Qt WebP image plugin installed?");
         return -1;
     }
-    const QByteArray &blob = buf.data();
-
-    QSqlDatabase db = QSqlDatabase::database(m_connName);
-    db.transaction();
+    const QByteArray blob = buf.data();
     const qint64 imageId = writeImage(blob, QStringLiteral("image/webp"));
+    if (imageId < 0) {
+        return -1;
+    }
     linkName(imageId, domain, filename);
-    db.commit();
     return imageId;
 }
 
@@ -88,11 +100,11 @@ qint64 ImageWriter::writeSvg(const QByteArray &svgData,
                               const QString    &domain,
                               const QString    &filename)
 {
-    QSqlDatabase db = QSqlDatabase::database(m_connName);
-    db.transaction();
     const qint64 imageId = writeImage(svgData, QStringLiteral("image/svg+xml"));
+    if (imageId < 0) {
+        return -1;
+    }
     linkName(imageId, domain, filename);
-    db.commit();
     return imageId;
 }
 
