@@ -2,6 +2,8 @@
 
 #include <QApplication>
 #include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSet>
 #include <QSettings>
 #include <QTemporaryDir>
@@ -494,6 +496,15 @@ private slots:
     void test_menu_assert_translated_passes_when_all_labels_translated();
     void test_menu_source_texts_contains_all_labels();
     void test_menu_save_load_roundtrip_preserves_translations();
+    // Regression tests for the source-array / field-id mismatch bugs
+    void test_menu_source_texts_returns_json_object_not_array();
+    void test_menu_missing_translations_returns_items_field_id();
+    void test_menu_missing_translations_empty_when_all_labels_translated();
+    void test_menu_translated_text_empty_before_any_translation();
+    void test_menu_translated_text_nonempty_after_full_translation();
+    void test_menu_set_translation_json_array_has_no_effect();
+    void test_menu_build_jobs_skips_fully_translated_menu();
+    void test_menu_build_jobs_includes_partially_translated_menu();
 };
 
 void Test_CommonBlocMenu_Translations::test_menu_set_translation_stored()
@@ -553,7 +564,7 @@ void Test_CommonBlocMenu_Translations::test_menu_label_change_causes_missing_tra
 
     const QStringList missing = menu.missingTranslations(QStringLiteral("fr"), QStringLiteral("en"));
     QCOMPARE(missing.size(), 1);
-    QCOMPARE(missing.first(), QStringLiteral("Main Page"));
+    QCOMPARE(missing.first(), QStringLiteral("items"));
 }
 
 void Test_CommonBlocMenu_Translations::test_menu_assert_translated_passes_for_source_lang()
@@ -668,6 +679,150 @@ void Test_CommonBlocMenu_Translations::test_menu_save_load_roundtrip_preserves_t
         const QStringList missing = menu.missingTranslations(QStringLiteral("fr"), QStringLiteral("en"));
         QVERIFY(missing.isEmpty());
     }
+}
+
+void Test_CommonBlocMenu_Translations::test_menu_source_texts_returns_json_object_not_array()
+{
+    // Bug: sourceTexts() used to return a JSON array ["Home", ...].
+    // setTranslation() expects a JSON object {source: translated}, so the
+    // array form made it impossible to reconstruct the source→target mapping.
+    // sourceTexts() must now return a JSON object {label: label}.
+    CommonBlocMenuTop menu;
+    MenuItem item;
+    item.label = QStringLiteral("Home");
+    item.url   = QStringLiteral("/");
+    menu.setItems({item});
+
+    const auto sources = menu.sourceTexts();
+    QVERIFY(sources.contains(QStringLiteral("items")));
+    const QJsonDocument doc =
+        QJsonDocument::fromJson(sources.value(QStringLiteral("items")).toUtf8());
+    QVERIFY2(doc.isObject(), "sourceTexts() items value must be a JSON object, not an array");
+    const QJsonObject obj = doc.object();
+    QVERIFY(obj.contains(QStringLiteral("Home")));
+    QCOMPARE(obj.value(QStringLiteral("Home")).toString(), QStringLiteral("Home"));
+}
+
+void Test_CommonBlocMenu_Translations::test_menu_missing_translations_returns_items_field_id()
+{
+    // Bug: missingTranslations() used to return individual label strings
+    // (e.g. "Home") instead of the field ID "items".  buildJobs() uses the
+    // field ID to look up source text in sourceTexts(), so returning label
+    // strings caused a field-id mismatch and the translation was never queued.
+    CommonBlocMenuTop menu;
+    MenuItem item;
+    item.label = QStringLiteral("Home");
+    item.url   = QStringLiteral("/");
+    menu.setItems({item});
+
+    const QStringList missing =
+        menu.missingTranslations(QStringLiteral("fr"), QStringLiteral("en"));
+    QCOMPARE(missing.size(), 1);
+    QCOMPARE(missing.first(), QStringLiteral("items"));
+}
+
+void Test_CommonBlocMenu_Translations::test_menu_missing_translations_empty_when_all_labels_translated()
+{
+    CommonBlocMenuTop menu;
+    MenuItem item;
+    item.label = QStringLiteral("Home");
+    item.url   = QStringLiteral("/");
+    MenuSubItem sub;
+    sub.label = QStringLiteral("About");
+    sub.url   = QStringLiteral("/about");
+    item.children.append(sub);
+    menu.setItems({item});
+
+    menu.setTranslation(QStringLiteral("items"), QStringLiteral("fr"),
+                        QStringLiteral("{\"Home\":\"Accueil\",\"About\":\"À propos\"}"));
+
+    QVERIFY(menu.missingTranslations(QStringLiteral("fr"), QStringLiteral("en")).isEmpty());
+}
+
+void Test_CommonBlocMenu_Translations::test_menu_translated_text_empty_before_any_translation()
+{
+    // Bug: translatedText("items", lang) used to look up m_labelTr["items"]
+    // which never exists (m_labelTr is keyed by source label, not field ID).
+    // It should return empty when no translations are stored.
+    CommonBlocMenuTop menu;
+    MenuItem item;
+    item.label = QStringLiteral("Home");
+    item.url   = QStringLiteral("/");
+    menu.setItems({item});
+
+    QVERIFY(menu.translatedText(QStringLiteral("items"), QStringLiteral("fr")).isEmpty());
+}
+
+void Test_CommonBlocMenu_Translations::test_menu_translated_text_nonempty_after_full_translation()
+{
+    // translatedText("items", lang) must return non-empty once all labels
+    // have a translation — this is how _processNextJob skips already-done blocs.
+    CommonBlocMenuTop menu;
+    MenuItem item;
+    item.label = QStringLiteral("Home");
+    item.url   = QStringLiteral("/");
+    menu.setItems({item});
+
+    menu.setTranslation(QStringLiteral("items"), QStringLiteral("fr"),
+                        QStringLiteral("{\"Home\":\"Accueil\"}"));
+
+    QVERIFY(!menu.translatedText(QStringLiteral("items"), QStringLiteral("fr")).isEmpty());
+}
+
+void Test_CommonBlocMenu_Translations::test_menu_set_translation_json_array_has_no_effect()
+{
+    // The old sourceTexts() returned a JSON array, so Claude translated the
+    // array and returned a translated array.  setTranslation() must ignore
+    // arrays (it cannot reconstruct the source→target mapping from them)
+    // rather than silently corrupting m_labelTr.
+    CommonBlocMenuTop menu;
+    MenuItem item;
+    item.label = QStringLiteral("Home");
+    item.url   = QStringLiteral("/");
+    menu.setItems({item});
+
+    menu.setTranslation(QStringLiteral("items"), QStringLiteral("fr"),
+                        QStringLiteral("[\"Accueil\"]"));
+
+    // Labels must still show as missing — no mapping was derivable.
+    QVERIFY(!menu.missingTranslations(QStringLiteral("fr"), QStringLiteral("en")).isEmpty());
+}
+
+void Test_CommonBlocMenu_Translations::test_menu_build_jobs_skips_fully_translated_menu()
+{
+    CommonBlocMenuTop menu;
+    MenuItem item;
+    item.label = QStringLiteral("Home");
+    item.url   = QStringLiteral("/");
+    menu.setItems({item});
+
+    menu.setTranslation(QStringLiteral("items"), QStringLiteral("fr"),
+                        QStringLiteral("{\"Home\":\"Accueil\"}"));
+
+    const QList<CommonBlocTranslator::TranslationJob> jobs =
+        CommonBlocTranslator::buildJobs({&menu}, QStringLiteral("en"), {QStringLiteral("fr")});
+    QVERIFY(jobs.isEmpty());
+}
+
+void Test_CommonBlocMenu_Translations::test_menu_build_jobs_includes_partially_translated_menu()
+{
+    // Two labels; only one translated → bloc still needs a job.
+    CommonBlocMenuTop menu;
+    MenuItem home;
+    home.label = QStringLiteral("Home");
+    home.url   = QStringLiteral("/");
+    MenuItem about;
+    about.label = QStringLiteral("About");
+    about.url   = QStringLiteral("/about");
+    menu.setItems({home, about});
+
+    // Translate only "Home"
+    menu.setTranslation(QStringLiteral("items"), QStringLiteral("fr"),
+                        QStringLiteral("{\"Home\":\"Accueil\"}"));
+
+    const QList<CommonBlocTranslator::TranslationJob> jobs =
+        CommonBlocTranslator::buildJobs({&menu}, QStringLiteral("en"), {QStringLiteral("fr")});
+    QCOMPARE(jobs.size(), 1);
 }
 
 // =============================================================================

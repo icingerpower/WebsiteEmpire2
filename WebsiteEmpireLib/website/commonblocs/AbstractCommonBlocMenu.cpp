@@ -115,19 +115,20 @@ static QSet<QString> collectAllLabels(const QList<MenuItem> &items)
 
 QHash<QString, QString> AbstractCommonBlocMenu::sourceTexts() const
 {
-    // For menus, we expose a single "items" field whose value is a JSON
-    // array of all unique labels.
+    // Expose a single "items" field as a JSON object {sourceLabel: sourceLabel}.
+    // The key is the label to preserve verbatim; the value is what the AI
+    // translates.  The object form gives the AI an explicit source→target
+    // mapping contract so setTranslation() can parse the result directly.
     const QSet<QString> labels = collectAllLabels(m_items);
-    QJsonArray arr;
-    for (const auto &lbl : labels) {
-        arr.append(lbl);
+    if (labels.isEmpty()) {
+        return {};
     }
-    QHash<QString, QString> result;
-    if (!arr.isEmpty()) {
-        result.insert(QStringLiteral("items"),
-                      QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
+    QJsonObject obj;
+    for (const auto &lbl : std::as_const(labels)) {
+        obj[lbl] = lbl;
     }
-    return result;
+    return {{QStringLiteral("items"),
+             QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))}};
 }
 
 void AbstractCommonBlocMenu::setTranslation(const QString &fieldId,
@@ -150,15 +151,16 @@ QStringList AbstractCommonBlocMenu::missingTranslations(const QString &langCode,
     if (langCode.isEmpty() || langCode == sourceLangCode) {
         return {};
     }
+    // The only field ID is "items".  Return it when at least one label
+    // still lacks a translation so the caller queues one job for the whole bloc.
     const QSet<QString> labels = collectAllLabels(m_items);
-    QStringList missing;
-    for (const auto &label : labels) {
+    for (const auto &label : std::as_const(labels)) {
         const auto srcIt = m_labelTr.constFind(label);
         if (srcIt == m_labelTr.constEnd() || !srcIt.value().contains(langCode)) {
-            missing.append(label);
+            return {QStringLiteral("items")};
         }
     }
-    return missing;
+    return {};
 }
 
 const QString &AbstractCommonBlocMenu::resolveLabel(const QString &sourceLabel,
@@ -219,5 +221,20 @@ void AbstractCommonBlocMenu::loadTranslations(QSettings &settings)
 QString AbstractCommonBlocMenu::translatedText(const QString &fieldId,
                                                const QString &langCode) const
 {
-    return m_labelTr.value(fieldId).value(langCode);
+    if (fieldId != QStringLiteral("items")) {
+        return {};
+    }
+    // Return non-empty iff every label has a translation for langCode.
+    // This lets _processNextJob skip the bloc when it is already fully translated.
+    const QSet<QString> labels = collectAllLabels(m_items);
+    if (labels.isEmpty()) {
+        return QStringLiteral("{}");
+    }
+    for (const auto &label : std::as_const(labels)) {
+        const auto it = m_labelTr.constFind(label);
+        if (it == m_labelTr.constEnd() || !it.value().contains(langCode)) {
+            return {};
+        }
+    }
+    return QStringLiteral("{}");
 }
