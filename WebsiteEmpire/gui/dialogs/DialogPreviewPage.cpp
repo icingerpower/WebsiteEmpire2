@@ -234,7 +234,7 @@ void DialogPreviewPage::_renderPage(const PreviewEntry &entry)
     _inlineSvgs(html, entry.lang);
     const QString domain = m_engine.data(
         m_engine.index(engineIdx, AbstractEngine::COL_DOMAIN)).toString();
-    _inlineRasterImages(html, domain);
+    _inlineRasterImages(html, domain, entry.lang);
 
     QString fullHtml;
     fullHtml.reserve(css.size() + html.size() + 64);
@@ -376,7 +376,8 @@ void DialogPreviewPage::_inlineSvgs(QString &html, const QString &lang)
     html = result;
 }
 
-void DialogPreviewPage::_inlineRasterImages(QString &html, const QString &domain)
+void DialogPreviewPage::_inlineRasterImages(QString &html, const QString &domain,
+                                             const QString &lang)
 {
     const QString dbPath = m_workingDir.filePath(QStringLiteral("images.db"));
     if (!QFile::exists(dbPath)) {
@@ -407,7 +408,9 @@ void DialogPreviewPage::_inlineRasterImages(QString &html, const QString &domain
         return;
     }
 
-    // Load blobs: prefer exact domain, fall back to domain="".
+    // Load blobs: prefer language-specific variant (translated social WebP),
+    // then website domain variant (source), then fall back to domain="" (source).
+    // Language must win over domain so translated images are shown for translated previews.
     QHash<QString, QPair<QByteArray, QString>> blobs; // filename → (blob, mimeType)
     const QString connName = QStringLiteral("preview_raster_")
                            + QString::number(reinterpret_cast<quintptr>(this));
@@ -420,11 +423,16 @@ void DialogPreviewPage::_inlineRasterImages(QString &html, const QString &domain
                 q.prepare(QStringLiteral(
                     "SELECT i.blob, i.mime_type FROM images i"
                     " JOIN image_names n ON n.image_id = i.id"
-                    " WHERE n.filename = :fn AND (n.domain = :domain OR n.domain = '')"
-                    " ORDER BY CASE WHEN n.domain = :domain THEN 0 ELSE 1 END"
+                    " WHERE n.filename = :fn"
+                    "   AND (n.domain = :domain OR n.domain = :lang OR n.domain = '')"
+                    " ORDER BY CASE"
+                    "   WHEN n.domain = :lang   THEN 0"
+                    "   WHEN n.domain = :domain THEN 1"
+                    "   ELSE 2 END"
                     " LIMIT 1"));
                 q.bindValue(QStringLiteral(":fn"),     fn);
                 q.bindValue(QStringLiteral(":domain"), domain);
+                q.bindValue(QStringLiteral(":lang"),   lang);
                 if (q.exec() && q.next()) {
                     blobs.insert(fn, {q.value(0).toByteArray(),
                                       q.value(1).toString()});

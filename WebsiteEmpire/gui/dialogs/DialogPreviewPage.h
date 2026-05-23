@@ -68,9 +68,10 @@ private:
     // and falls back to domain="" (source).  No-op if images.db does not exist.
     void _inlineSvgs(QString &html, const QString &lang);
     // Replaces <img src="/images/{domain}/{file}"> tags with base64 data URIs
-    // loaded from images.db.  Falls back to domain="" when no domain-specific
-    // entry exists.  No-op if images.db does not exist.
-    void _inlineRasterImages(QString &html, const QString &domain);
+    // loaded from images.db.  Prefers website domain, then language code (for
+    // translated social WebP variants), then falls back to domain="".
+    // No-op if images.db does not exist.
+    void _inlineRasterImages(QString &html, const QString &domain, const QString &lang);
 
     // Returns the engine row index whose lang code matches lang, or 0 as fallback.
     int _engineIndexForLang(const QString &lang) const;

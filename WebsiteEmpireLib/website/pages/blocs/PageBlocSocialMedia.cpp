@@ -1,5 +1,6 @@
 #include "PageBlocSocialMedia.h"
 
+#include "website/AbstractEngine.h"
 #include "website/pages/PageRecord.h"
 #include "website/pages/blocs/widgets/PageBlocSocialWidget.h"
 #include "website/social/AbstractSocialMedia.h"
@@ -51,14 +52,48 @@ void PageBlocSocialMedia::save(QHash<QString, QString> &values) const
 // =============================================================================
 
 void PageBlocSocialMedia::addCode(QStringView      /*origContent*/,
-                                   AbstractEngine  & /*engine*/,
-                                   int              /*websiteIndex*/,
-                                   QString         & /*html*/,
+                                   AbstractEngine  &engine,
+                                   int              websiteIndex,
+                                   QString         &html,
                                    QString         & /*css*/,
                                    QString         & /*js*/,
                                    QSet<QString>   & /*cssDoneIds*/,
                                    QSet<QString>   & /*jsDoneIds*/) const
 {
+//    // TEMPORARY — visual debug: show social images inline so they can be
+//    // validated in the preview before deploying.
+//    if (m_imgOg.isEmpty() && m_imgWide.isEmpty()
+//            && m_imgSquare.isEmpty() && m_imgPortrait.isEmpty()) {
+//        return;
+//    }
+//    const QString domain = engine.data(
+//        engine.index(websiteIndex, AbstractEngine::COL_DOMAIN)).toString();
+//    const QString base = QStringLiteral("/images/") + domain + QLatin1Char('/');
+//
+//    html += QStringLiteral(
+//        "<section style=\"border:3px solid #e00;padding:12px;margin:24px 0;"
+//                           "background:#fff5f5;font-family:sans-serif\">"
+//        "<p style=\"color:#e00;font-weight:bold;margin:0 0 8px\">"
+//        "[DEBUG] Social-media images</p>");
+//
+//    const auto appendImg = [&](const QString &fn, const char *label) {
+//        if (fn.isEmpty()) { return; }
+//        html += QStringLiteral("<figure style=\"margin:8px 0\">"
+//                               "<img src=\"");
+//        html += base;
+//        html += fn;
+//        html += QStringLiteral("\" style=\"max-width:100%;display:block\">"
+//                               "<figcaption style=\"font-size:12px;color:#555\">");
+//        html += QLatin1String(label);
+//        html += QStringLiteral("</figcaption></figure>");
+//    };
+//
+//    appendImg(m_imgOg,       "og / landscape (1200×630)");
+//    appendImg(m_imgWide,     "wide (1200×675)");
+//    appendImg(m_imgSquare,   "square (1200×1200)");
+//    appendImg(m_imgPortrait, "portrait (1000×1500)");
+//
+//    html += QStringLiteral("</section>");
 }
 
 // =============================================================================
