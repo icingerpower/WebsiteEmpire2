@@ -3,7 +3,9 @@
 #include "website/AbstractEngine.h"
 #include "website/HostTable.h"
 #include "website/commonblocs/AbstractCommonBloc.h"
+#include "website/pages/attributes/CategoryTable.h"
 #include "website/theme/AbstractTheme.h"
+#include "website/translation/CategoryTranslator.h"
 #include "website/translation/CommonBlocTranslator.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
 
@@ -106,29 +108,46 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
     }
 
     // -------------------------------------------------------------------------
-    // Build jobs and run
+    // Build jobs and run — common blocs first, then categories
     // -------------------------------------------------------------------------
     const QList<AbstractCommonBloc *> blocs =
         theme->getTopBlocs() + theme->getBottomBlocs();
-    const QList<CommonBlocTranslator::TranslationJob> jobs =
+    const QList<CommonBlocTranslator::TranslationJob> blocJobs =
         CommonBlocTranslator::buildJobs(blocs, sourceLang, targetLangs);
 
-    qDebug() << "[TranslateCommon] Scheduler queued" << jobs.size() << "job(s).";
+    auto *categoryTable = new CategoryTable(workingDir, holder);
+    const QList<CategoryTranslator::TranslationJob> catJobs =
+        CategoryTranslator::buildJobs(*categoryTable, sourceLang, targetLangs);
 
-    auto *translator = new CommonBlocTranslator(*theme, workingDir, holder);
+    qDebug() << "[TranslateCommon] Bloc jobs:" << blocJobs.size()
+             << " Category jobs:" << catJobs.size();
 
-    QObject::connect(translator, &CommonBlocTranslator::logMessage, holder,
+    auto *blocTranslator = new CommonBlocTranslator(*theme, workingDir, holder);
+    auto *catTranslator  = new CategoryTranslator(*categoryTable, workingDir, holder);
+
+    QObject::connect(blocTranslator, &CommonBlocTranslator::logMessage, holder,
                      [](const QString &msg) {
                          qDebug() << "[TranslateCommon]" << qPrintable(msg);
                      });
+    QObject::connect(catTranslator, &CategoryTranslator::logMessage, holder,
+                     [](const QString &msg) {
+                         qDebug() << "[TranslateCategories]" << qPrintable(msg);
+                     });
 
-    QObject::connect(translator, &CommonBlocTranslator::finished, holder,
+    QObject::connect(blocTranslator, &CommonBlocTranslator::finished, holder,
+                     [catTranslator, catJobs](int translated, int errors) {
+                         qDebug() << "[TranslateCommon] Blocs done. Translated:" << translated
+                                  << " Errors:" << errors;
+                         catTranslator->startWithJobs(catJobs);
+                     });
+
+    QObject::connect(catTranslator, &CategoryTranslator::finished, holder,
                      [holder](int translated, int errors) {
-                         qDebug() << "[TranslateCommon] Done. Translated:" << translated
+                         qDebug() << "[TranslateCategories] Done. Translated:" << translated
                                   << " Errors:" << errors;
                          holder->deleteLater();
                          QCoreApplication::quit();
                      });
 
-    translator->startWithJobs(jobs);
+    blocTranslator->startWithJobs(blocJobs);
 }
