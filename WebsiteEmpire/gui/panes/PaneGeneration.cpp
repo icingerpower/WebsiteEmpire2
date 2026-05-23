@@ -184,17 +184,22 @@ void PaneGeneration::generatePhase2()
 
     QList<PageRecord> candidates;
     QSet<int>         seenIds;
-    const int rowCount = m_strategies->rowCount();
-    for (int row = 0; row < rowCount; ++row) {
-        const QString typeId = m_strategies->data(
-            m_strategies->index(row, GenStrategyTable::COL_PAGE_TYPE)).toString();
-        const QList<PageRecord> pages =
-            pageRepo.findByGenerationState(typeId, PageGenerationState::Complete);
-        for (const PageRecord &p : std::as_const(pages)) {
-            if (!seenIds.contains(p.id)) {
-                seenIds.insert(p.id);
-                candidates.append(p);
-            }
+
+    // All Complete pages — regardless of whether they came from a strategy.
+    for (const PageRecord &p : pageRepo.findAll()) {
+        if (p.generationState == PageGenerationState::Complete && !seenIds.contains(p.id)) {
+            seenIds.insert(p.id);
+            candidates.append(p);
+        }
+    }
+
+    // Pages already promoted to Phase 2 (MainImageReady + SocialMedia flag) so
+    // the user can see and confirm them even if they have no registered strategy.
+    for (const PageRecord &p : pageRepo.findByFlag(PageFlag::SocialMedia)) {
+        if (p.generationState == PageGenerationState::MainImageReady
+                && !seenIds.contains(p.id)) {
+            seenIds.insert(p.id);
+            candidates.append(p);
         }
     }
 

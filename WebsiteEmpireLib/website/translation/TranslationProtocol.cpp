@@ -32,7 +32,8 @@ QString TranslationProtocol::buildPrompt(const QList<TranslatableField> &fields,
                "===BEGIN <id>===\n"
                "<translated text, may span multiple lines>\n"
                "===END===\n\n"
-               "Fields:\n%3")
+               "Fields:\n%3"
+               "\nREMINDER: Output ONLY ===BEGIN <id>=== / ===END=== blocks. No other text.")
         .arg(sourceLang, targetLang, fieldList);
 }
 
@@ -60,7 +61,19 @@ QHash<QString, QString> TranslationProtocol::parseResponse(const QString &respon
     auto it = reBegin.globalMatch(response);
     while (it.hasNext()) {
         const auto m = it.next();
-        const QString id = m.captured(1).trimmed();
+        QString id = m.captured(1).trimmed();
+        if (id.isEmpty()) {
+            continue;
+        }
+        // Strip any trailing annotation the model may add after the field ID,
+        // e.g. "1_text (part 2/4 — description)" → "1_text".
+        // Only strip if it looks like an annotation (space + opening paren).
+        {
+            const int parenIdx = id.indexOf(QStringLiteral(" ("));
+            if (parenIdx > 0) {
+                id = id.left(parenIdx).trimmed();
+            }
+        }
         if (id.isEmpty()) {
             continue;
         }

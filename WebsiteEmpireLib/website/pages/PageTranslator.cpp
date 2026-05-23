@@ -214,6 +214,56 @@ void PageTranslator::startSvgJobs(const QString &editingLang,
         }
     }
 
+    // Second pass: social-image SVGs (-og.svg, -wide.svg, -square.svg, -portrait.svg).
+    // These are not referenced in article text — their filename is derived from the
+    // page permalink by Phase 2 generation and stored in images.db under domain="".
+    // Build a slug→page map so we can resolve the SVG filename back to its page.
+    {
+        static const QLatin1String kSocialSuffixes[] = {
+            QLatin1String("-og.svg"),
+            QLatin1String("-wide.svg"),
+            QLatin1String("-square.svg"),
+            QLatin1String("-portrait.svg"),
+        };
+
+        QHash<QString, const PageRecord *> slugToPage;
+        for (const PageRecord &src : std::as_const(sources)) {
+            QString slug = src.permalink;
+            while (slug.startsWith(QLatin1Char('/'))) { slug.remove(0, 1); }
+            if (!slug.isEmpty()) {
+                slugToPage.insert(slug, &src);
+            }
+        }
+
+        for (const QString &svgFn : std::as_const(sourceSvgNames)) {
+            const QString lowerFn = svgFn.toLower();
+            QString slug;
+            for (const QLatin1String &suffix : kSocialSuffixes) {
+                if (lowerFn.endsWith(suffix)) {
+                    slug = svgFn.left(svgFn.size() - suffix.size());
+                    break;
+                }
+            }
+            if (slug.isEmpty()) { continue; }
+            const PageRecord *src = slugToPage.value(slug, nullptr);
+            if (!src || src->langCodesToTranslate.isEmpty()) { continue; }
+
+            for (const QString &targetLang : std::as_const(src->langCodesToTranslate)) {
+                if (!languageFilter.isEmpty() && targetLang != languageFilter) { continue; }
+                if (translatedPairs.contains(targetLang + QLatin1Char('\n') + svgFn)) { continue; }
+                TranslationJob job;
+                job.pageId      = src->id;
+                job.typeId      = src->typeId;
+                job.sourceLang  = editingLang;
+                job.targetLang  = targetLang;
+                job.svgFilename = svgFn;
+                m_queue.append(job);
+                _log(QStringLiteral("  Queued social SVG: %1  SVG: %2  → %3")
+                         .arg(src->permalink, svgFn, targetLang));
+            }
+        }
+    }
+
     if (limit >= 1 && m_queue.size() > limit) {
         m_queue.resize(limit);
         _log(QStringLiteral("SVG jobs limited to %1.").arg(limit));
@@ -451,6 +501,7 @@ void PageTranslator::_processNextJob()
         m_process->setProgram(QStringLiteral("claude"));
         m_process->setArguments({QStringLiteral("-p"), QStringLiteral("-"),
                                   QStringLiteral("--dangerously-skip-permissions"),
+                                  QStringLiteral("--no-session-persistence"),
                                   QStringLiteral("--tools"), QStringLiteral(""),
                                   QStringLiteral("--output-format"), QStringLiteral("stream-json"),
                                   QStringLiteral("--verbose")});
@@ -570,20 +621,34 @@ void PageTranslator::_processNextJob()
         _log(QStringLiteral("  Page %1: field '%2' is large — splitting into %3 chunk(s)")
                  .arg(m_currentJob.pageId).arg(cs.fieldId).arg(cs.totalChunks));
 
-        // Build the first call: non-chunk fields (e.g. slug) + first chunk.
-        QList<TranslatableField> firstBatch;
+        // Each chunk is sent alone so the prompt stays focused on one large field.
+        // Non-chunk fields (slug, social-media, etc.) are deferred to the last
+        // chunk call where the prompt is small enough for Claude to follow the
+        // BEGIN/END protocol reliably on ALL fields simultaneously.
         for (const TranslatableField &f : std::as_const(fields)) {
             if (f.id != cs.fieldId) {
-                firstBatch.append(f);
+                cs.otherFields.append(f);
             }
         }
-        TranslatableField chunkField;
-        chunkField.id         = cs.fieldId;
-        chunkField.sourceText = cs.pendingChunks.takeFirst();
-        firstBatch.append(chunkField);
+
+        const QString firstChunkText = cs.pendingChunks.takeFirst();
         cs.chunkIndex = 1;
 
-        _launchTextTranslation(firstBatch);
+        if (cs.pendingChunks.isEmpty()) {
+            // Only one chunk: include other fields and use the normal protocol
+            // (prompt is small enough for Claude to follow BEGIN/END reliably).
+            QList<TranslatableField> firstBatch;
+            TranslatableField chunkField;
+            chunkField.id         = cs.fieldId;
+            chunkField.sourceText = firstChunkText;
+            firstBatch.append(chunkField);
+            firstBatch.append(cs.otherFields);
+            _launchTextTranslation(firstBatch);
+        } else {
+            // More chunks follow: use a plain "translate this text" prompt so the
+            // model doesn't have to track BEGIN/END markers over 44K+ chars.
+            _launchDirectChunkTranslation(firstChunkText);
+        }
     } else {
         _launchTextTranslation(fields);
     }
@@ -745,6 +810,80 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
         return;
     }
 
+    m_processOutput.clear();
+
+    // -------------------------------------------------------------------------
+    // Direct-chunk mode: response is raw translated text (no BEGIN/END protocol).
+    // -------------------------------------------------------------------------
+    if (m_isDirectChunkCall) {
+        m_isDirectChunkCall = false;
+
+        const QString chunkTranslation = translatedJson.trimmed();
+        if (chunkTranslation.isEmpty()) {
+            _log(QStringLiteral("  Page %1 → %2: direct chunk %3/%4 returned empty — aborting")
+                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang)
+                     .arg(m_chunkState->chunkIndex).arg(m_chunkState->totalChunks), true);
+            m_chunkState.reset();
+            ++m_errors;
+            _processNextJob();
+            return;
+        }
+
+        auto &cs = m_chunkState.value();
+        if (!cs.assembledText.isEmpty()) {
+            cs.assembledText += QStringLiteral("\n\n");
+        }
+        cs.assembledText += chunkTranslation;
+
+        if (!cs.pendingChunks.isEmpty()) {
+            _log(QStringLiteral("  Page %1 → %2: direct chunk %3/%4 done (%5 chars), continuing…")
+                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang)
+                     .arg(cs.chunkIndex).arg(cs.totalChunks).arg(chunkTranslation.size()));
+
+            const QString nextChunkText = cs.pendingChunks.takeFirst();
+            cs.chunkIndex++;
+
+            if (cs.pendingChunks.isEmpty()) {
+                // Last chunk: use normal protocol so other fields (slug, social)
+                // come back with proper BEGIN/END markers in the same call.
+                QList<TranslatableField> lastBatch;
+                TranslatableField chunkField;
+                chunkField.id         = cs.fieldId;
+                chunkField.sourceText = nextChunkText;
+                lastBatch.append(chunkField);
+                lastBatch.append(cs.otherFields);
+                _launchTextTranslation(lastBatch);
+            } else {
+                _launchDirectChunkTranslation(nextChunkText);
+            }
+            return;
+        }
+
+        // All direct chunks done (no pending) — but otherFields still need translating
+        // via the normal protocol in a separate call if not already handled.
+        if (!cs.otherFields.isEmpty()) {
+            _log(QStringLiteral("  Page %1 → %2: direct chunk %3/%4 done, sending other fields…")
+                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang)
+                     .arg(cs.chunkIndex).arg(cs.totalChunks));
+            const QList<TranslatableField> otherBatch = cs.otherFields;
+            cs.otherFields.clear();
+            _launchTextTranslation(otherBatch);
+            return;
+        }
+
+        // No more chunks and no other fields — finalize.
+        QHash<QString, QString> finalTranslations = cs.otherTranslations;
+        finalTranslations.insert(cs.fieldId, cs.assembledText);
+        m_chunkState.reset();
+        _log(QStringLiteral("  Page %1 → %2: all direct chunks assembled")
+                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang));
+        _finalizeTextTranslations(finalTranslations);
+        return;
+    }
+
+    // -------------------------------------------------------------------------
+    // Protocol-mode: parse BEGIN/END response.
+    // -------------------------------------------------------------------------
     const QHash<QString, QString> translations = TranslationProtocol::parseResponse(translatedJson);
 
     if (translations.isEmpty()) {
@@ -754,7 +893,6 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
                  .arg(m_currentJob.pageId).arg(m_currentJob.targetLang)
                  .arg(translatedJson.size()).arg(preview), true);
 
-        // Save full raw response for diagnosis.
         const QString dumpPath = m_workingDir.filePath(
             QStringLiteral("translation_response_debug_p%1_%2.txt")
                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang));
@@ -766,20 +904,28 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
             }
         }
 
-        m_processOutput.clear();
         m_chunkState.reset();
         ++m_errors;
         _processNextJob();
         return;
     }
 
-    m_processOutput.clear();
-
     // -------------------------------------------------------------------------
-    // Chunk mode: accumulate the result and dispatch the next chunk (or finalize).
+    // Chunk mode (protocol): accumulate and dispatch next chunk or finalize.
     // -------------------------------------------------------------------------
     if (m_chunkState.has_value()) {
         auto &cs = m_chunkState.value();
+
+        // Guard: if the chunked field is absent, the model ignored the protocol.
+        if (!translations.contains(cs.fieldId)) {
+            _log(QStringLiteral("  Page %1 → %2: chunk %3/%4 response missing field '%5' — aborting")
+                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang)
+                     .arg(cs.chunkIndex).arg(cs.totalChunks).arg(cs.fieldId), true);
+            m_chunkState.reset();
+            ++m_errors;
+            _processNextJob();
+            return;
+        }
 
         for (auto it = translations.cbegin(); it != translations.cend(); ++it) {
             if (it.key() == cs.fieldId) {
@@ -792,23 +938,7 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
             }
         }
 
-        if (!cs.pendingChunks.isEmpty()) {
-            _log(QStringLiteral("  Page %1 → %2: chunk %3/%4 done, continuing…")
-                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang)
-                     .arg(cs.chunkIndex).arg(cs.totalChunks));
-
-            QList<TranslatableField> nextBatch;
-            TranslatableField chunkField;
-            chunkField.id         = cs.fieldId;
-            chunkField.sourceText = cs.pendingChunks.takeFirst();
-            nextBatch.append(chunkField);
-            cs.chunkIndex++;
-
-            _launchTextTranslation(nextBatch);
-            return;
-        }
-
-        // All chunks done — assemble final translations and save.
+        // All chunks done — finalize.
         QHash<QString, QString> finalTranslations = cs.otherTranslations;
         finalTranslations.insert(cs.fieldId, cs.assembledText);
         m_chunkState.reset();
@@ -930,13 +1060,92 @@ void PageTranslator::_launchTextTranslation(const QList<TranslatableField> &fiel
     m_process->setProgram(QStringLiteral("claude"));
     m_process->setArguments({QStringLiteral("-p"), QStringLiteral("-"),
                               QStringLiteral("--dangerously-skip-permissions"),
+                              QStringLiteral("--no-session-persistence"),
                               QStringLiteral("--tools"), QStringLiteral(""),
                               QStringLiteral("--output-format"), QStringLiteral("stream-json"),
                               QStringLiteral("--verbose")});
-    // Use the temp dir as cwd so the claude CLI finds no project context (no
-    // CLAUDE.md, no session history).  Without this, the CLI can inherit the
-    // translation project's session history and "continue" a previously
-    // interrupted response instead of translating the current prompt fresh.
+    // Use the temp dir as cwd so the claude CLI finds no project context.
+    // --no-session-persistence ensures no previous session is resumed even
+    // if the prompt content matches a prior translation attempt.
+    m_process->setWorkingDirectory(m_tempDir->path());
+    m_process->setStandardInputFile(promptPath);
+
+    connect(m_process, &QProcess::readyReadStandardOutput,
+            this, &PageTranslator::_onProcessReadyRead);
+    connect(m_process,
+            QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, &PageTranslator::_onProcessFinished);
+
+    m_process->start();
+}
+
+// =============================================================================
+// Private: _launchDirectChunkTranslation
+// =============================================================================
+
+void PageTranslator::_launchDirectChunkTranslation(const QString &chunkText)
+{
+    // Build a simple "translate this text" prompt — no BEGIN/END protocol.
+    // Claude reliably outputs clean translated text for this format even at 44K chars.
+    const QString prompt =
+        QStringLiteral("Translate the following text from ")
+        + m_currentJob.sourceLang
+        + QStringLiteral(" to ")
+        + m_currentJob.targetLang
+        + QStringLiteral(
+              ".\n\n"
+              "Rules:\n"
+              "- Preserve any [SHORTCODE attr=\"val\"]...[/SHORTCODE] tags verbatim;"
+              " translate only the plain text segments between them\n"
+              "- Preserve any HTML tags; translate only the text content\n"
+              "- Keep proper nouns, brand names, and technical terms appropriate\n"
+              "- Never translate shortcode tag names or attribute names\n"
+              "- Output ONLY the translated text — no preamble, no explanation,"
+              " no markdown, no commentary\n"
+              "- Start your output immediately with the first translated word\n\n"
+              "Text:\n\n")
+        + chunkText;
+
+    _log(QStringLiteral("  Sending direct chunk %1/%2 to claude, prompt size: %3 chars")
+             .arg(m_chunkState->chunkIndex).arg(m_chunkState->totalChunks).arg(prompt.size()));
+
+    m_tempDir = std::make_unique<QTemporaryDir>();
+    if (!m_tempDir->isValid()) {
+        _log(QStringLiteral("  Failed to create temp dir for direct chunk, page %1 → %2")
+                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
+        m_chunkState.reset();
+        ++m_errors;
+        m_tempDir.reset();
+        _processNextJob();
+        return;
+    }
+
+    const QString promptPath = m_tempDir->path() + QStringLiteral("/prompt.txt");
+    {
+        QFile f(promptPath);
+        if (!f.open(QIODevice::WriteOnly)) {
+            _log(QStringLiteral("  Failed to write prompt file for direct chunk, page %1 → %2")
+                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
+            m_chunkState.reset();
+            ++m_errors;
+            m_tempDir.reset();
+            _processNextJob();
+            return;
+        }
+        f.write(prompt.toUtf8());
+    }
+
+    m_processOutput.clear();
+    m_isDirectChunkCall = true;
+
+    m_process = new QProcess(this);
+    m_process->setProgram(QStringLiteral("claude"));
+    m_process->setArguments({QStringLiteral("-p"), QStringLiteral("-"),
+                              QStringLiteral("--dangerously-skip-permissions"),
+                              QStringLiteral("--no-session-persistence"),
+                              QStringLiteral("--tools"), QStringLiteral(""),
+                              QStringLiteral("--output-format"), QStringLiteral("stream-json"),
+                              QStringLiteral("--verbose")});
     m_process->setWorkingDirectory(m_tempDir->path());
     m_process->setStandardInputFile(promptPath);
 
@@ -955,6 +1164,26 @@ void PageTranslator::_launchTextTranslation(const QList<TranslatableField> &fiel
 
 void PageTranslator::_finalizeTextTranslations(const QHash<QString, QString> &translations)
 {
+    // Validate each field for truncation: if the translated text has more opening
+    // shortcode brackets than closing ones, the output was cut off mid-shortcode.
+    for (auto it = translations.cbegin(); it != translations.cend(); ++it) {
+        if (it.key() == QStringLiteral("_permalink_slug")) {
+            continue; // slug never contains shortcodes
+        }
+        const int opens  = it.value().count(QLatin1Char('['));
+        const int closes = it.value().count(QLatin1Char(']'));
+        if (opens > closes) {
+            _log(QStringLiteral("  Page %1 → %2: field '%3' appears truncated "
+                                 "(unbalanced brackets: %4 open, %5 close) — skipping save")
+                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang)
+                     .arg(it.key()).arg(opens).arg(closes), true);
+            m_chunkState.reset();
+            ++m_errors;
+            _processNextJob();
+            return;
+        }
+    }
+
     for (auto it = translations.cbegin(); it != translations.cend(); ++it) {
         m_currentPageType->applyTranslation(QStringView{},
                                              it.key(),
@@ -1163,7 +1392,7 @@ void PageTranslator::_rasterizeSvgToWebPs(const QString    &svgFilename,
 
     // Derive WebP filename from SVG filename by swapping suffix.
     const QString webpFilename = svgFilename.left(
-        svgFilename.size() - 4) + QStringLiteral("webp"); // replace ".svg" with ".webp"
+        svgFilename.size() - 4) + QStringLiteral(".webp"); // replace ".svg" with ".webp"
 
     // Write to images.db under (lang, webpFilename).
     const QString dbPath = m_workingDir.filePath(QStringLiteral("images.db"));

@@ -165,6 +165,12 @@ private:
     // all already populated.
     void _launchTextTranslation(const QList<TranslatableField> &fields);
 
+    // Direct-mode chunk translation: sends a plain "translate this text" prompt
+    // without the BEGIN/END protocol. Used for large intermediate chunks where
+    // the model reliably ignores the structured format. The response is captured
+    // as raw translated text. Sets m_isDirectChunkCall = true before launching.
+    void _launchDirectChunkTranslation(const QString &chunkText);
+
     // Applies translations from a completed text job (or assembled chunks),
     // saves to the repository, queues SVG sub-jobs, and calls _processNextJob().
     void _finalizeTextTranslations(const QHash<QString, QString> &translations);
@@ -195,8 +201,13 @@ private:
         QStringList pendingChunks; ///< chunks not yet dispatched (front = next)
         QString  assembledText;    ///< translated content accumulated so far
         QHash<QString, QString> otherTranslations; ///< non-chunked field results
+        QList<TranslatableField> otherFields; ///< non-chunked fields appended to last chunk call
     };
     std::optional<ChunkState> m_chunkState;
+
+    // When true, the in-flight claude call is a direct chunk (no BEGIN/END protocol).
+    // _onProcessFinished uses the raw response text as the chunk translation directly.
+    bool m_isDirectChunkCall = false;
 
     /// Fields per chunk; >45 k chars in a single field triggers chunking.
     static constexpr int MAX_CHUNK_CHARS = 45'000;

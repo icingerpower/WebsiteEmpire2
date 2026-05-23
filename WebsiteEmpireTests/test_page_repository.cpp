@@ -321,6 +321,7 @@ void Test_PageRepository::test_pagerepo_update_permalink_records_history()
 {
     Fixture f;
     const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/old.html"), QStringLiteral("en"));
+    f.repo.setPublishedAt(id, QStringLiteral("2025-01-01T00:00:00Z"));
     f.repo.updatePermalink(id, QStringLiteral("/new.html"));
     const auto &history = f.repo.permalinkHistory(id);
     QCOMPARE(history.size(), 1);
@@ -357,6 +358,7 @@ void Test_PageRepository::test_pagerepo_permalink_history_grows_on_each_update()
 {
     Fixture f;
     const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/v1.html"), QStringLiteral("en"));
+    f.repo.setPublishedAt(id, QStringLiteral("2025-01-01T00:00:00Z"));
     f.repo.updatePermalink(id, QStringLiteral("/v2.html"));
     f.repo.updatePermalink(id, QStringLiteral("/v3.html"));
     QCOMPARE(f.repo.permalinkHistory(id).size(), 2);
@@ -366,6 +368,7 @@ void Test_PageRepository::test_pagerepo_permalink_history_chronological_order()
 {
     Fixture f;
     const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/v1.html"), QStringLiteral("en"));
+    f.repo.setPublishedAt(id, QStringLiteral("2025-01-01T00:00:00Z"));
     f.repo.updatePermalink(id, QStringLiteral("/v2.html"));
     f.repo.updatePermalink(id, QStringLiteral("/v3.html"));
     const auto &history = f.repo.permalinkHistory(id);

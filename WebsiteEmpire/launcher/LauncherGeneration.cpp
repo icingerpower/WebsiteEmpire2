@@ -381,13 +381,19 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                             renderer.render(&painter);
                             painter.end();
 
+                            // Save the source SVG so --translate --svg can generate
+                            // language-specific WebP variants from it later.
+                            const QString svgFilename = webpFilename.left(
+                                webpFilename.size() - 5) + QStringLiteral(".svg");
+                            imageWriter.writeSvg(validatedSvg.toUtf8(), domain, svgFilename);
+
                             imageWriter.writeQImage(img, domain, webpFilename);
                             const QString dataKey =
                                 QStringLiteral("%1_").arg(bIdx) + secBloc->variantDataKey(vi);
                             retryPageData.insert(dataKey, webpFilename);
                             anyVariantSaved = true;
 
-                            *(state->out) << QStringLiteral("[S%1] 2nd pass WebP saved (retry): %2\n")
+                            *(state->out) << QStringLiteral("[S%1] 2nd pass SVG+WebP saved (retry): %2\n")
                                                  .arg(sNum).arg(webpFilename);
                             state->out->flush();
                         }
@@ -1063,11 +1069,13 @@ void LauncherGeneration::run(const QString & /*value*/)
             // findPendingByTypeId() — existing pending stubs still get processed.
         }
 
-        // ---- Housekeeping: fix legacy states -----------------------------------
-        // Advance MainImageReady pages without SocialMedia flag to Complete
-        // (pages left in MainImageReady by an interrupted run or old pipeline).
-        // Migrate Complete pages that have the SocialMedia flag to SocialComplete
-        // (pages whose second pass ran before the SocialComplete state existed).
+        // ---- Housekeeping: advance MainImageReady without SocialMedia flag ----
+        // Pages left in MainImageReady by an interrupted run or old pipeline
+        // that did not set the SocialMedia flag should be promoted to Complete
+        // so they are not stuck in the retry queue indefinitely.
+        // NOTE: we intentionally do NOT auto-promote Complete + SocialMedia flag
+        // → SocialComplete here. That migration was removed because it could
+        // corrupt state by promoting a page whose second pass never ran.
         {
             const QList<PageRecord> allMirPages =
                 schedRepo.findByGenerationState(info.pageTypeId,
@@ -1075,15 +1083,6 @@ void LauncherGeneration::run(const QString & /*value*/)
             for (const PageRecord &p : std::as_const(allMirPages)) {
                 if (!(p.flags & static_cast<quint32>(PageFlag::SocialMedia))) {
                     schedRepo.setGenerationState(p.id, PageGenerationState::Complete);
-                }
-            }
-
-            const QList<PageRecord> allComplete =
-                schedRepo.findByGenerationState(info.pageTypeId,
-                                               PageGenerationState::Complete);
-            for (const PageRecord &p : std::as_const(allComplete)) {
-                if (p.flags & static_cast<quint32>(PageFlag::SocialMedia)) {
-                    schedRepo.setGenerationState(p.id, PageGenerationState::SocialComplete);
                 }
             }
         }

@@ -377,6 +377,9 @@ private slots:
     // --- addCode with translation ---
     void test_pagebloctext_addcode_uses_translation_when_available();
     void test_pagebloctext_addcode_falls_back_to_source_no_translation();
+
+    // --- truncated-shortcode rendering (regression: output token limit cuts off mid-tag) ---
+    void test_pagebloctext_addcode_truncated_shortcode_renders_literal_bracket_text();
 };
 
 // Helper: load text, apply translation, run addCode, return html
@@ -622,6 +625,42 @@ void Test_PageBlocText_Translation::test_pagebloctext_addcode_falls_back_to_sour
     bloc.addCode(QStringView{}, g_emptyEngine, 0, html, css, js, cssDone, jsDone);
 
     QVERIFY(html.contains(src));
+}
+
+void Test_PageBlocText_Translation::test_pagebloctext_addcode_truncated_shortcode_renders_literal_bracket_text()
+{
+    // Regression: if a translation is stored with a truncated shortcode at the end
+    // (e.g. the Claude response was cut off mid-output-token), processText cannot
+    // match the incomplete tag and emits it as literal text.  This test documents
+    // the symptom so that prevention (bracket-balance check before saving) is clear.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    {
+        QFile csv(QDir(dir.path()).absoluteFilePath(QStringLiteral("engine_domains.csv")));
+        QVERIFY(csv.open(QIODevice::WriteOnly | QIODevice::Text));
+        QTextStream out(&csv);
+        out << QStringLiteral("Enabled;LangCode;Language;Theme;Domain;HostId;HostFolder\n");
+        out << QStringLiteral("1;fr;French;default;fr.example.com;;\n");
+    }
+    HostTable hostTable(QDir(dir.path()));
+    EngineArticles engine;
+    engine.init(QDir(dir.path()), hostTable);
+
+    PageBlocText bloc;
+    bloc.load({{QLatin1String(PageBlocText::KEY_TEXT), QStringLiteral("Source text")}});
+
+    const QString truncated = QStringLiteral("Texte traduit\n\n[TITLE level");
+    bloc.applyTranslation(QStringView{}, QLatin1String(PageBlocText::KEY_TEXT),
+                          QStringLiteral("fr"), truncated);
+
+    QString html, css, js;
+    QSet<QString> cssDone, jsDone;
+    bloc.addCode(QStringView{}, engine, 0, html, css, js, cssDone, jsDone);
+
+    // The incomplete bracket text must appear verbatim because processText
+    // finds no complete [TAG]...[/TAG] match for it.
+    QVERIFY2(html.contains(QStringLiteral("[TITLE level")),
+             "truncated shortcode should render as literal text (not silently dropped)");
 }
 
 // =============================================================================
