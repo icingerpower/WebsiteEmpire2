@@ -741,8 +741,11 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
                     const QJsonObject blk = block.toObject();
                     if (blk.value(QStringLiteral("type")).toString() == QStringLiteral("text")) {
                         const QString t = blk.value(QStringLiteral("text")).toString().trimmed();
-                        if (t.size() > assistantText.size()) {
-                            assistantText = t;
+                        if (!t.isEmpty()) {
+                            if (!assistantText.isEmpty()) {
+                                assistantText += QLatin1Char('\n');
+                            }
+                            assistantText += t;
                         }
                     }
                 }

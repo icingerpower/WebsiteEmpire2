@@ -91,7 +91,11 @@ QHash<QString, QString> TranslationProtocol::parseResponse(const QString &respon
         content = content.trimmed();
 
         if (!content.isEmpty()) {
-            result.insert(id, content);
+            if (result.contains(id)) {
+                result[id] += QLatin1Char('\n') + content;
+            } else {
+                result.insert(id, content);
+            }
         }
     }
     return result;

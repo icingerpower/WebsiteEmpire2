@@ -19,6 +19,7 @@ private slots:
     void test_protocol_parse_id_trimmed();
     void test_protocol_parse_missing_end_marker_still_extracts_content();
     void test_protocol_parse_end_without_preceding_newline();
+    void test_protocol_parse_duplicate_field_id_appends_content();
 
     // buildPrompt ---------------------------------------------------------
 
@@ -145,6 +146,27 @@ void Test_TranslationProtocol::test_protocol_parse_end_without_preceding_newline
     const auto result = TranslationProtocol::parseResponse(response);
     QCOMPARE(result.size(), 1);
     QCOMPARE(result.value(QStringLiteral("1_text")), QStringLiteral("Bonjour monde."));
+}
+
+void Test_TranslationProtocol::test_protocol_parse_duplicate_field_id_appends_content()
+{
+    // Simulate a CLI continuation: the model hits max_tokens and the CLI makes a
+    // second API call.  Both responses use the same field id — the continuation
+    // chunk must be appended, not discarded.
+    const QString response =
+        QStringLiteral("===BEGIN 1_text===\n"
+                       "First part of the article.\n"
+                       "===BEGIN 1_text===\n"
+                       "Second part of the article.\n"
+                       "===END===\n"
+                       "===BEGIN _permalink_slug===\n"
+                       "my-article-slug\n"
+                       "===END===");
+    const auto result = TranslationProtocol::parseResponse(response);
+    QCOMPARE(result.size(), 2);
+    QCOMPARE(result.value(QStringLiteral("1_text")),
+             QStringLiteral("First part of the article.\nSecond part of the article."));
+    QCOMPARE(result.value(QStringLiteral("_permalink_slug")), QStringLiteral("my-article-slug"));
 }
 
 // =============================================================================

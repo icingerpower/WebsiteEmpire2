@@ -209,8 +209,8 @@ private:
     // _onProcessFinished uses the raw response text as the chunk translation directly.
     bool m_isDirectChunkCall = false;
 
-    /// Fields per chunk; >45 k chars in a single field triggers chunking.
-    static constexpr int MAX_CHUNK_CHARS = 45'000;
+    /// Fields per chunk; >28 k chars in a single field triggers chunking.
+    static constexpr int MAX_CHUNK_CHARS = 28'000;
 
     QFile *m_logFile = nullptr;
 };
