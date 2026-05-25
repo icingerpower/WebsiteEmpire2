@@ -1187,6 +1187,34 @@ void PageTranslator::_finalizeTextTranslations(const QHash<QString, QString> &tr
         }
     }
 
+    // Minimum-length guard: reject if the translation is suspiciously short relative
+    // to the source.  CJK languages are naturally ~40-60 % of Latin text by character
+    // count, so 35 % is a conservative floor that catches obviously incomplete outputs
+    // while accepting even the most compact target languages.
+    // Only applied to fields whose source exceeds MIN_LENGTH_CHECK_CHARS so that
+    // short titles and slugs are never compared.
+    for (auto it = translations.cbegin(); it != translations.cend(); ++it) {
+        if (it.key() == QStringLiteral("_permalink_slug")) {
+            continue;
+        }
+        const QString &srcText = m_currentPageData.value(it.key());
+        if (srcText.size() < MIN_LENGTH_CHECK_CHARS) {
+            continue;
+        }
+        const int minRequired = static_cast<int>(srcText.size() * MIN_TRANSLATION_RATIO);
+        if (it.value().size() < minRequired) {
+            _log(QStringLiteral("  Page %1 → %2: field '%3' translation too short "
+                                 "(%4 chars, source %5 chars, min %6) — skipping save")
+                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang)
+                     .arg(it.key()).arg(it.value().size()).arg(srcText.size()).arg(minRequired),
+                 true);
+            m_chunkState.reset();
+            ++m_errors;
+            _processNextJob();
+            return;
+        }
+    }
+
     for (auto it = translations.cbegin(); it != translations.cend(); ++it) {
         m_currentPageType->applyTranslation(QStringView{},
                                              it.key(),

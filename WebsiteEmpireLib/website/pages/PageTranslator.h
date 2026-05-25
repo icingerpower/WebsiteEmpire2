@@ -212,6 +212,11 @@ private:
     /// Fields per chunk; >28 k chars in a single field triggers chunking.
     static constexpr int MAX_CHUNK_CHARS = 28'000;
 
+    /// Minimum source length before the translation-length ratio check is applied.
+    static constexpr int    MIN_LENGTH_CHECK_CHARS  = 1'000;
+    /// Translation must be at least this fraction of source length (CJK is ~40-60 %).
+    static constexpr double MIN_TRANSLATION_RATIO   = 0.35;
+
     QFile *m_logFile = nullptr;
 };
 
