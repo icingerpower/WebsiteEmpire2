@@ -74,6 +74,20 @@ QHash<QString, QString> TranslationProtocol::parseResponse(const QString &respon
                 id = id.left(parenIdx).trimmed();
             }
         }
+        // Strip continuation suffixes the model appends when it hits output limits
+        // and makes a new API call for the rest of a field:
+        //   "1_text_part2"           → "1_text"
+        //   "1_text_continued_part2" → "1_text"
+        //   "1_text_continued"       → "1_text"
+        // Combined with the duplicate-field append logic below, this reassembles
+        // the full translation from all continuation chunks.
+        {
+            static const QRegularExpression reContinuation(
+                QStringLiteral("(?:_continued)?_part\\d+$|_continued\\d*$"),
+                QRegularExpression::CaseInsensitiveOption);
+            id.remove(reContinuation);
+            id = id.trimmed();
+        }
         if (id.isEmpty()) {
             continue;
         }

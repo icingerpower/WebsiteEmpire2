@@ -20,6 +20,7 @@ private slots:
     void test_protocol_parse_missing_end_marker_still_extracts_content();
     void test_protocol_parse_end_without_preceding_newline();
     void test_protocol_parse_duplicate_field_id_appends_content();
+    void test_protocol_parse_continuation_suffix_stripped_and_appended();
 
     // buildPrompt ---------------------------------------------------------
 
@@ -167,6 +168,27 @@ void Test_TranslationProtocol::test_protocol_parse_duplicate_field_id_appends_co
     QCOMPARE(result.value(QStringLiteral("1_text")),
              QStringLiteral("First part of the article.\nSecond part of the article."));
     QCOMPARE(result.value(QStringLiteral("_permalink_slug")), QStringLiteral("my-article-slug"));
+}
+
+void Test_TranslationProtocol::test_protocol_parse_continuation_suffix_stripped_and_appended()
+{
+    // Simulate the _part2 / _continued_part2 / _continued naming the model uses
+    // when it hits max_tokens and continues in a second API call.
+    // All variants must be stripped to the base field id and appended.
+    const QString response =
+        QStringLiteral("===BEGIN 1_text===\n"
+                       "First part.\n"
+                       "===BEGIN 1_text_part2===\n"
+                       "Second part.\n"
+                       "===END===\n"
+                       "===BEGIN 2_title_continued===\n"
+                       "Titre traduit.\n"
+                       "===END===");
+    const auto result = TranslationProtocol::parseResponse(response);
+    QCOMPARE(result.size(), 2);
+    QCOMPARE(result.value(QStringLiteral("1_text")),
+             QStringLiteral("First part.\nSecond part."));
+    QCOMPARE(result.value(QStringLiteral("2_title")), QStringLiteral("Titre traduit."));
 }
 
 // =============================================================================
