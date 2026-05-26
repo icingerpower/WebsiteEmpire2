@@ -417,14 +417,23 @@ bool GenPageQueue::processContentAndMetadata(int              pageId,
     cleanText.remove(reSvgBlock);
     cleanText = cleanText.trimmed();
 
-    // If SVG removal left leading non-shortcode content, seek the article title.
-    if (!cleanText.startsWith(QLatin1Char('['))) {
+    // If the content doesn't start with the expected shortcode, seek it.
+    // This handles non-shortcode preamble (e.g. XML declarations, stray text).
+    if (!cleanText.startsWith(kExpectedStart)) {
         const int titlePos = cleanText.indexOf(kExpectedStart);
         if (titlePos > 0) {
             cleanText = cleanText.mid(titlePos);
         }
     }
     cleanText = cleanText.trimmed();
+
+    // Normalize: if the model opened with [TITLE level="2"] (wrong level) as
+    // the very first shortcode, promote it to level="1" — the position uniquely
+    // identifies it as the article title regardless of which level Claude chose.
+    static const QString kWrongLevel = QStringLiteral("[TITLE level=\"2\"]");
+    if (cleanText.startsWith(kWrongLevel)) {
+        cleanText = kExpectedStart + cleanText.mid(kWrongLevel.size());
+    }
 
     // Reject articles that don't start with the mandatory title shortcode — this
     // catches both Claude disobeying the formatting rules and over-aggressive SVG

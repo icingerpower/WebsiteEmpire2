@@ -45,7 +45,7 @@ public:
     /** Returns the social image bloc (second-pass WebP variants) for the page generator. */
     const PageBlocSocialMedia &socialBloc() const { return m_socialBloc; }
 
-    QString buildHeadMetaTags(const QString &baseUrl) const override;
+    QString buildHeadMetaTags(const QString &baseUrl, const QString &langCode) const override;
 
 private:
     PageBlocHubGrid                 m_hubGridBloc;

@@ -208,22 +208,27 @@ void PageBlocCategory::addCode(QStringView     /*origContent*/,
         return;
     }
 
-    // <p> with inline <a> children is the only structure QTextBrowser renders
-    // on one line reliably (white-space:nowrap is not in Qt's CSS subset).
-    // The same HTML renders correctly in all real browsers too.
-    Q_UNUSED(css)
-    Q_UNUSED(cssDoneIds)
-
-    html += QStringLiteral(
-        "<p style=\"font-size:0.8em;color:#aaa;margin:0 0 0.75em;"
-        "padding-bottom:0.35em;border-bottom:1px solid #eee\">");
-    for (int i = 0; i < trails.size(); ++i) {
-        if (i > 0) {
-            html += QStringLiteral(" &nbsp;/&nbsp; ");
-        }
-        html += trails.at(i);
+    static const QString CSS_ID = QStringLiteral("PageBlocCategory_breadcrumb");
+    if (!cssDoneIds.contains(CSS_ID)) {
+        cssDoneIds.insert(CSS_ID);
+        css += QStringLiteral(
+            ".breadcrumb{list-style:none;padding:0;margin:0 0 0.75em;"
+            "display:flex;flex-wrap:wrap;gap:0.25em 0;"
+            "font-size:0.8em;color:#aaa;"
+            "border-bottom:1px solid #eee;padding-bottom:0.35em}"
+            ".breadcrumb li{display:inline}"
+            ".breadcrumb li+li::before{content:\" › \";color:#ccc}"
+            ".breadcrumb a{color:#aaa;text-decoration:none}"
+            ".breadcrumb a:hover{text-decoration:underline}");
     }
-    html += QStringLiteral("</p>");
+
+    html += QStringLiteral("<nav aria-label=\"breadcrumb\"><ol class=\"breadcrumb\">");
+    for (int i = 0; i < trails.size(); ++i) {
+        html += QStringLiteral("<li>");
+        html += trails.at(i);
+        html += QStringLiteral("</li>");
+    }
+    html += QStringLiteral("</ol></nav>");
 }
 
 AbstractPageBlockWidget *PageBlocCategory::createEditWidget()

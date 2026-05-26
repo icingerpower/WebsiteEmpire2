@@ -111,6 +111,8 @@ bool PageGenerator::_writePage(AbstractPageType &type,
                                 AbstractEngine   &engine,
                                 int               websiteIndex)
 {
+    type.setGenerationContext(record.permalink, record.lang, record.langCodesToTranslate);
+
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
     type.addCode(QStringView{}, engine, websiteIndex, html, css, js, cssDoneIds, jsDoneIds);

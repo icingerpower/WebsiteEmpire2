@@ -25,6 +25,7 @@ macro(add_empire_test TARGET_NAME SOURCE_FILE)
 endmacro()
 
 add_empire_test(Test_Website_PageBlocText              test_website_page_bloc_text.cpp)
+add_empire_test(Test_Website_PageBlocMeta              test_website_page_bloc_meta.cpp)
 add_empire_test(Test_Website_PageBlocCategory          test_website_page_bloc_category.cpp)
 add_empire_test(Test_Website_PageBlocCategoryLinks     test_website_page_bloc_category_links.cpp)
 add_empire_test(Test_Website_PageBlocImageLinks        test_website_page_bloc_image_links.cpp)

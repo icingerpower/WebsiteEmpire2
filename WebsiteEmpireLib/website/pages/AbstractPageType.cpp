@@ -130,10 +130,24 @@ void AbstractPageType::bindGenerationContext(IPageRepository & /*repo*/,
 }
 
 // =============================================================================
+// setGenerationContext
+// =============================================================================
+
+void AbstractPageType::setGenerationContext(const QString     &permalink,
+                                             const QString     &sourceLang,
+                                             const QStringList &targetLangs)
+{
+    m_permalink   = permalink;
+    m_sourceLang  = sourceLang;
+    m_targetLangs = targetLangs;
+}
+
+// =============================================================================
 // buildHeadMetaTags / hasSvg
 // =============================================================================
 
-QString AbstractPageType::buildHeadMetaTags(const QString & /*baseUrl*/) const
+QString AbstractPageType::buildHeadMetaTags(const QString & /*baseUrl*/,
+                                             const QString & /*langCode*/) const
 {
     return {};
 }
@@ -330,7 +344,7 @@ void AbstractPageType::addCode(QStringView     origContent,
         html += QStringLiteral("</style>");
     }
     if (!baseUrl.isEmpty()) {
-        html += buildHeadMetaTags(baseUrl);
+        html += buildHeadMetaTags(baseUrl, langCode);
     }
     html += QStringLiteral("</head><body>");
     html += bodyHtml;

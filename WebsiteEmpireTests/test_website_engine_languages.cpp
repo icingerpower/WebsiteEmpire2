@@ -92,7 +92,7 @@ void Test_Website_Engine_Languages::test_variations_count()
     EngineLanguages engine;
     const QStringList codes = CountryLangManager::instance()->defaultLangCodes();
     QVERIFY(!codes.isEmpty());
-    QCOMPARE(codes.size(), 30);
+    QCOMPARE(codes.size(), 31);
 
     // getVariations() returns every lang code as a source language — one per entry.
     const QList<AbstractEngine::Variation> variations = engine.getVariations();
@@ -208,7 +208,7 @@ void Test_Website_Engine_Languages::test_flags()
     HostTable hostTable(QDir(dir.path()));
     EngineLanguages engine;
     engine.init(QDir(dir.path()), hostTable);
-    QCOMPARE(engine.rowCount(), 900);  // zh/zh preserved + 899 missing pairs added (30×30)
+    QCOMPARE(engine.rowCount(), 961);  // zh/zh preserved + 960 missing pairs added (31×31)
 
     // COL_LANG_CODE: user-checkable but NOT text-editable (read-only column)
     const Qt::ItemFlags langFlags = engine.flags(engine.index(0, AbstractEngine::COL_LANG_CODE));
@@ -245,7 +245,7 @@ void Test_Website_Engine_Languages::test_load_csv_basic()
     EngineLanguages engine;
     engine.init(QDir(dir.path()), hostTable);
 
-    QCOMPARE(engine.rowCount(), 900);  // zh/zh preserved + 899 missing pairs added (30×30)
+    QCOMPARE(engine.rowCount(), 961);  // zh/zh preserved + 960 missing pairs added (31×31)
     QCOMPARE(engine.columnCount(), 6);
     QCOMPARE(engine.data(engine.index(0, AbstractEngine::COL_LANG_CODE)).toString(),   QStringLiteral("zh"));
     QCOMPARE(engine.data(engine.index(0, AbstractEngine::COL_LANGUAGE)).toString(),    QStringLiteral("Chinese"));
@@ -273,7 +273,7 @@ void Test_Website_Engine_Languages::test_setdata_text_columns()
     HostTable hostTable(QDir(dir.path()));
     EngineLanguages engine;
     engine.init(QDir(dir.path()), hostTable);
-    QCOMPARE(engine.rowCount(), 900);  // zh/zh preserved + 899 missing pairs added (30×30)
+    QCOMPARE(engine.rowCount(), 961);  // zh/zh preserved + 960 missing pairs added (31×31)
 
     QVERIFY(engine.setData(engine.index(0, AbstractEngine::COL_LANG_CODE), QStringLiteral("fr")));
     QCOMPARE(engine.data(engine.index(0, AbstractEngine::COL_LANG_CODE)).toString(), QStringLiteral("fr"));
@@ -349,7 +349,7 @@ void Test_Website_Engine_Languages::test_save_and_reload()
     {
         EngineLanguages engine;
         engine.init(QDir(dir.path()), hostTable);
-        QCOMPARE(engine.rowCount(), 900);  // zh/zh preserved + 899 missing pairs added (30×30)
+        QCOMPARE(engine.rowCount(), 961);  // zh/zh preserved + 960 missing pairs added (31×31)
         QVERIFY(engine.setData(engine.index(0, AbstractEngine::COL_DOMAIN), QStringLiteral("voyage.cn")));
         QVERIFY(engine.setData(engine.index(0, AbstractEngine::COL_LANG_CODE), Qt::Unchecked, Qt::CheckStateRole));
     }
@@ -357,7 +357,7 @@ void Test_Website_Engine_Languages::test_save_and_reload()
     // Fresh engine reads the file written by _save()
     EngineLanguages engine2;
     engine2.init(QDir(dir.path()), hostTable);
-    QCOMPARE(engine2.rowCount(), 900);
+    QCOMPARE(engine2.rowCount(), 961);
     QCOMPARE(engine2.data(engine2.index(0, AbstractEngine::COL_LANG_CODE)).toString(),  QStringLiteral("zh"));
     QCOMPARE(engine2.data(engine2.index(0, AbstractEngine::COL_LANGUAGE)).toString(),   QStringLiteral("Chinese"));
     QCOMPARE(engine2.data(engine2.index(0, AbstractEngine::COL_THEME)).toString(),      QStringLiteral("zh"));
@@ -413,7 +413,7 @@ void Test_Website_Engine_Languages::test_multi_row_csv()
     EngineLanguages engine;
     engine.init(QDir(dir.path()), hostTable);
 
-    QCOMPARE(engine.rowCount(), 900);  // 3 preserved rows + 897 missing pairs added (30×30)
+    QCOMPARE(engine.rowCount(), 961);  // 3 preserved rows + 958 missing pairs added (31×31)
     QCOMPARE(engine.data(engine.index(0, AbstractEngine::COL_LANG_CODE)).toString(), QStringLiteral("zh"));
     QCOMPARE(engine.data(engine.index(1, AbstractEngine::COL_LANG_CODE)).toString(), QStringLiteral("es"));
     QCOMPARE(engine.data(engine.index(2, AbstractEngine::COL_LANG_CODE)).toString(), QStringLiteral("fr"));
@@ -437,7 +437,7 @@ void Test_Website_Engine_Languages::test_host_column_empty_hosttable()
     EngineLanguages engine;
     engine.init(QDir(dir.path()), hostTable);
 
-    QCOMPARE(engine.rowCount(), 900);  // zh/zh preserved + 899 missing pairs added (30×30)
+    QCOMPARE(engine.rowCount(), 961);  // zh/zh preserved + 960 missing pairs added (31×31)
     // No hosts → host name resolves to empty
     QVERIFY(engine.data(engine.index(0, AbstractEngine::COL_HOST)).toString().isEmpty());
     // availableHostNames is also empty
@@ -463,7 +463,7 @@ void Test_Website_Engine_Languages::test_host_column_with_host()
     EngineLanguages engine;
     engine.init(QDir(engineDir.path()), hostTable);
 
-    QCOMPARE(engine.rowCount(), 900);  // zh/zh preserved + 899 missing pairs added (30×30)
+    QCOMPARE(engine.rowCount(), 961);  // zh/zh preserved + 960 missing pairs added (31×31)
     // COL_HOST displays the host name resolved via the stored UUID
     QCOMPARE(engine.data(engine.index(0, AbstractEngine::COL_HOST)).toString(), QStringLiteral("MyServer"));
     QCOMPARE(engine.availableHostNames().size(), 1);
@@ -489,14 +489,14 @@ void Test_Website_Engine_Languages::test_reload_clears_old_data()
     HostTable hostTable(QDir(dir.path()));
     EngineLanguages engine;
     engine.init(QDir(dir.path()), hostTable);
-    QCOMPARE(engine.rowCount(), 900);
+    QCOMPARE(engine.rowCount(), 961);
     QCOMPARE(engine.data(engine.index(0, AbstractEngine::COL_DOMAIN)).toString(), QStringLiteral("old.com"));
 
     // Overwrite CSV with updated domain and reload via init()
     QVERIFY(writeEngineCsv(QDir(dir.path()), {{"1", "zh", "Chinese", "zh", "new.com", "", ""}}));
     engine.init(QDir(dir.path()), hostTable);
 
-    QCOMPARE(engine.rowCount(), 900);
+    QCOMPARE(engine.rowCount(), 961);
     // The domain reflects the new CSV content
     QCOMPARE(engine.data(engine.index(0, AbstractEngine::COL_DOMAIN)).toString(), QStringLiteral("new.com"));
 }
@@ -574,7 +574,7 @@ void Test_Website_Engine_Languages::test_rowcount_equals_langs_times_variations(
     HostTable hostTable(QDir(dir.path()));
     EngineLanguages engine;
 
-    // Write only 5 of the 900 expected (lang × source-lang) pairs — the rest are missing
+    // Write only 5 of the 961 expected (lang × source-lang) pairs — the rest are missing
     QVERIFY(writeEngineCsv(QDir(dir.path()), {
         {QStringLiteral("1"), QStringLiteral("zh"), QStringLiteral("Chinese"),
          QStringLiteral("zh"), QStringLiteral("zh.example.com"), QString(), QString()},

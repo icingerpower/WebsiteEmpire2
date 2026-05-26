@@ -173,8 +173,8 @@ private slots:
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         GenStrategyTable table(QDir(dir.path()));
-        // Name, PageType, Theme, NonSvgImages, PrimaryAttrId, Priority, NDone, NTotal
-        QCOMPARE(table.columnCount(), 8);
+        // Name, PageType, Theme, NonSvgImages, PrimaryAttrId, Priority, EndPermalink, NDone, NTotal
+        QCOMPARE(table.columnCount(), 9);
     }
 
     void test_strategy_table_column_count_with_valid_parent_returns_zero()

@@ -273,13 +273,14 @@ void Test_EngineArticles::test_enginearticles_get_page_types_valid_after_reinit(
 
 void Test_EngineArticles::test_enginearticles_page_type_has_two_blocs()
 {
-    // PageTypeArticle has five blocs: Category, Text, Social, AutoLink, CategoryLinks.
+    // PageTypeArticle has seven blocs: Category, Text, Social, SocialMedia,
+    // AutoLink, CategoryLinks, Meta.
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     HostTable hostTable(QDir(dir.path()));
     EngineArticles engine;
     engine.init(QDir(dir.path()), hostTable);
-    QCOMPARE(engine.getPageTypes().first()->getPageBlocs().size(), 5);
+    QCOMPARE(engine.getPageTypes().first()->getPageBlocs().size(), 7);
 }
 
 void Test_EngineArticles::test_enginearticles_first_bloc_is_category_bloc()

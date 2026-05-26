@@ -26,7 +26,7 @@ void PageTypeCategory::bindGenerationContext(IPageRepository &repo, const QDir &
     m_hubGridBloc.bindContext(repo, workingDir);
 }
 
-QString PageTypeCategory::buildHeadMetaTags(const QString &baseUrl) const
+QString PageTypeCategory::buildHeadMetaTags(const QString &baseUrl, const QString & /*langCode*/) const
 {
     QString result;
 

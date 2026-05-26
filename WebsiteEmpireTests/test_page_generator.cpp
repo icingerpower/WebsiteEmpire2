@@ -333,6 +333,8 @@ void Test_PageGenerator::test_pagegen_generate_redirect_row_for_old_permalink()
 {
     Fixture f;
     const int id = f.addArticle(QStringLiteral("/old.html"), QStringLiteral("text"));
+    // Mark as published so updatePermalink records a history entry.
+    f.repo.setPublishedAt(id, QStringLiteral("2024-01-01T00:00:00Z"));
     f.repo.updatePermalink(id, QStringLiteral("/new.html"));
     f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
 

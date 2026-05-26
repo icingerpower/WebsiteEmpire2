@@ -126,9 +126,10 @@ private slots:
 
 void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_returns_four_blocs()
 {
-    // PageTypeArticle has five blocs: Category, Text, Social, AutoLink, CategoryLinks.
+    // PageTypeArticle has seven blocs: Category, Text, Social, SocialMedia,
+    // AutoLink, CategoryLinks, Meta.
     ArticleFixture f;
-    QCOMPARE(f.article.getPageBlocs().size(), 5);   // 1
+    QCOMPARE(f.article.getPageBlocs().size(), 7);   // 1
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_all_non_null()
@@ -320,10 +321,11 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_style_tag_in_head_before
 
 void Test_PageTypeArticle::test_pagetypearticle_addcode_no_script_tag_when_no_js()
 {
-    // Neither PageBlocText nor PageBlocCategory emits JS.
+    // AbstractPageType always injects the image-zoom lightbox script, so a
+    // <script> tag is present even when no page bloc emits JS.
     ArticleFixture f;
     const auto &html = htmlFrom(f, QStringLiteral("text"));
-    QVERIFY(!html.contains(QStringLiteral("<script>")));   // 25
+    QVERIFY(html.contains(QStringLiteral("<script>")));   // 25
 }
 
 // =============================================================================

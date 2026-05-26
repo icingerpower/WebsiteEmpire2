@@ -8,6 +8,7 @@
 #include <QList>
 #include <QSet>
 #include <QString>
+#include <QStringList>
 
 #include <functional>
 #include <memory>
@@ -129,16 +130,27 @@ public:
     virtual void bindGenerationContext(IPageRepository &repo, const QDir &workingDir);
 
     /**
-     * Returns social-media <meta> tag HTML to be injected into the page <head>.
-     *
-     * addCode() calls this and appends the result between the <style> block and
-     * </head>.  The base URL is "https://<domain>" (no trailing slash).
-     *
-     * The default implementation returns an empty string.  Page types that have
-     * a social-media bloc (PageTypeArticle, PageTypeCategory) override this to
-     * iterate AbstractSocialMedia::all() and emit per-platform tags.
+     * Called by PageGenerator before addCode() to supply the page's permalink,
+     * its source language, and the list of target languages for hreflang generation.
+     * Stored in m_permalink / m_sourceLang / m_targetLangs and forwarded to
+     * buildHeadMetaTags() by addCode().
      */
-    virtual QString buildHeadMetaTags(const QString &baseUrl) const;
+    void setGenerationContext(const QString     &permalink,
+                              const QString     &sourceLang,
+                              const QStringList &targetLangs);
+
+    /**
+     * Returns <title>, canonical, Open Graph and hreflang <meta>/<link> tags
+     * to inject into the page <head>.  addCode() calls this between the <style>
+     * block and </head>.
+     *
+     * baseUrl is "https://<domain>" (no trailing slash).
+     * langCode is the language being rendered (e.g. "fr").
+     *
+     * Default: returns an empty string.  PageTypeArticle overrides this.
+     */
+    virtual QString buildHeadMetaTags(const QString &baseUrl,
+                                      const QString &langCode) const;
 
     /**
      * Returns true when the page type requires an SVG image to be generated as
@@ -207,6 +219,12 @@ public:
                           const QString &displayName,
                           Factory        factory);
     };
+
+protected:
+    // Set by setGenerationContext(); used by buildHeadMetaTags() overrides.
+    QString     m_permalink;
+    QString     m_sourceLang;
+    QStringList m_targetLangs;
 
 private:
     QString m_authorLang;  ///< set by setAuthorLang(); compared in isTranslationComplete()
