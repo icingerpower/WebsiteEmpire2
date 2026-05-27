@@ -219,18 +219,23 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         // Collect every category ID covered by at least one article so we can
         // exclude hub pages whose category has no articles from availablePages.
         // That prevents PageBlocCategoryLinks from linking to empty hub pages.
+        // Scan all *_categories keys (breadcrumb + cross-reference blocs).
         QSet<int> articleCatIds;
         for (const PageRecord &r : std::as_const(pages)) {
             if (r.typeId != QStringLiteral("article")) {
                 continue;
             }
             const QHash<QString, QString> &data = m_pageRepo.loadData(r.id);
-            const auto &catStr = data.value(QStringLiteral("0_categories"));
-            for (const QString &part : catStr.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
-                bool ok = false;
-                const int id = part.trimmed().toInt(&ok);
-                if (ok && id > 0) {
-                    articleCatIds.insert(id);
+            for (auto it = data.constBegin(); it != data.constEnd(); ++it) {
+                if (!it.key().endsWith(QStringLiteral("_categories"))) {
+                    continue;
+                }
+                for (const QString &part : it.value().split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+                    bool ok = false;
+                    const int id = part.trimmed().toInt(&ok);
+                    if (ok && id > 0) {
+                        articleCatIds.insert(id);
+                    }
                 }
             }
         }

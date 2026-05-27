@@ -8,6 +8,7 @@
 #include "website/pages/blocs/widgets/PageBlocHubGridWidget.h"
 
 #include <QCoreApplication>
+#include <QRegularExpression>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -42,7 +43,24 @@ QString permalinkToTitle(const QString &permalink)
     return title;
 }
 
-QString extractExcerpt(const QString &rawText, qsizetype maxSentences)
+// Extract the H1 title from article body text that uses [TITLE level="1"]...[/TITLE].
+// Returns an empty string if not found; caller falls back to permalinkToTitle().
+QString extractH1Title(const QString &text)
+{
+    static const QRegularExpression re(
+        QStringLiteral("\\[TITLE\\b[^\\]]*level=[\"']1[\"'][^\\]]*\\]([^\\[]+)\\[/TITLE\\]"),
+        QRegularExpression::CaseInsensitiveOption);
+    const auto m = re.match(text);
+    if (m.hasMatch()) {
+        return m.captured(1).trimmed();
+    }
+    return {};
+}
+
+// Collects sentences until either maxSentences is reached OR totalChars >= targetChars,
+// whichever comes first.  targetChars=0 disables the character threshold.
+// This prevents very short excerpts in languages with brief introductory sentences.
+QString extractExcerpt(const QString &rawText, qsizetype maxSentences, qsizetype targetChars = 0)
 {
     if (rawText.isEmpty()) {
         return {};
@@ -80,9 +98,10 @@ QString extractExcerpt(const QString &rawText, qsizetype maxSentences)
         return {};
     }
     QStringList sentences;
+    qsizetype totalChars = 0;
     qsizetype start = 0;
     const qsizetype len = plain.size();
-    for (qsizetype i = 0; i < len && sentences.size() < maxSentences; ++i) {
+    for (qsizetype i = 0; i < len; ++i) {
         const QChar c = plain.at(i);
         if (c != QLatin1Char('.') && c != QLatin1Char('!') && c != QLatin1Char('?')) {
             continue;
@@ -90,10 +109,17 @@ QString extractExcerpt(const QString &rawText, qsizetype maxSentences)
         if (i + 1 < len && plain.at(i + 1) != QLatin1Char(' ')) {
             continue;
         }
-        sentences.append(plain.mid(start, i - start + 1).trimmed());
+        const QString sentence = plain.mid(start, i - start + 1).trimmed();
+        sentences.append(sentence);
+        totalChars += sentence.size();
         start = i + 2;
+        if (sentences.size() >= maxSentences || (targetChars > 0 && totalChars >= targetChars)) {
+            break;
+        }
     }
-    if (sentences.size() < maxSentences && start < len) {
+    const bool underLimit = sentences.size() < maxSentences
+                            && (targetChars == 0 || totalChars < targetChars);
+    if (underLimit && start < len) {
         const QString &tail = plain.mid(start).trimmed();
         if (!tail.isEmpty()) {
             sentences.append(tail);
@@ -104,6 +130,7 @@ QString extractExcerpt(const QString &rawText, qsizetype maxSentences)
 
 struct ArticleEntry {
     PageRecord record;
+    QString    effectivePermalink; ///< language-specific permalink (may differ from record.permalink)
     QString    title;
     QString    excerpt;
 };
@@ -254,17 +281,21 @@ void PageBlocHubGrid::addCode(QStringView     /*origContent*/,
                 || !engine.isPageAvailable(record.permalink, websiteIndex)) {
             continue;
         }
-        const auto &data   = m_repo->loadData(record.id);
-        const auto &catStr = data.value(QStringLiteral("0_categories"));
-        if (catStr.isEmpty()) {
-            continue;
-        }
-        const auto &parts = catStr.split(QLatin1Char(','), Qt::SkipEmptyParts);
+        const auto &data = m_repo->loadData(record.id);
+
+        // Scan every *_categories key (breadcrumb bloc AND cross-reference bloc)
+        // so that sub-category assignments in cross-references also populate hubs.
         bool inCategory = false;
-        for (const auto &part : std::as_const(parts)) {
-            if (catIds.contains(part.trimmed().toInt())) {
-                inCategory = true;
-                break;
+        for (auto it = data.constBegin(); it != data.constEnd() && !inCategory; ++it) {
+            if (!it.key().endsWith(QStringLiteral("_categories"))) {
+                continue;
+            }
+            const auto &parts = it.value().split(QLatin1Char(','), Qt::SkipEmptyParts);
+            for (const auto &part : std::as_const(parts)) {
+                if (catIds.contains(part.trimmed().toInt())) {
+                    inCategory = true;
+                    break;
+                }
             }
         }
         if (inCategory) {
@@ -273,11 +304,26 @@ void PageBlocHubGrid::addCode(QStringView     /*origContent*/,
                 continue; // not yet translated for this language — skip
             }
             ArticleEntry entry;
-            entry.record  = record;
-            entry.title   = permalinkToTitle(record.permalink);
-            const auto &sourceText = data.value(QStringLiteral("1_text"));
-            entry.excerpt = extractExcerpt(
-                translatedText.isEmpty() ? sourceText : translatedText, 2);
+            entry.record = record;
+
+            // Compute the language-specific permalink (mirrors PageGenerator logic).
+            QString ep = record.permalink;
+            if (!record.endPermalink.isEmpty() && lang != record.lang) {
+                const QString trSlugKey = QStringLiteral("tr:") + lang
+                                          + QStringLiteral(":_permalink_slug");
+                const QString &trSlug = data.value(trSlugKey);
+                if (!trSlug.isEmpty()) {
+                    ep = QLatin1Char('/') + trSlug;
+                }
+            }
+            entry.effectivePermalink = ep;
+            const QString &sourceText = data.value(QStringLiteral("1_text"));
+            const QString &bodyForTitle = translatedText.isEmpty() ? sourceText : translatedText;
+            entry.title = extractH1Title(bodyForTitle);
+            if (entry.title.isEmpty()) {
+                entry.title = permalinkToTitle(ep);
+            }
+            entry.excerpt = extractExcerpt(bodyForTitle, 4, 200);
             entries.append(entry);
         }
     }
@@ -408,10 +454,10 @@ void PageBlocHubGrid::addCode(QStringView     /*origContent*/,
 
     for (const auto &entry : std::as_const(entries)) {
         html += QStringLiteral("<article class=\"hub-card\" data-hub-permalink=\"");
-        html += entry.record.permalink;
+        html += entry.effectivePermalink;
         html += QStringLiteral("\">");
         html += QStringLiteral("<a href=\"");
-        html += entry.record.permalink;
+        html += entry.effectivePermalink;
         html += QStringLiteral("\" class=\"hub-card__link\">");
         html += QStringLiteral("<h3 class=\"hub-card__title\">");
         html += entry.title;
