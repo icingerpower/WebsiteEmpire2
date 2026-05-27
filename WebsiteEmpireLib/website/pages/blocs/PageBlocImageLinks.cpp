@@ -70,8 +70,8 @@ void PageBlocImageLinks::save(QHash<QString, QString> &values) const
 // =============================================================================
 
 void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
-                                  AbstractEngine &engine,
-                                  int             websiteIndex,
+                                  AbstractEngine &/*engine*/,
+                                  int             /*websiteIndex*/,
                                   QString        &html,
                                   QString        &css,
                                   QString        &js,
@@ -90,10 +90,6 @@ void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
         return;
     }
 
-    // Resolve the domain once for imgdb: URLs.
-    const QString domain = engine.data(
-        engine.index(websiteIndex, AbstractEngine::COL_DOMAIN)).toString();
-
     // ── HTML ────────────────────────────────────────────────────────────
     html += QStringLiteral("<section class=\"image-links-grid\" style=\"--cols-d:");
     html += QString::number(m_colsDesktop);
@@ -110,11 +106,10 @@ void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
         }
         const auto &href = resolveHref(item.linkType, item.linkTarget);
 
-        // imgdb:<filename> → /images/<domain>/<filename>
+        // imgdb:<filename> → /<filename>  (ImageController looks up by filename + Host header)
         QString resolvedUrl;
         if (item.imageUrl.startsWith(QLatin1String("imgdb:"))) {
-            resolvedUrl = QStringLiteral("/images/") + domain
-                          + QStringLiteral("/") + item.imageUrl.mid(6);
+            resolvedUrl = QStringLiteral("/") + item.imageUrl.mid(6);
         } else {
             resolvedUrl = item.imageUrl;
         }
@@ -210,10 +205,8 @@ int PageBlocImageLinks::rowsMobile() const  { return m_rowsMobile; }
 
 QString PageBlocImageLinks::resolveHref(const QString &linkType, const QString &linkTarget)
 {
-    if (linkType == QLatin1String(LINK_TYPE_CATEGORY)) {
-        return QStringLiteral("/category/") + linkTarget;
-    }
-    if (linkType == QLatin1String(LINK_TYPE_PAGE)) {
+    if (linkType == QLatin1String(LINK_TYPE_CATEGORY)
+            || linkType == QLatin1String(LINK_TYPE_PAGE)) {
         return QStringLiteral("/") + linkTarget;
     }
     // "url" or any unknown type: use target as-is.

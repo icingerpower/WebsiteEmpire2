@@ -13,4 +13,6 @@ set(LAUNCHER_FILES
     ${CMAKE_CURRENT_LIST_DIR}/LauncherTranslateCommon.cpp
     ${CMAKE_CURRENT_LIST_DIR}/LauncherReview.h
     ${CMAKE_CURRENT_LIST_DIR}/LauncherReview.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/LauncherPublish.h
+    ${CMAKE_CURRENT_LIST_DIR}/LauncherPublish.cpp
 )

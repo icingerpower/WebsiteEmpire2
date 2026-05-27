@@ -11,9 +11,17 @@
 #include "repository/IRedirectRepository.h"
 
 /**
- * Serves pre-compressed HTML pages via two-pass rendering.
+ * Serves pre-compressed HTML pages via two-pass rendering, and serves
+ * sitemap / robots files directly from the content DB.
  *
- * Route: GET /(.+\.html)$
+ * Routes:
+ *   GET /robots.txt               → serveFile (no menu, text/plain)
+ *   GET /sitemap*.xml             → serveFile (no menu, application/xml)
+ *   GET /(<slug>.html | <slug>)   → servePage (menu + body, text/html)
+ *
+ * The servePage regex is ^/(.+\.html|[^/.]+)$ — it matches .html pages and
+ * extension-less slugs only, intentionally leaving paths with other extensions
+ * (e.g. .webp, .svg, .jpg) to ImageController.
  *
  * Serving flow:
  *  1. Look up the path in pages → PageRecord (metadata).
@@ -44,8 +52,13 @@ public:
     static void loadMenuCache(IMenuRepository *repo);
 
     METHOD_LIST_BEGIN
-    ADD_METHOD_VIA_REGEX(PageController::servePage, "^/(.+\\.html)$", drogon::Get);
+    ADD_METHOD_VIA_REGEX(PageController::serveFile, "^/(robots\\.txt|sitemap[\\w-]*\\.xml)$", drogon::Get);
+    ADD_METHOD_VIA_REGEX(PageController::servePage, "^/(.+\\.html|[^/.]+)$", drogon::Get);
     METHOD_LIST_END
+
+    void serveFile(const drogon::HttpRequestPtr                          &req,
+                   std::function<void(const drogon::HttpResponsePtr &)> &&callback,
+                   const std::string                                     &filename);
 
     void servePage(const drogon::HttpRequestPtr                          &req,
                    std::function<void(const drogon::HttpResponsePtr &)> &&callback,

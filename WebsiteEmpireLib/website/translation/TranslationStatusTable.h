@@ -48,6 +48,19 @@ public:
     /** Reload all rows from the repository (calls beginResetModel / endResetModel). */
     void reload();
 
+    /**
+     * Returns the number of source pages whose translation is complete for
+     * each requested language, in a single pass over the repository.
+     *
+     * Used by the publish launchers to decide which languages have ≥ N pages
+     * ready to deploy.  Shares the exact same completion logic as the
+     * Translations pane (AbstractPageType::isTranslationComplete).
+     */
+    static QHash<QString, int> countCompletedPerLang(
+        IPageRepository   &repo,
+        CategoryTable     &categoryTable,
+        const QStringList &langs);
+
     /** Returns the page id for the given model row, or -1 if out of range. */
     int pageIdAt(int row) const;
 

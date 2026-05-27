@@ -51,6 +51,42 @@ void TranslationStatusTable::reload()
     endResetModel();
 }
 
+QHash<QString, int> TranslationStatusTable::countCompletedPerLang(
+    IPageRepository   &repo,
+    CategoryTable     &categoryTable,
+    const QStringList &langs)
+{
+    QHash<QString, int> counts;
+    for (const QString &lang : std::as_const(langs)) {
+        counts[lang] = 0;
+    }
+
+    const QList<PageRecord> pages = repo.findAll();
+    for (const PageRecord &page : std::as_const(pages)) {
+        if (page.sourcePageId != 0) {
+            continue;
+        }
+        if (page.typeId == QLatin1String("category_hub")) {
+            continue;
+        }
+        auto type = AbstractPageType::createForTypeId(page.typeId, categoryTable);
+        if (!type) {
+            continue;
+        }
+        const QHash<QString, QString> data = repo.loadData(page.id);
+        type->load(data);
+        type->setAuthorLang(page.lang);
+
+        for (const QString &lang : std::as_const(langs)) {
+            if (type->isTranslationComplete(QStringView{}, lang)) {
+                ++counts[lang];
+            }
+        }
+    }
+
+    return counts;
+}
+
 int TranslationStatusTable::pageIdAt(int row) const
 {
     if (row < 0 || row >= m_rows.size()) {

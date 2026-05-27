@@ -1,3 +1,5 @@
+#include <cstdlib>
+#include <string_view>
 #include <thread>
 
 #include <drogon/drogon.h>
@@ -14,9 +16,15 @@
 #include "repository/RedirectRepositorySQLite.h"
 #include "repository/StatsWriterSQLite.h"
 
-int main()
+int main(int argc, char *argv[])
 {
-    // TODO: load paths from a config file or CLI arguments.
+    int port = 8080;
+    for (int i = 1; i < argc - 1; ++i) {
+        if (std::string_view(argv[i]) == "--port") {
+            port = std::atoi(argv[i + 1]);
+        }
+    }
+
     ContentDb contentDb(ContentDb::FILENAME);
     ImageDb   imageDb(ImageDb::FILENAME);
     StatsDb   statsDb(StatsDb::FILENAME);
@@ -37,7 +45,7 @@ int main()
     StatsController::setStatsWriter(&statsWriter);
 
     drogon::app()
-        .addListener("0.0.0.0", 8080)
+        .addListener("0.0.0.0", port)
         .setThreadNum(static_cast<int>(std::thread::hardware_concurrency()))
         .run();
 

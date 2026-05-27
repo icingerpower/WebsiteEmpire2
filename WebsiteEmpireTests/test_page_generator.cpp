@@ -179,7 +179,7 @@ void Test_PageGenerator::test_pagegen_generate_creates_page_row_in_content_db()
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
-    q.exec(QStringLiteral("SELECT COUNT(*) FROM pages"));
+    q.exec(QStringLiteral("SELECT COUNT(*) FROM pages WHERE lang != '_'"));
     q.next();
     QCOMPARE(q.value(0).toInt(), 1);
     f.closeContentDb(conn);
@@ -193,7 +193,7 @@ void Test_PageGenerator::test_pagegen_generate_stores_correct_permalink()
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
-    q.exec(QStringLiteral("SELECT path FROM pages LIMIT 1"));
+    q.exec(QStringLiteral("SELECT path FROM pages WHERE path = '/my-article.html'"));
     q.next();
     QCOMPARE(q.value(0).toString(), QStringLiteral("/my-article.html"));
     f.closeContentDb(conn);
@@ -207,7 +207,7 @@ void Test_PageGenerator::test_pagegen_generate_stores_correct_domain()
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
-    q.exec(QStringLiteral("SELECT domain FROM pages LIMIT 1"));
+    q.exec(QStringLiteral("SELECT domain FROM pages WHERE path = '/p.html'"));
     q.next();
     QCOMPARE(q.value(0).toString(), QStringLiteral("mysite.com"));
     f.closeContentDb(conn);
@@ -221,7 +221,7 @@ void Test_PageGenerator::test_pagegen_generate_stores_correct_lang()
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
-    q.exec(QStringLiteral("SELECT lang FROM pages LIMIT 1"));
+    q.exec(QStringLiteral("SELECT lang FROM pages WHERE path = '/p.html'"));
     q.next();
     QCOMPARE(q.value(0).toString(), QStringLiteral("en"));
     f.closeContentDb(conn);
@@ -235,7 +235,10 @@ void Test_PageGenerator::test_pagegen_generate_creates_variant_row()
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
-    q.exec(QStringLiteral("SELECT COUNT(*) FROM page_variants"));
+    q.exec(QStringLiteral(
+        "SELECT COUNT(*) FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id"
+        " WHERE p.lang != '_'"));
     q.next();
     QCOMPARE(q.value(0).toInt(), 1);
     f.closeContentDb(conn);
@@ -249,7 +252,10 @@ void Test_PageGenerator::test_pagegen_generate_html_gz_is_non_empty()
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
-    q.exec(QStringLiteral("SELECT LENGTH(html_gz) FROM page_variants LIMIT 1"));
+    q.exec(QStringLiteral(
+        "SELECT LENGTH(pv.html_gz) FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id"
+        " WHERE p.path = '/p.html'"));
     q.next();
     QVERIFY(q.value(0).toInt() > 0);
     f.closeContentDb(conn);
@@ -263,7 +269,10 @@ void Test_PageGenerator::test_pagegen_generate_etag_matches_compressed_html()
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
-    q.exec(QStringLiteral("SELECT html_gz, etag FROM page_variants LIMIT 1"));
+    q.exec(QStringLiteral(
+        "SELECT pv.html_gz, pv.etag FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id"
+        " WHERE p.path = '/p.html'"));
     q.next();
     const QByteArray &gz   = q.value(0).toByteArray();
     const QString    &etag = q.value(1).toString();
@@ -279,7 +288,10 @@ void Test_PageGenerator::test_pagegen_generate_variant_is_active()
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
-    q.exec(QStringLiteral("SELECT is_active FROM page_variants LIMIT 1"));
+    q.exec(QStringLiteral(
+        "SELECT pv.is_active FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id"
+        " WHERE p.path = '/p.html'"));
     q.next();
     QCOMPARE(q.value(0).toInt(), 1);
     f.closeContentDb(conn);
@@ -293,7 +305,10 @@ void Test_PageGenerator::test_pagegen_generate_variant_label_is_control()
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
-    q.exec(QStringLiteral("SELECT label FROM page_variants LIMIT 1"));
+    q.exec(QStringLiteral(
+        "SELECT pv.label FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id"
+        " WHERE p.path = '/p.html'"));
     q.next();
     QCOMPARE(q.value(0).toString(), QStringLiteral("control"));
     f.closeContentDb(conn);
@@ -363,9 +378,9 @@ void Test_PageGenerator::test_pagegen_generate_second_run_updates_existing_rows(
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
-    q.exec(QStringLiteral("SELECT COUNT(*) FROM pages"));
+    q.exec(QStringLiteral("SELECT COUNT(*) FROM pages WHERE lang != '_'"));
     q.next();
-    QCOMPARE(q.value(0).toInt(), 1); // still one row, not two
+    QCOMPARE(q.value(0).toInt(), 1); // still one content row, not two
     f.closeContentDb(conn);
 }
 

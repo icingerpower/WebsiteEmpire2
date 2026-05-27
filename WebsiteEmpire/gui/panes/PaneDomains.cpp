@@ -10,6 +10,7 @@
 #include "website/pages/PageDb.h"
 #include "website/pages/PageGenerator.h"
 #include "website/pages/PageRepositoryDb.h"
+#include "website/translation/TranslationStatusTable.h"
 #include "ExceptionWithTitleText.h"
 
 #include <QAbstractItemView>
@@ -363,53 +364,68 @@ void PaneDomains::deployLocally()
             return;
         }
 
-        // Generate all pages into workingDir/content.db
-        CategoryTable    categoryTable(m_workingDir);
+        // ── Determine qualifying languages (≥ 5 fully-translated pages) ────────
         PageDb           pageDb(m_workingDir);
         PageRepositoryDb pageRepo(pageDb);
-        PageGenerator    generator(pageRepo, categoryTable);
+        CategoryTable    categoryTable(m_workingDir);
 
-        // Ensure a hub stub exists for every category, then mark stale hubs
-        // before the full generation pass so the generated_at stamps stay fresh.
+        QStringList engineLangs;
+        const int rows = m_engine->rowCount();
+        for (int i = 0; i < rows; ++i) {
+            const QString lang = m_engine->getLangCode(i);
+            if (!lang.isEmpty() && !engineLangs.contains(lang)) {
+                engineLangs.append(lang);
+            }
+        }
+        const QHash<QString, int> translatedCounts =
+            TranslationStatusTable::countCompletedPerLang(pageRepo, categoryTable, engineLangs);
+
+        struct LangTarget {
+            int     engineIndex;
+            QString lang;
+            QString domain;
+            int     port;
+        };
+
+        QList<LangTarget> targets;
+        QSet<QString>     seenLangs;
+        int portOffset = 0;
+        for (int i = 0; i < rows; ++i) {
+            const QString lang = m_engine->getLangCode(i);
+            if (lang.isEmpty() || seenLangs.contains(lang)) {
+                continue;
+            }
+            const int count = translatedCounts.value(lang, 0);
+            if (count < 10) {
+                continue;
+            }
+            seenLangs.insert(lang);
+            const QString rawDomain = m_engine->data(
+                m_engine->index(i, AbstractEngine::COL_DOMAIN)).toString().trimmed();
+            const QString domain = rawDomain.isEmpty()
+                                   ? QStringLiteral("localhost") : rawDomain;
+            targets.append({i, lang, domain, 8080 + portOffset});
+            ++portOffset;
+        }
+
+        if (targets.isEmpty()) {
+            ExceptionWithTitleText ex(tr("Generate & Publish"),
+                                      tr("No language has 5 or more pages yet.\n"
+                                         "Create or translate at least 5 pages before publishing."));
+            ex.raise();
+            return;
+        }
+
+        // ── Generate each qualifying language directly into its deploy dir ──────
+        PageGenerator       generator(pageRepo, categoryTable);
         CategoryHubDirtySet hubDirtySet(m_workingDir);
         CategoryHubSyncer   hubSyncer(pageRepo, categoryTable, hubDirtySet, generator);
         hubSyncer.syncStubs(m_engine->getLangCode(0));
         hubSyncer.markStaleByStats(m_workingDir);
 
-        // One generateAll() call per unique domain — multiple engine rows can
-        // share the same domain (e.g. different themes); generating twice would
-        // only overwrite the same content.db rows and inflate the page count.
-        int totalPages = 0;
-        QSet<QString> seenDomains;
-        const int rows = m_engine->rowCount();
-        for (int i = 0; i < rows; ++i) {
-            const QString rawDomain = m_engine->data(
-                m_engine->index(i, AbstractEngine::COL_DOMAIN)).toString().trimmed();
-            // Fall back to "localhost" when no domain is configured so that local
-            // development works even before production domains are assigned.
-            const QString domain = rawDomain.isEmpty() ? QStringLiteral("localhost") : rawDomain;
-            if (seenDomains.contains(domain)) {
-                continue;
-            }
-            seenDomains.insert(domain);
-            totalPages += generator.generateAll(m_workingDir, domain, *m_engine, i);
-        }
-
-        // All pages — including hub pages — were just regenerated.  Clear the
-        // dirty set so the Generated Pages pane reflects "Ready" on next open.
-        hubDirtySet.clear();
-
-        // Mark all fully-generated pages as published so that subsequent
-        // permalink changes create history entries for redirect generation.
-        pageRepo.markAllCompleteAsPublished();
-
-        // Copy content.db to the deploy folder
-        _deployLocallyImpl();
-
-        // Locate the StaticWebsiteServe binary (check sibling build dirs first)
-        // before restarting so we can pass the resolved path to _restartLocalDrogon.
+        // ── Locate StaticWebsiteServe binary ─────────────────────────────────
         const QString appDir = QCoreApplication::applicationDirPath();
-        QString binaryPath = QStringLiteral("StaticWebsiteServe"); // fallback: rely on PATH
+        QString binaryPath = QStringLiteral("StaticWebsiteServe");
         const QStringList candidates = {
             appDir + QStringLiteral("/StaticWebsiteServe"),
             appDir + QStringLiteral("/../StaticWebsiteServe/StaticWebsiteServe"),
@@ -422,36 +438,75 @@ void PaneDomains::deployLocally()
             }
         }
 
-        const QString deployPath = _resolveDeployPath();
-        const QString homeUrl    = QStringLiteral("http://localhost:8080/index.html");
+        // Kill all StaticWebsiteServe processes unconditionally — old deploys
+        // from any directory (including stale servers) must release their ports.
+        const QString deployBase = _resolveDeployPath();
+        QProcess killer;
+        killer.start(QStringLiteral("bash"),
+                     {QStringLiteral("-c"),
+                      QStringLiteral("pkill -f StaticWebsiteServe 2>/dev/null; true")});
+        killer.waitForFinished(3000);
+        QThread::msleep(500);
 
-        // Restart Drogon so it picks up the new content.db.
-        // (remove+copy in _deployLocallyImpl creates a new inode; the old
-        // process keeps its fd pointing to the deleted file.)
-        _restartLocalDrogon(deployPath, binaryPath);
+        const QString srcImages = m_workingDir.filePath(QStringLiteral("images.db"));
+        int totalPages = 0;
 
-        const QString msg = tr(
-            "Generated %1 page(s) and published to:\n"
-            "%2\n\n"
-            "Drogon has been restarted — open: %3")
-            .arg(totalPages)
-            .arg(deployPath, homeUrl);
+        QStringList urls;
+        for (const LangTarget &t : std::as_const(targets)) {
+            const QString destDir = QDir(deployBase).filePath(t.lang);
+
+            if (!QDir().mkpath(destDir)) {
+                qWarning() << "deployLocally: could not create" << destDir;
+                continue;
+            }
+
+            // Remove stale content.db (and WAL/SHM) so generation starts fresh.
+            const QDir ddir(destDir);
+            QFile::remove(ddir.filePath(QStringLiteral("content.db-wal")));
+            QFile::remove(ddir.filePath(QStringLiteral("content.db-shm")));
+            QFile::remove(ddir.filePath(QStringLiteral("content.db")));
+
+            totalPages += generator.generateAll(m_workingDir, ddir, t.domain, *m_engine, t.engineIndex);
+
+            const QString destImages = ddir.filePath(QStringLiteral("images.db"));
+            if (QFile::exists(srcImages)) {
+                if (QFile::exists(destImages)) {
+                    QFile::remove(destImages);
+                }
+                QFile::copy(srcImages, destImages);
+            }
+
+            _restartLocalDrogon(destDir, binaryPath, t.port);
+
+            urls.append(QStringLiteral("http://localhost:%1/index.html  [%2]")
+                           .arg(t.port).arg(t.lang));
+        }
+
+        hubDirtySet.clear();
+        pageRepo.markAllCompleteAsPublished();
+
+        // ── Success dialog ────────────────────────────────────────────────────
+        const QString urlList  = urls.join(QStringLiteral("\n"));
+        const QString firstUrl = QStringLiteral("http://localhost:%1/index.html")
+                                     .arg(targets.first().port);
+        const QString msg = tr("Generated %1 page(s).\n\nServing:\n%2")
+                               .arg(totalPages).arg(urlList);
 
         QMessageBox msgBox(this);
         msgBox.setWindowTitle(tr("Generate & Publish"));
         msgBox.setText(msg);
-        QPushButton *copyBtn    = msgBox.addButton(tr("Copy path"),      QMessageBox::ActionRole);
-        QPushButton *copyUrlBtn = msgBox.addButton(tr("Copy url"),       QMessageBox::ActionRole);
-        QPushButton *openBtn    = msgBox.addButton(tr("Open home page"), QMessageBox::ActionRole);
+        QPushButton *openBtn    = msgBox.addButton(tr("Open"),       QMessageBox::ActionRole);
+        QPushButton *copyUrlBtn = msgBox.addButton(tr("Copy URL"),   QMessageBox::ActionRole);
+        QPushButton *copyPathBtn = msgBox.addButton(tr("Copy path"), QMessageBox::ActionRole);
         msgBox.addButton(QMessageBox::Ok);
         msgBox.exec();
 
-        if (msgBox.clickedButton() == copyBtn) {
-            QGuiApplication::clipboard()->setText(deployPath);
+        if (msgBox.clickedButton() == openBtn) {
+            QDesktopServices::openUrl(QUrl(firstUrl));
         } else if (msgBox.clickedButton() == copyUrlBtn) {
-            QGuiApplication::clipboard()->setText(homeUrl);
-        } else if (msgBox.clickedButton() == openBtn) {
-            QDesktopServices::openUrl(QUrl(homeUrl));
+            QGuiApplication::clipboard()->setText(firstUrl);
+        } else if (msgBox.clickedButton() == copyPathBtn) {
+            QGuiApplication::clipboard()->setText(deployBase);
         }
 
     } catch (const ExceptionWithTitleText &ex) {
@@ -493,12 +548,26 @@ void PaneDomains::_deployLocallyImpl()
     if (QFile::exists(destDb)) {
         QFile::remove(destDb);
     }
+    // Remove stale WAL/SHM so the new database opens cleanly without replaying
+    // transactions that belong to a previous version of the file.
+    QFile::remove(deployDir.filePath(QStringLiteral("content.db-wal")));
+    QFile::remove(deployDir.filePath(QStringLiteral("content.db-shm")));
 
     if (!QFile::copy(srcDb, destDb)) {
         ExceptionWithTitleText ex(tr("Local deploy"),
                                   tr("Failed to copy content.db to:\n%1").arg(destDb));
         ex.raise();
         return;
+    }
+
+    // Copy images.db so the serve binary can find image blobs in its cwd.
+    const QString srcImages  = m_workingDir.filePath(QStringLiteral("images.db"));
+    const QString destImages = deployDir.filePath(QStringLiteral("images.db"));
+    if (QFile::exists(srcImages)) {
+        if (QFile::exists(destImages)) {
+            QFile::remove(destImages);
+        }
+        QFile::copy(srcImages, destImages); // best-effort; failure won't break HTML pages
     }
 }
 
@@ -610,11 +679,15 @@ bool PaneDomains::_deployNeeded() const
     return srcInfo.lastModified() > destInfo.lastModified();
 }
 
-void PaneDomains::_restartLocalDrogon(const QString &deployPath, const QString &binaryPath)
+void PaneDomains::_restartLocalDrogon(const QString &deployPath,
+                                       const QString &binaryPath,
+                                       int            port)
 {
     // Kill any StaticWebsiteServe process whose cwd is exactly deployPath.
+    // Use pgrep -f (match full command line) because the 18-char name exceeds
+    // pgrep's 15-character limit for process-name matching.
     const QString killScript =
-        QStringLiteral("for pid in $(pgrep StaticWebsiteServe 2>/dev/null); do "
+        QStringLiteral("for pid in $(pgrep -f StaticWebsiteServe 2>/dev/null); do "
                        "  cwd=$(readlink /proc/$pid/cwd 2>/dev/null); "
                        "  if [ \"$cwd\" = \"") + deployPath +
         QStringLiteral("\" ]; then kill \"$pid\"; fi; done");
@@ -626,7 +699,9 @@ void PaneDomains::_restartLocalDrogon(const QString &deployPath, const QString &
     // Brief pause so the port is released before we rebind it.
     QThread::msleep(300);
 
-    QProcess::startDetached(binaryPath, {}, deployPath);
+    QProcess::startDetached(binaryPath,
+                            {QStringLiteral("--port"), QString::number(port)},
+                            deployPath);
 }
 
 bool PaneDomains::_runScp(const QStringList &args, QString &errorOutput) const

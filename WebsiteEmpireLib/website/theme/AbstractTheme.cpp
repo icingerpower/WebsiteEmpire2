@@ -303,9 +303,7 @@ void AbstractTheme::addCodeTop(AbstractEngine &engine,
                                 QSet<QString>  &cssDoneIds,
                                 QSet<QString>  &jsDoneIds)
 {
-    const QString langCode = engine.getLangCode(websiteIndex);
     for (AbstractCommonBloc *bloc : getTopBlocs()) {
-        bloc->assertTranslated(langCode, m_sourceLangCode);
         bloc->addCode(QStringView{}, engine, websiteIndex,
                       html, css, js, cssDoneIds, jsDoneIds);
     }
@@ -319,9 +317,7 @@ void AbstractTheme::addCodeBottom(AbstractEngine &engine,
                                    QSet<QString>  &cssDoneIds,
                                    QSet<QString>  &jsDoneIds)
 {
-    const QString langCode = engine.getLangCode(websiteIndex);
     for (AbstractCommonBloc *bloc : getBottomBlocs()) {
-        bloc->assertTranslated(langCode, m_sourceLangCode);
         bloc->addCode(QStringView{}, engine, websiteIndex,
                       html, css, js, cssDoneIds, jsDoneIds);
     }

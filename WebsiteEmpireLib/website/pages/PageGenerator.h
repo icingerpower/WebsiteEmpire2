@@ -53,6 +53,18 @@ public:
                     int             websiteIndex);
 
     /**
+     * Two-directory overload: workingDir is used for reading auxiliary source
+     * data (e.g. stats.db), while outputDir receives content.db.  Use this
+     * for per-language deployments where each language writes to its own
+     * deploy directory rather than the shared working directory.
+     */
+    int generateAll(const QDir     &workingDir,
+                    const QDir     &outputDir,
+                    const QString  &domain,
+                    AbstractEngine &engine,
+                    int             websiteIndex);
+
+    /**
      * Generates only the pages whose IDs are listed in pageIds and writes them
      * to content.db.  Skips IDs that are not found in the repository.
      * Does NOT build the available-pages index (hub blocs do not need it).

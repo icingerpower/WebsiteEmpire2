@@ -44,6 +44,52 @@ std::string PageController::_selectVariant(const std::vector<std::string> &activ
 
 // ---------------------------------------------------------------------------
 
+void PageController::serveFile(const drogon::HttpRequestPtr                          &req,
+                                std::function<void(const drogon::HttpResponsePtr &)> &&callback,
+                                const std::string                                     &filename)
+{
+    const std::string fullPath = "/" + filename;
+
+    const auto pageOpt = s_pageRepo->findByPath(fullPath);
+    if (!pageOpt) {
+        callback(drogon::HttpResponse::newNotFoundResponse());
+        return;
+    }
+
+    auto variantOpt = s_pageRepo->findVariant(pageOpt->id, "control");
+    if (!variantOpt) {
+        callback(drogon::HttpResponse::newNotFoundResponse());
+        return;
+    }
+
+    const std::string &etag = variantOpt->etag;
+    if (req->getHeader("If-None-Match") == etag) {
+        auto resp = drogon::HttpResponse::newHttpResponse();
+        resp->setStatusCode(drogon::k304NotModified);
+        callback(resp);
+        return;
+    }
+
+    const std::string contentType =
+        (filename.size() >= 4 && filename.compare(filename.size() - 4, 4, ".xml") == 0)
+        ? "application/xml; charset=utf-8"
+        : "text/plain; charset=utf-8";
+
+    const auto &bodyGz = variantOpt->htmlGz;
+    std::string body(reinterpret_cast<const char *>(bodyGz.data()), bodyGz.size());
+
+    auto resp = drogon::HttpResponse::newHttpResponse();
+    resp->setStatusCode(drogon::k200OK);
+    resp->addHeader("Content-Type", contentType);
+    resp->addHeader("Content-Encoding", "gzip");
+    resp->addHeader("ETag", etag);
+    resp->addHeader("Cache-Control", "no-cache");
+    resp->setBody(std::move(body));
+    callback(resp);
+}
+
+// ---------------------------------------------------------------------------
+
 void PageController::servePage(const drogon::HttpRequestPtr                          &req,
                                 std::function<void(const drogon::HttpResponsePtr &)> &&callback,
                                 const std::string                                     &path)

@@ -54,6 +54,10 @@ add_empire_test(Test_Website_CategoryHub_Syncer              test_category_hub_s
 add_empire_test(Test_Website_SocialMedia                     test_social_media.cpp)
 add_empire_test(Test_Website_ReviewAction                    test_website_review_action.cpp)
 add_empire_test(Test_Website_PageStateFormatter              test_website_page_state_formatter.cpp)
+add_empire_test(Test_Website_SitemapChunkWriter              test_website_sitemap_chunk_writer.cpp)
+add_empire_test(Test_Website_SitemapIndexWriter              test_website_sitemap_index_writer.cpp)
+add_empire_test(Test_Website_RobotsWriter                    test_website_robots_writer.cpp)
+add_empire_test(Test_Website_SitemapOrchestrator             test_website_sitemap_orchestrator.cpp)
 
 # LauncherTranslate modes test compiles launcher code directly (no app binary needed).
 add_executable(Test_Website_LauncherTranslate_Modes

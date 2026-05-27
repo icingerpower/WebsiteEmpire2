@@ -1,0 +1,12 @@
+set(SITEMAP_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/SitemapConfig.h
+    ${CMAKE_CURRENT_LIST_DIR}/SitemapEntry.h
+    ${CMAKE_CURRENT_LIST_DIR}/SitemapChunkWriter.h
+    ${CMAKE_CURRENT_LIST_DIR}/SitemapChunkWriter.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/SitemapIndexWriter.h
+    ${CMAKE_CURRENT_LIST_DIR}/SitemapIndexWriter.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/RobotsWriter.h
+    ${CMAKE_CURRENT_LIST_DIR}/RobotsWriter.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/SitemapOrchestrator.h
+    ${CMAKE_CURRENT_LIST_DIR}/SitemapOrchestrator.cpp
+)

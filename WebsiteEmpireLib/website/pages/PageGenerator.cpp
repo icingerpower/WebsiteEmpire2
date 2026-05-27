@@ -1,13 +1,12 @@
 #include "PageGenerator.h"
 
-#include "ExceptionWithTitleText.h"
 #include "website/AbstractEngine.h"
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/IPageRepository.h"
 #include "website/pages/PageRecord.h"
 #include "website/pages/PermalinkHistoryEntry.h"
+#include "website/sitemap/SitemapOrchestrator.h"
 
-#include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QHash>
@@ -133,7 +132,7 @@ bool PageGenerator::_writePage(AbstractPageType &type,
         "   etag=excluded.etag, updated_at=excluded.updated_at"));
     upsertPage.bindValue(QStringLiteral(":path"),   record.permalink);
     upsertPage.bindValue(QStringLiteral(":domain"), domain);
-    upsertPage.bindValue(QStringLiteral(":lang"),   record.lang);
+    upsertPage.bindValue(QStringLiteral(":lang"),   engine.getLangCode(websiteIndex));
     upsertPage.bindValue(QStringLiteral(":etag"),   etag);
     upsertPage.bindValue(QStringLiteral(":now"),    now);
     upsertPage.exec();
@@ -192,10 +191,21 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                                AbstractEngine &engine,
                                int             websiteIndex)
 {
-    const QString connName = QStringLiteral("page_generator_content_db");
+    return generateAll(workingDir, workingDir, domain, engine, websiteIndex);
+}
+
+int PageGenerator::generateAll(const QDir     &workingDir,
+                               const QDir     &outputDir,
+                               const QString  &domain,
+                               AbstractEngine &engine,
+                               int             websiteIndex)
+{
+    static std::atomic<int> s_counter{0};
+    const QString connName = QStringLiteral("page_generator_all_")
+                             + QString::number(s_counter.fetch_add(1));
     {
         QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
-        db.setDatabaseName(workingDir.filePath(QLatin1StringView(FILENAME)));
+        db.setDatabaseName(outputDir.filePath(QLatin1StringView(FILENAME)));
         db.open();
     }
     ensureSchema(connName);
@@ -246,18 +256,11 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         type->setAuthorLang(record.lang);
         type->bindGenerationContext(m_pageRepo, workingDir);
 
-        // Guard: only when translation was explicitly requested for this language
-        // and is incomplete.  An incomplete translation is a workflow bug — raise
-        // so it is caught during CI rather than silently generating source text.
+        // Skip pages whose translation is incomplete for the current language.
+        // Partial deploys are valid — only fully-translated pages are published.
         if (hasExplicitTargets && isTargetLang
                 && !type->isTranslationComplete(QStringView{}, currentLang)) {
-            ExceptionWithTitleText ex(
-                QCoreApplication::translate("PageGenerator", "Incomplete Translation"),
-                QCoreApplication::translate("PageGenerator",
-                    "Page '%1' has not been fully translated into '%2'. "
-                    "Run the translator before generating.")
-                    .arg(record.permalink, currentLang));
-            ex.raise();
+            continue;
         }
 
         // For translated pages of strategies that carry an endPermalink suffix,
@@ -280,6 +283,11 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         if (_writePage(*type, effectiveRecord, connName, domain, engine, websiteIndex)) {
             ++count;
         }
+    }
+
+    if (!domain.isEmpty()) {
+        SitemapOrchestrator::generate(
+            connName, domain, QStringLiteral("https://") + domain);
     }
 
     {

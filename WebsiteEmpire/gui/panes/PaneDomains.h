@@ -95,9 +95,12 @@ private:
 
     /**
      * Kills any StaticWebsiteServe process whose working directory is
-     * deployPath, then starts a fresh instance of binaryPath from deployPath.
+     * deployPath, then starts a fresh instance of binaryPath from deployPath
+     * listening on port.
      */
-    void _restartLocalDrogon(const QString &deployPath, const QString &binaryPath);
+    void _restartLocalDrogon(const QString &deployPath,
+                              const QString &binaryPath,
+                              int            port = 8080);
 
     /**
      * Runs sshpass with the given arguments. Returns true on success.

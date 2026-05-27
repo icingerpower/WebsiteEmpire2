@@ -105,7 +105,7 @@ private slots:
     void test_imagelinks_mixed_valid_and_empty_items_valid_link_ids_sequential();
 
     // --- Link type resolution ---
-    void test_imagelinks_category_link_type_resolves_to_category_path();
+    void test_imagelinks_category_link_type_resolves_to_root_path();
     void test_imagelinks_page_link_type_resolves_to_root_path();
     void test_imagelinks_url_link_type_uses_target_as_is();
 
@@ -429,14 +429,14 @@ void Test_Website_PageBlocImageLinks::test_imagelinks_mixed_valid_and_empty_item
 // Link type resolution
 // =============================================================================
 
-void Test_Website_PageBlocImageLinks::test_imagelinks_category_link_type_resolves_to_category_path()
+void Test_Website_PageBlocImageLinks::test_imagelinks_category_link_type_resolves_to_root_path()
 {
     PageBlocImageLinks bloc;
     const auto &html = htmlFrom(bloc, oneItemHash(QStringLiteral("https://example.com/img.jpg"),
                                                    QLatin1String(PageBlocImageLinks::LINK_TYPE_CATEGORY),
-                                                   QStringLiteral("food"),
+                                                   QStringLiteral("food.html"),
                                                    QStringLiteral("Food")));
-    QVERIFY(html.contains(QStringLiteral("href=\"/category/food\"")));   // 31
+    QVERIFY(html.contains(QStringLiteral("href=\"/food.html\"")));
 }
 
 void Test_Website_PageBlocImageLinks::test_imagelinks_page_link_type_resolves_to_root_path()

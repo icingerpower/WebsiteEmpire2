@@ -19,11 +19,16 @@
  * CSS and JS are appended once per page via cssDoneIds / jsDoneIds with the
  * shared ID "page-bloc-image-links".
  *
+ * Image URL resolution for imgdb: URLs:
+ *   "imgdb:<filename>" → "/<filename>"
+ * The ImageController serves images by filename + Host-header domain; no path
+ * prefix is needed and the domain is not embedded in the URL.
+ *
  * JS uses IntersectionObserver + navigator.sendBeacon to track display rate
  * and click rate on each link.
  *
  * Link resolution:
- *   "category" -> /category/{target}
+ *   "category" -> /{target}  (category hub pages live at root, no /category/ prefix)
  *   "page"     -> /{target}
  *   "url"      -> target as-is
  */
@@ -108,7 +113,7 @@ private:
 
     /**
      * Resolves a link type + target pair into the final href value.
-     *   "category" -> /category/{target}
+     *   "category" -> /{target}
      *   "page"     -> /{target}
      *   "url"      -> target as-is
      */
