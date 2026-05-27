@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <filesystem>
 #include <string_view>
 #include <thread>
 
@@ -19,9 +20,12 @@
 int main(int argc, char *argv[])
 {
     int port = 8080;
+    std::string lang;
     for (int i = 1; i < argc - 1; ++i) {
         if (std::string_view(argv[i]) == "--port") {
             port = std::atoi(argv[i + 1]);
+        } else if (std::string_view(argv[i]) == "--lang") {
+            lang = argv[i + 1];
         }
     }
 
@@ -41,6 +45,19 @@ int main(int argc, char *argv[])
     PageController::setRedirectRepository(&redirectRepo);
     PageController::loadMenuCache(&menuRepo);  // populate in-memory menu cache
 
+    // If --lang wasn't passed, derive from the working directory name.
+    // The publish step starts each server inside deploy/<lang>/, so the
+    // directory basename is the language code (e.g. "fr", "de").
+    if (lang.empty()) {
+        const std::string dirname =
+            std::filesystem::current_path().filename().string();
+        if (dirname.size() >= 2 && dirname.size() <= 5) {
+            lang = dirname;
+        }
+    }
+    if (!lang.empty()) {
+        imageRepo.setLang(lang);
+    }
     ImageController::setImageRepository(&imageRepo);
     StatsController::setStatsWriter(&statsWriter);
 

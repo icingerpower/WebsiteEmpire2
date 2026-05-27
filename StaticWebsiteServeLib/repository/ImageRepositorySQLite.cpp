@@ -9,19 +9,25 @@ std::optional<ImageRecord> ImageRepositorySQLite::findByDomainAndFilename(
     const std::string &domain,
     const std::string &filename) const
 {
-    // Try the exact (domain, filename) match first, then fall back to
-    // domain="" for images uploaded before a domain was configured in the engine.
+    // Priority: exact host domain > server lang code > domain="" fallback.
+    // The lang fallback ensures translated images (stored as domain=lang by
+    // PageTranslator) are served by the per-language server even when the Host
+    // header doesn't match the stored domain key.
     SQLite::Statement q(m_db.database(),
         "SELECT i.id, i.blob, i.mime_type"
         " FROM images i"
         " JOIN image_names n ON n.image_id = i.id"
         " WHERE n.filename = ?"
-        "   AND (n.domain = ? OR n.domain = '')"
-        " ORDER BY CASE WHEN n.domain = ? THEN 0 ELSE 1 END"
+        "   AND (n.domain = ? OR n.domain = ? OR n.domain = '')"
+        " ORDER BY CASE WHEN n.domain = ? THEN 0"
+        "               WHEN n.domain = ? THEN 1"
+        "               ELSE 2 END"
         " LIMIT 1");
     q.bind(1, filename);
     q.bind(2, domain);
-    q.bind(3, domain);
+    q.bind(3, m_lang);
+    q.bind(4, domain);
+    q.bind(5, m_lang);
     if (!q.executeStep()) {
         return std::nullopt;
     }

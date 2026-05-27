@@ -222,7 +222,8 @@ void LauncherPublish::run(const QString & /*value*/)
         }
 
         QProcess::startDetached(binaryPath,
-                                {QStringLiteral("--port"), QString::number(t.port)},
+                                {QStringLiteral("--port"), QString::number(t.port),
+                                 QStringLiteral("--lang"), t.lang},
                                 destDir);
         out << QStringLiteral("  → StaticWebsiteServe lang=%1 at http://localhost:%2/\n")
                .arg(t.lang).arg(t.port);
