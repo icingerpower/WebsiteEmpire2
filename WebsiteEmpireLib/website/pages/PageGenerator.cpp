@@ -214,17 +214,50 @@ int PageGenerator::generateAll(const QDir     &workingDir,
     const QList<PageRecord> &pages = m_pageRepo.findAll();
     const QString &currentLang = engine.getLangCode(websiteIndex);
 
-    // Build available-pages index: lang code → set of permalinks that will be
-    // generated.  A page is available in language L when:
-    //   • langCodesToTranslate is non-empty (assessed) AND L equals record.lang
-    //     or L is in langCodesToTranslate, OR
-    //   • langCodesToTranslate is empty (not yet assessed) — the page is treated
-    //     as available in the current generation language for backward compat.
-    // This map is used by blocs (e.g. PageBlocCategoryArticles) to filter links
-    // so only reachable pages are listed.
+    // Pre-pass: build available-pages index and translated-permalink map.
     {
-        QHash<QString, QSet<QString>> availablePages;
+        // Collect every category ID covered by at least one article so we can
+        // exclude hub pages whose category has no articles from availablePages.
+        // That prevents PageBlocCategoryLinks from linking to empty hub pages.
+        QSet<int> articleCatIds;
         for (const PageRecord &r : std::as_const(pages)) {
+            if (r.typeId != QStringLiteral("article")) {
+                continue;
+            }
+            const QHash<QString, QString> &data = m_pageRepo.loadData(r.id);
+            const auto &catStr = data.value(QStringLiteral("0_categories"));
+            for (const QString &part : catStr.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+                bool ok = false;
+                const int id = part.trimmed().toInt(&ok);
+                if (ok && id > 0) {
+                    articleCatIds.insert(id);
+                }
+            }
+        }
+
+        QHash<QString, QSet<QString>>            availablePages;
+        QHash<QString, QHash<QString, QString>>  translatedPermalinks;
+
+        for (const PageRecord &r : std::as_const(pages)) {
+            // Skip hub pages whose category has no articles — they would render
+            // empty and should not appear as link targets.
+            if (r.typeId == QStringLiteral("category_hub")) {
+                const QHash<QString, QString> &data = m_pageRepo.loadData(r.id);
+                const auto &catStr = data.value(QStringLiteral("0_categories"));
+                bool hasArticles = false;
+                for (const QString &part : catStr.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+                    bool ok = false;
+                    const int id = part.trimmed().toInt(&ok);
+                    if (ok && articleCatIds.contains(id)) {
+                        hasArticles = true;
+                        break;
+                    }
+                }
+                if (!hasArticles) {
+                    continue;
+                }
+            }
+
             if (r.langCodesToTranslate.isEmpty()) {
                 availablePages[currentLang].insert(r.permalink);
             } else {
@@ -233,8 +266,23 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                     availablePages[lang].insert(r.permalink);
                 }
             }
+
+            if (!r.endPermalink.isEmpty() && !r.langCodesToTranslate.isEmpty()) {
+                const QHash<QString, QString> &data = m_pageRepo.loadData(r.id);
+                for (const QString &lang : std::as_const(r.langCodesToTranslate)) {
+                    const QString trSlugKey = QStringLiteral("tr:") + lang
+                                             + QStringLiteral(":_permalink_slug");
+                    const QString &trSlug = data.value(trSlugKey);
+                    if (!trSlug.isEmpty()) {
+                        translatedPermalinks[lang][r.permalink] =
+                            QLatin1Char('/') + trSlug;
+                    }
+                }
+            }
         }
+
         engine.setAvailablePages(availablePages);
+        engine.setTranslatedPermalinks(translatedPermalinks);
     }
 
     for (const PageRecord &record : std::as_const(pages)) {
@@ -243,6 +291,11 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         const bool isTargetLang       = record.langCodesToTranslate.contains(currentLang);
 
         if (hasExplicitTargets && !isSourceLang && !isTargetLang) {
+            continue;
+        }
+
+        // Skip pages excluded from availablePages (e.g. empty hub pages).
+        if (!engine.isPageAvailable(record.permalink, websiteIndex)) {
             continue;
         }
 
@@ -265,7 +318,7 @@ int PageGenerator::generateAll(const QDir     &workingDir,
 
         // For translated pages of strategies that carry an endPermalink suffix,
         // use the AI-translated slug stored in page data as the output path.
-        // Falls back to the source permalink (with lang prefix) when not set.
+        // Falls back to the source permalink when not set.
         PageRecord effectiveRecord = record;
         if (isTargetLang && !record.endPermalink.isEmpty()) {
             const QString trSlugKey = QStringLiteral("tr:")
@@ -273,10 +326,7 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                                       + QStringLiteral(":_permalink_slug");
             const QString &trSlug = data.value(trSlugKey);
             if (!trSlug.isEmpty()) {
-                effectiveRecord.permalink = QLatin1Char('/')
-                                            + currentLang
-                                            + QLatin1Char('/')
-                                            + trSlug;
+                effectiveRecord.permalink = QLatin1Char('/') + trSlug;
             }
         }
 
@@ -365,10 +415,7 @@ int PageGenerator::generateSubset(const QList<int> &pageIds,
                                       + QStringLiteral(":_permalink_slug");
             const QString &trSlug = data.value(trSlugKey);
             if (!trSlug.isEmpty()) {
-                effectiveRecord.permalink = QLatin1Char('/')
-                                            + currentLang
-                                            + QLatin1Char('/')
-                                            + trSlug;
+                effectiveRecord.permalink = QLatin1Char('/') + trSlug;
             }
         }
 
