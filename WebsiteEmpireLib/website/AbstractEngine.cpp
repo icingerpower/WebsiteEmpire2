@@ -74,6 +74,29 @@ void AbstractEngine::setAvailablePages(const QHash<QString, QSet<QString>> &page
     m_availablePages = pages;
 }
 
+void AbstractEngine::setTranslatedPermalinks(
+    const QHash<QString, QHash<QString, QString>> &map)
+{
+    m_translatedPermalinks = map;
+}
+
+QString AbstractEngine::resolvePermalink(const QString &permalink, int websiteIndex) const
+{
+    if (permalink.startsWith(QStringLiteral("http://"))
+            || permalink.startsWith(QStringLiteral("https://"))) {
+        return permalink;
+    }
+    if (m_translatedPermalinks.isEmpty()) {
+        return permalink;
+    }
+    const QString &lang = getLangCode(websiteIndex);
+    const auto it = m_translatedPermalinks.find(lang);
+    if (it == m_translatedPermalinks.cend()) {
+        return permalink;
+    }
+    return it->value(permalink, permalink);
+}
+
 bool AbstractEngine::isPageAvailable(const QString &permalink, int websiteIndex) const
 {
     // Permissive default: if no availability map has been set, every page is

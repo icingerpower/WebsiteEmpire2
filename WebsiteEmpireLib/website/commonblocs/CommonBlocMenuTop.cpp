@@ -224,7 +224,7 @@ void CommonBlocMenuTop::addCode(QStringView     origContent,
                     ? QStringLiteral("<a class=\"nav-top__submenu-link"
                                      " nav-top__submenu-link--important\" href=\"")
                     : QStringLiteral("<a class=\"nav-top__submenu-link\" href=\"");
-                html += sub.url.toHtmlEscaped();
+                html += engine.resolvePermalink(sub.url, websiteIndex).toHtmlEscaped();
                 html += QStringLiteral("\"");
                 const QString subRel = buildRel(sub.rel, sub.newTab);
                 if (!subRel.isEmpty()) {
@@ -245,7 +245,7 @@ void CommonBlocMenuTop::addCode(QStringView     origContent,
             html += item.important
                 ? QStringLiteral("<a class=\"nav-top__link nav-top__link--important\" href=\"")
                 : QStringLiteral("<a class=\"nav-top__link\" href=\"");
-            html += item.url.toHtmlEscaped();
+            html += engine.resolvePermalink(item.url, websiteIndex).toHtmlEscaped();
             html += QStringLiteral("\"");
             const QString itemRel = buildRel(item.rel, item.newTab);
             if (!itemRel.isEmpty()) {

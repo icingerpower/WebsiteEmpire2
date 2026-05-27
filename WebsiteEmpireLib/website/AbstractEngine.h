@@ -124,6 +124,20 @@ public:
      */
     bool isPageAvailable(const QString &permalink, int websiteIndex) const;
 
+    /**
+     * Registers translated permalinks for all languages in one call.
+     * @param map  langCode → (sourcePermalink → translatedPermalink)
+     * Built by PageGenerator from the tr:<lang>:_permalink_slug page-data keys.
+     */
+    void setTranslatedPermalinks(const QHash<QString, QHash<QString, QString>> &map);
+
+    /**
+     * Returns the language-specific permalink for the given source permalink
+     * and the language at websiteIndex.  Returns permalink unchanged when no
+     * translation is registered or when permalink is an external URL.
+     */
+    QString resolvePermalink(const QString &permalink, int websiteIndex) const;
+
     // Binds this engine to workingDir and hostTable, then loads engine_domains.csv.
     // Must be called before using the model.
     void init(const QDir &workingDir, const HostTable &hostTable);
@@ -176,6 +190,10 @@ private:
     /// Populated by setAvailablePages(); queried by isPageAvailable().
     /// Empty map → permissive (all pages available).
     QHash<QString, QSet<QString>> m_availablePages;
+
+    /// Populated by setTranslatedPermalinks(); queried by resolvePermalink().
+    /// langCode → (sourcePermalink → translatedPermalink)
+    QHash<QString, QHash<QString, QString>> m_translatedPermalinks;
     QList<DomainRow> m_rows;
 
     // Backing storage for the default getPageTypes() implementation.

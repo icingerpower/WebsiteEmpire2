@@ -64,7 +64,7 @@ void CommonBlocMenuBottom::addCode(QStringView     origContent,
         html += item.important
             ? QStringLiteral("<li><a class=\"nav-bottom__link nav-bottom__link--important\" href=\"")
             : QStringLiteral("<li><a class=\"nav-bottom__link\" href=\"");
-        html += item.url.toHtmlEscaped();
+        html += engine.resolvePermalink(item.url, websiteIndex).toHtmlEscaped();
         html += QStringLiteral("\"");
         const QString itemRel = buildRel(item.rel, item.newTab);
         if (!itemRel.isEmpty()) {
