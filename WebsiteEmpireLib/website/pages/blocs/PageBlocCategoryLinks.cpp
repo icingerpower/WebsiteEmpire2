@@ -151,20 +151,21 @@ void PageBlocCategoryLinks::addCode(QStringView     /*origContent*/,
             const CategoryTable::CategoryRow *row = m_table.categoryById(id);
             if (!row) { continue; }
 
-            const QString name = langCode.isEmpty()
+            const QString displayName = langCode.isEmpty()
                 ? row->name
                 : m_table.translationFor(id, langCode);
-            const QString permalink = _buildCatLinkPermalink(name);
+            // Hub pages always use the English-derived permalink regardless of lang.
+            const QString permalink = _buildCatLinkPermalink(row->name);
 
             html += QLatin1Char(' ');
             if (!permalink.isEmpty() && engine.isPageAvailable(permalink, websiteIndex)) {
                 html += QStringLiteral("<a href=\"");
                 html += permalink;
                 html += QStringLiteral("\">");
-                html += name;
+                html += displayName;
                 html += QStringLiteral("</a>");
             } else {
-                html += name;
+                html += displayName;
             }
         }
 
