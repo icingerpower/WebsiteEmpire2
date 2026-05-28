@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>600</width>
-    <height>80</height>
+    <height>120</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -34,7 +34,7 @@
    <item row="1" column="0">
     <widget class="QLabel" name="labelButtonText">
      <property name="text">
-      <string>Button text:</string>
+      <string>Accept label:</string>
      </property>
     </widget>
    </item>
@@ -42,6 +42,34 @@
     <widget class="QLineEdit" name="lineEditButtonText">
      <property name="placeholderText">
       <string>Accept</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="0">
+    <widget class="QLabel" name="labelRejectText">
+     <property name="text">
+      <string>Reject label:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QLineEdit" name="lineEditRejectText">
+     <property name="placeholderText">
+      <string>Reject</string>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="0">
+    <widget class="QLabel" name="labelRejectUrl">
+     <property name="text">
+      <string>Reject URL:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="1">
+    <widget class="QLineEdit" name="lineEditRejectUrl">
+     <property name="placeholderText">
+      <string>/cookies-policy (optional — redirected to after Reject)</string>
      </property>
     </widget>
    </item>
