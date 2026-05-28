@@ -348,11 +348,59 @@ void AbstractPageType::addCode(QStringView     origContent,
     }
     html += QStringLiteral("</head><body>");
     html += bodyHtml;
-    if (!innerJs.isEmpty()) {
+
+    // Stats beacon + page JS — one <script> block to minimise round-trips.
+    {
+        // Beacon: POST /stats/display on load, PATCH /stats/click on link click,
+        // POST /stats/session on page hide (uses sendBeacon for reliability).
+        QString beaconJs =
+            QStringLiteral("(function(){"
+                "var pid=") + QStringLiteral("\"") + m_permalink + QStringLiteral("\",")
+            + QStringLiteral(
+                "did=null,t0=Date.now(),scroll=0,clicked=false;"
+                "fetch('/stats/display',{method:'POST',"
+                    "headers:{'Content-Type':'application/json'},"
+                    "body:JSON.stringify({page_id:pid})})"
+                    ".then(function(r){return r.json()})"
+                    ".then(function(d){did=d.id})"
+                    ".catch(function(){});"
+                "document.addEventListener('scroll',function(){"
+                    "var p=Math.min(100,Math.round((scrollY+innerHeight)"
+                        "/document.documentElement.scrollHeight*100));"
+                    "if(p>scroll)scroll=p;"
+                "},{passive:true});"
+                "document.addEventListener('click',function(e){"
+                    "var a=e.target.closest('a[href]');"
+                    "if(!a||!did)return;"
+                    "var h=a.getAttribute('href');"
+                    "if(!h||h.charAt(0)==='#')return;"
+                    "clicked=true;"
+                    "navigator.sendBeacon('/stats/click/'+did,"
+                        "new Blob([JSON.stringify({clicked_at:new Date().toISOString()})],"
+                        "{type:'application/json'}));"
+                "});"
+                "document.addEventListener('visibilitychange',function(){"
+                    "if(document.visibilityState!=='hidden')return;"
+                    "navigator.sendBeacon('/stats/session',"
+                        "new Blob([JSON.stringify({"
+                            "page_id:pid,"
+                            "scrolling_percentage:scroll,"
+                            "time_on_page:Math.round((Date.now()-t0)/1000),"
+                            "is_final_page:!clicked"
+                        "})],"
+                        "{type:'application/json'}));"
+                "});"
+                "})();");
+
         html += QStringLiteral("<script>");
-        html += innerJs;
+        if (!innerJs.isEmpty()) {
+            html += innerJs;
+            html += QLatin1Char(';');
+        }
+        html += beaconJs;
         html += QStringLiteral("</script>");
     }
+
     html += QStringLiteral("</body></html>");
 
     // css and js are intentionally left untouched — all output is inlined
