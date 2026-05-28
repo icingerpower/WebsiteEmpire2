@@ -21,16 +21,19 @@ int main(int argc, char *argv[])
 {
     int port = 8080;
     std::string lang;
+    std::string imagesDbPath = ImageDb::FILENAME;
     for (int i = 1; i < argc - 1; ++i) {
         if (std::string_view(argv[i]) == "--port") {
             port = std::atoi(argv[i + 1]);
         } else if (std::string_view(argv[i]) == "--lang") {
             lang = argv[i + 1];
+        } else if (std::string_view(argv[i]) == "--images-db") {
+            imagesDbPath = argv[i + 1];
         }
     }
 
     ContentDb contentDb(ContentDb::FILENAME);
-    ImageDb   imageDb(ImageDb::FILENAME);
+    ImageDb   imageDb(imagesDbPath);
     StatsDb   statsDb(StatsDb::FILENAME);
 
     PageRepositorySQLite    pageRepo(contentDb);

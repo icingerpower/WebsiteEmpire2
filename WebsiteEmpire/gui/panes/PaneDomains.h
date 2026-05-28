@@ -100,7 +100,8 @@ private:
      */
     void _restartLocalDrogon(const QString &deployPath,
                               const QString &binaryPath,
-                              int            port = 8080);
+                              int            port = 8080,
+                              const QString &imagesDbPath = {});
 
     /**
      * Runs sshpass with the given arguments. Returns true on success.

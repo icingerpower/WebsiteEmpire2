@@ -181,7 +181,25 @@ void LauncherPublish::run(const QString & /*value*/)
     killer.waitForFinished(3000);
     QThread::msleep(500);
 
-    const QString srcImagesPath = workingDir.filePath(QStringLiteral("images.db"));
+    // Copy images.db once to the deploy base — shared across all languages.
+    const QString srcImagesPath  = workingDir.filePath(QStringLiteral("images.db"));
+    const QString sharedImages   = QDir(deployBase).filePath(QStringLiteral("images.db"));
+    if (QFile::exists(srcImagesPath)) {
+        if (!QDir().mkpath(deployBase)) {
+            out << QStringLiteral("WARNING: could not create deploy dir: %1\n").arg(deployBase);
+            out.flush();
+        }
+        if (QFile::exists(sharedImages)) {
+            QFile::remove(sharedImages);
+        }
+        if (QFile::copy(srcImagesPath, sharedImages)) {
+            out << QStringLiteral("→ images.db → %1 (shared)\n").arg(deployBase);
+        } else {
+            out << QStringLiteral("WARNING: failed to copy images.db to %1\n").arg(deployBase);
+        }
+        out.flush();
+    }
+
     int totalPages = 0;
 
     for (const LangToDeploy &t : std::as_const(targets)) {
@@ -207,23 +225,10 @@ void LauncherPublish::run(const QString & /*value*/)
         out << QStringLiteral("  → %1 page(s) written to %2\n").arg(n).arg(destDir);
         out.flush();
 
-        // Copy images.db (best-effort — server still starts without it).
-        const QString destImages = ddir.filePath(QStringLiteral("images.db"));
-        if (QFile::exists(srcImagesPath)) {
-            if (QFile::exists(destImages)) {
-                QFile::remove(destImages);
-            }
-            if (QFile::copy(srcImagesPath, destImages)) {
-                out << QStringLiteral("  → images.db → %1\n").arg(destDir);
-            } else {
-                out << QStringLiteral("  WARNING: failed to copy images.db to %1\n").arg(destDir);
-            }
-            out.flush();
-        }
-
         QProcess::startDetached(binaryPath,
-                                {QStringLiteral("--port"), QString::number(t.port),
-                                 QStringLiteral("--lang"), t.lang},
+                                {QStringLiteral("--port"),      QString::number(t.port),
+                                 QStringLiteral("--lang"),      t.lang,
+                                 QStringLiteral("--images-db"), sharedImages},
                                 destDir);
         out << QStringLiteral("  → StaticWebsiteServe lang=%1 at http://localhost:%2/\n")
                .arg(t.lang).arg(t.port);

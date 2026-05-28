@@ -448,7 +448,16 @@ void PaneDomains::deployLocally()
         killer.waitForFinished(3000);
         QThread::msleep(500);
 
-        const QString srcImages = m_workingDir.filePath(QStringLiteral("images.db"));
+        // Copy images.db once to the deploy base — shared across all languages.
+        const QString srcImages    = m_workingDir.filePath(QStringLiteral("images.db"));
+        const QString sharedImages = QDir(deployBase).filePath(QStringLiteral("images.db"));
+        if (QFile::exists(srcImages)) {
+            if (QFile::exists(sharedImages)) {
+                QFile::remove(sharedImages);
+            }
+            QFile::copy(srcImages, sharedImages);
+        }
+
         int totalPages = 0;
 
         QStringList urls;
@@ -468,15 +477,7 @@ void PaneDomains::deployLocally()
 
             totalPages += generator.generateAll(m_workingDir, ddir, t.domain, *m_engine, t.engineIndex);
 
-            const QString destImages = ddir.filePath(QStringLiteral("images.db"));
-            if (QFile::exists(srcImages)) {
-                if (QFile::exists(destImages)) {
-                    QFile::remove(destImages);
-                }
-                QFile::copy(srcImages, destImages);
-            }
-
-            _restartLocalDrogon(destDir, binaryPath, t.port);
+            _restartLocalDrogon(destDir, binaryPath, t.port, sharedImages);
 
             urls.append(QStringLiteral("http://localhost:%1/index.html  [%2]")
                            .arg(t.port).arg(t.lang));
@@ -681,7 +682,8 @@ bool PaneDomains::_deployNeeded() const
 
 void PaneDomains::_restartLocalDrogon(const QString &deployPath,
                                        const QString &binaryPath,
-                                       int            port)
+                                       int            port,
+                                       const QString &imagesDbPath)
 {
     // Kill any StaticWebsiteServe process whose cwd is exactly deployPath.
     // Use pgrep -f (match full command line) because the 18-char name exceeds
@@ -699,9 +701,11 @@ void PaneDomains::_restartLocalDrogon(const QString &deployPath,
     // Brief pause so the port is released before we rebind it.
     QThread::msleep(300);
 
-    QProcess::startDetached(binaryPath,
-                            {QStringLiteral("--port"), QString::number(port)},
-                            deployPath);
+    QStringList args = {QStringLiteral("--port"), QString::number(port)};
+    if (!imagesDbPath.isEmpty()) {
+        args << QStringLiteral("--images-db") << imagesDbPath;
+    }
+    QProcess::startDetached(binaryPath, args, deployPath);
 }
 
 bool PaneDomains::_runScp(const QStringList &args, QString &errorOutput) const
