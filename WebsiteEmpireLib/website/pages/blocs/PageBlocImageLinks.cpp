@@ -41,6 +41,17 @@ void PageBlocImageLinks::load(const QHash<QString, QString> &values)
         item.label      = values.value(prefix + QStringLiteral("label"));
         m_items.append(std::move(item));
     }
+
+    // Register each non-empty label as a BlocTranslations source, then restore
+    // any previously stored translations from the flat map.
+    for (int i = 0; i < m_items.size(); ++i) {
+        if (!m_items.at(i).label.isEmpty()) {
+            m_translations.setSource(
+                QStringLiteral("item_") + QString::number(i) + QStringLiteral("_label"),
+                m_items.at(i).label);
+        }
+    }
+    m_translations.loadFromMap(values);
 }
 
 void PageBlocImageLinks::save(QHash<QString, QString> &values) const
@@ -63,6 +74,8 @@ void PageBlocImageLinks::save(QHash<QString, QString> &values) const
         values.insert(prefix + QStringLiteral("alt"),    item.altText);
         values.insert(prefix + QStringLiteral("label"),  item.label);
     }
+
+    m_translations.saveToMap(values);
 }
 
 // =============================================================================
@@ -70,8 +83,8 @@ void PageBlocImageLinks::save(QHash<QString, QString> &values) const
 // =============================================================================
 
 void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
-                                  AbstractEngine &/*engine*/,
-                                  int             /*websiteIndex*/,
+                                  AbstractEngine &engine,
+                                  int             websiteIndex,
                                   QString        &html,
                                   QString        &css,
                                   QString        &js,
@@ -90,6 +103,8 @@ void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
         return;
     }
 
+    const QString langCode = engine.getLangCode(websiteIndex);
+
     // ── HTML ────────────────────────────────────────────────────────────
     html += QStringLiteral("<section class=\"image-links-grid\" style=\"--cols-d:");
     html += QString::number(m_colsDesktop);
@@ -100,11 +115,14 @@ void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
     html += QStringLiteral("\">");
 
     int visibleIndex = 0;
-    for (const auto &item : std::as_const(m_items)) {
+    for (int i = 0; i < m_items.size(); ++i) {
+        const auto &item = m_items.at(i);
         if (item.imageUrl.isEmpty()) {
             continue;
         }
-        const auto &href = resolveHref(item.linkType, item.linkTarget);
+        // Resolve to translated permalink if available (e.g. category hub pages).
+        const QString href = engine.resolvePermalink(
+            resolveHref(item.linkType, item.linkTarget), websiteIndex);
 
         // imgdb:<filename> → /<filename>  (ImageController looks up by filename + Host header)
         QString resolvedUrl;
@@ -113,6 +131,11 @@ void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
         } else {
             resolvedUrl = item.imageUrl;
         }
+
+        // Resolve translated label; fall back to source label if none stored.
+        const QString fieldId = QStringLiteral("item_") + QString::number(i) + QStringLiteral("_label");
+        const QString &tr = m_translations.translation(fieldId, langCode);
+        const QString &displayLabel = tr.isEmpty() ? item.label : tr;
 
         html += QStringLiteral("<a href=\"");
         html += href;
@@ -124,8 +147,8 @@ void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
         html += item.altText;
         html += QStringLiteral("\" loading=\"lazy\">");
         html += QStringLiteral("<span class=\"image-link-label\">");
-        if (!item.label.isEmpty()) {
-            html += item.label;
+        if (!displayLabel.isEmpty()) {
+            html += displayLabel;
             html += QStringLiteral(" ");
         }
         html += QStringLiteral("&#8594;</span>");
@@ -172,6 +195,36 @@ void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
             "},true);"
             "})();");
     }
+}
+
+// =============================================================================
+// collectTranslatables / applyTranslation / isTranslationComplete
+// =============================================================================
+
+void PageBlocImageLinks::collectTranslatables(QStringView /*origContent*/,
+                                               QList<TranslatableField> &out) const
+{
+    for (int i = 0; i < m_items.size(); ++i) {
+        const QString &lbl = m_items.at(i).label;
+        if (!lbl.isEmpty()) {
+            out.append({QStringLiteral("item_") + QString::number(i) + QStringLiteral("_label"),
+                        lbl});
+        }
+    }
+}
+
+void PageBlocImageLinks::applyTranslation(QStringView   /*origContent*/,
+                                           const QString &fieldId,
+                                           const QString &lang,
+                                           const QString &text)
+{
+    m_translations.setTranslation(fieldId, lang, text);
+}
+
+bool PageBlocImageLinks::isTranslationComplete(QStringView   /*origContent*/,
+                                                const QString &lang) const
+{
+    return m_translations.isComplete(lang);
 }
 
 // =============================================================================

@@ -178,8 +178,9 @@ void PageBlocCategory::addCode(QStringView     /*origContent*/,
             const QString name = langCode.isEmpty()
                 ? row->name
                 : m_table.translationFor(id, langCode);
-            // Hub pages always use the English-derived permalink regardless of lang.
-            const QString permalink = _categoryPermalink(row->name);
+            // Resolve to translated hub permalink if available; fall back to English.
+            const QString permalink = engine.resolvePermalink(
+                _categoryPermalink(row->name), websiteIndex);
 
             QString item;
             if (!permalink.isEmpty() && engine.isPageAvailable(permalink, websiteIndex)) {

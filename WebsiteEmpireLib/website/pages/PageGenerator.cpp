@@ -5,17 +5,36 @@
 #include "website/pages/IPageRepository.h"
 #include "website/pages/PageRecord.h"
 #include "website/pages/PermalinkHistoryEntry.h"
+#include "website/pages/attributes/CategoryTable.h"
 #include "website/sitemap/SitemapOrchestrator.h"
 
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QHash>
+#include <QRegularExpression>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 
 #include <atomic>
 #include <zlib.h>
+
+namespace {
+
+// Derives a hub page permalink from a category name — same logic as
+// _categoryPermalink() in the link-builder blocs so both sides agree.
+QString categoryHubSlug(const QString &name)
+{
+    static const QRegularExpression s_nonAlnum(QStringLiteral("[^a-z0-9]+"));
+    QString slug = name.toLower();
+    slug.replace(s_nonAlnum, QStringLiteral("-"));
+    while (slug.startsWith(QLatin1Char('-'))) { slug.remove(0, 1); }
+    while (slug.endsWith(QLatin1Char('-'))) { slug.chop(1); }
+    if (slug.isEmpty()) { return {}; }
+    return QStringLiteral("/") + slug + QStringLiteral(".html");
+}
+
+} // namespace
 
 // =============================================================================
 // Constructor
@@ -272,6 +291,33 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                 }
             }
 
+            // Hub pages: add translated permalink for the current deployment language.
+            // Applies whether langCodesToTranslate is empty (legacy hubs) or set.
+            if (r.typeId == QStringLiteral("category_hub")) {
+                const bool relevantToCurrentLang = r.langCodesToTranslate.isEmpty()
+                    || r.langCodesToTranslate.contains(currentLang);
+                if (relevantToCurrentLang) {
+                    const QHash<QString, QString> &hubData = m_pageRepo.loadData(r.id);
+                    const QString &catStr = hubData.value(QStringLiteral("0_categories"));
+                    for (const QString &part : catStr.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+                        bool ok = false;
+                        const int catId = part.trimmed().toInt(&ok);
+                        if (!ok || catId <= 0) { continue; }
+                        const CategoryTable::CategoryRow *catRow = m_categoryTable.categoryById(catId);
+                        if (!catRow) { continue; }
+                        const QString translatedName = m_categoryTable.translationFor(catId, currentLang);
+                        if (translatedName != catRow->name) {
+                            const QString trPermalink = categoryHubSlug(translatedName);
+                            if (!trPermalink.isEmpty() && trPermalink != r.permalink) {
+                                translatedPermalinks[currentLang][r.permalink] = trPermalink;
+                                availablePages[currentLang].insert(trPermalink);
+                            }
+                        }
+                        break; // use first category only
+                    }
+                }
+            }
+
             if (!r.endPermalink.isEmpty() && !r.langCodesToTranslate.isEmpty()) {
                 const QHash<QString, QString> &data = m_pageRepo.loadData(r.id);
                 for (const QString &lang : std::as_const(r.langCodesToTranslate)) {
@@ -332,6 +378,26 @@ int PageGenerator::generateAll(const QDir     &workingDir,
             const QString &trSlug = data.value(trSlugKey);
             if (!trSlug.isEmpty()) {
                 effectiveRecord.permalink = QLatin1Char('/') + trSlug;
+            }
+        }
+        // Hub pages: generate at translated URL when the category has a
+        // translation that differs from its English name.
+        if (record.typeId == QStringLiteral("category_hub")) {
+            const QString &catStr = data.value(QStringLiteral("0_categories"));
+            for (const QString &part : catStr.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+                bool ok = false;
+                const int catId = part.trimmed().toInt(&ok);
+                if (!ok || catId <= 0) { continue; }
+                const CategoryTable::CategoryRow *catRow = m_categoryTable.categoryById(catId);
+                if (!catRow) { continue; }
+                const QString translatedName = m_categoryTable.translationFor(catId, currentLang);
+                if (translatedName != catRow->name) {
+                    const QString trPermalink = categoryHubSlug(translatedName);
+                    if (!trPermalink.isEmpty()) {
+                        effectiveRecord.permalink = trPermalink;
+                    }
+                }
+                break;
             }
         }
 
@@ -421,6 +487,26 @@ int PageGenerator::generateSubset(const QList<int> &pageIds,
             const QString &trSlug = data.value(trSlugKey);
             if (!trSlug.isEmpty()) {
                 effectiveRecord.permalink = QLatin1Char('/') + trSlug;
+            }
+        }
+        // Hub pages: generate at translated URL when the category has a
+        // translation that differs from its English name.
+        if (record.typeId == QStringLiteral("category_hub")) {
+            const QString &catStr = data.value(QStringLiteral("0_categories"));
+            for (const QString &part : catStr.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+                bool ok = false;
+                const int catId = part.trimmed().toInt(&ok);
+                if (!ok || catId <= 0) { continue; }
+                const CategoryTable::CategoryRow *catRow = m_categoryTable.categoryById(catId);
+                if (!catRow) { continue; }
+                const QString translatedName = m_categoryTable.translationFor(catId, currentLang);
+                if (translatedName != catRow->name) {
+                    const QString trPermalink = categoryHubSlug(translatedName);
+                    if (!trPermalink.isEmpty()) {
+                        effectiveRecord.permalink = trPermalink;
+                    }
+                }
+                break;
             }
         }
 

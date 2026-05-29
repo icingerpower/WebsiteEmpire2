@@ -1,6 +1,7 @@
 #ifndef PAGEBLOCIMAGELINKS_H
 #define PAGEBLOCIMAGELINKS_H
 
+#include "website/commonblocs/BlocTranslations.h"
 #include "website/pages/blocs/AbstractPageBloc.h"
 
 #include <QList>
@@ -31,6 +32,11 @@
  *   "category" -> /{target}  (category hub pages live at root, no /category/ prefix)
  *   "page"     -> /{target}
  *   "url"      -> target as-is
+ *
+ * Translation:
+ *   Item labels are translatable.  Field IDs follow the pattern "item_N_label"
+ *   (0-based index).  BlocTranslations handles persistence in the flat data map.
+ *   Labels with empty source text are silently skipped by the translation pipeline.
  */
 class PageBlocImageLinks : public AbstractPageBloc
 {
@@ -65,13 +71,14 @@ public:
 
     /**
      * Reads grid settings and items from the flat key-value map.
-     * Unknown keys are silently ignored.
+     * Registers item labels as BlocTranslations sources and loads stored
+     * translations.  Unknown keys are silently ignored.
      */
     void load(const QHash<QString, QString> &values) override;
 
     /**
      * Writes grid settings and all items (including those with empty imageUrl)
-     * into the flat key-value map.
+     * into the flat key-value map.  Also persists all stored translations.
      */
     void save(QHash<QString, QString> &values) const override;
 
@@ -91,6 +98,15 @@ public:
 
     AbstractPageBlockWidget *createEditWidget() override;
 
+    void collectTranslatables(QStringView              origContent,
+                              QList<TranslatableField> &out) const override;
+    void applyTranslation(QStringView   origContent,
+                          const QString &fieldId,
+                          const QString &lang,
+                          const QString &text) override;
+    bool isTranslationComplete(QStringView   origContent,
+                               const QString &lang) const override;
+
     // ── Accessors ───────────────────────────────────────────────────────
     const QList<Item> &items() const;
 
@@ -109,7 +125,8 @@ private:
     int m_colsMobile  = 1;
     int m_rowsMobile  = 4;
 
-    QList<Item> m_items;
+    QList<Item>      m_items;
+    BlocTranslations m_translations;
 
     /**
      * Resolves a link type + target pair into the final href value.
