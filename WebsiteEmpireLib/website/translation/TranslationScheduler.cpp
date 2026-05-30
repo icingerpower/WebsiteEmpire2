@@ -40,7 +40,19 @@ TranslationScheduler::buildJobs(IPageRepository           &repo,
             type->setAuthorLang(editingLang);
 
             if (type->isTranslationComplete(QStringView{}, targetLang)) {
-                continue; // already done
+                // Content is complete, but also verify the permalink slug is set
+                // when the page type uses per-language URL slugs (endPermalink != "").
+                // The slug is injected dynamically by PageTranslator and is invisible
+                // to isTranslationComplete(), so we must check it explicitly here.
+                if (page.endPermalink.isEmpty()) {
+                    continue; // fully done — no slug needed
+                }
+                const QString slugKey = QStringLiteral("tr:") + targetLang
+                                        + QStringLiteral(":_permalink_slug");
+                if (!data.value(slugKey).isEmpty()) {
+                    continue; // slug already translated
+                }
+                // Fall through: re-queue to get the missing slug translated.
             }
 
             PageTranslator::TranslationJob job;

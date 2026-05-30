@@ -23,10 +23,14 @@ namespace {
 
 // Derives a hub page permalink from a category name — same logic as
 // _categoryPermalink() in the link-builder blocs so both sides agree.
+// NFD decomposition maps accented letters to their ASCII base (é→e, ü→u, etc.)
+// so translated names like "Santé mentale" slug correctly to "sante-mentale".
 QString categoryHubSlug(const QString &name)
 {
     static const QRegularExpression s_nonAlnum(QStringLiteral("[^a-z0-9]+"));
-    QString slug = name.toLower();
+    static const QRegularExpression s_combining(QStringLiteral("[\\x{0300}-\\x{036F}]"));
+    QString slug = name.toLower().normalized(QString::NormalizationForm_D);
+    slug.remove(s_combining);
     slug.replace(s_nonAlnum, QStringLiteral("-"));
     while (slug.startsWith(QLatin1Char('-'))) { slug.remove(0, 1); }
     while (slug.endsWith(QLatin1Char('-'))) { slug.chop(1); }

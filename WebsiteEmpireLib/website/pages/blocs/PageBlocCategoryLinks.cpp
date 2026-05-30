@@ -76,7 +76,9 @@ void PageBlocCategoryLinks::save(QHash<QString, QString> &values) const
 static QString _buildCatLinkPermalink(const QString &name)
 {
     static const QRegularExpression s_nonAlnum(QStringLiteral("[^a-z0-9]+"));
-    QString slug = name.toLower();
+    static const QRegularExpression s_combining(QStringLiteral("[\\x{0300}-\\x{036F}]"));
+    QString slug = name.toLower().normalized(QString::NormalizationForm_D);
+    slug.remove(s_combining);
     slug.replace(s_nonAlnum, QStringLiteral("-"));
     while (slug.startsWith(QLatin1Char('-'))) { slug.remove(0, 1); }
     while (slug.endsWith(QLatin1Char('-'))) { slug.chop(1); }
@@ -161,7 +163,7 @@ void PageBlocCategoryLinks::addCode(QStringView     /*origContent*/,
             html += QLatin1Char(' ');
             if (!permalink.isEmpty() && engine.isPageAvailable(permalink, websiteIndex)) {
                 html += QStringLiteral("<a href=\"");
-                html += permalink;
+                html += permalink.mid(permalink.startsWith(QLatin1Char('/')) ? 1 : 0);
                 html += QStringLiteral("\">");
                 html += displayName;
                 html += QStringLiteral("</a>");
