@@ -9,6 +9,9 @@
  *
  * Only getTypeId() and getDisplayName() are overridden; all bloc logic
  * is inherited from PageTypeArticle.
+ *
+ * addInnerTopCode() is suppressed so the AI disclaimer does not appear
+ * on legal pages — they are human-authored authoritative documents.
  */
 class PageTypeLegal : public PageTypeArticle
 {
@@ -20,6 +23,15 @@ public:
 
     QString getTypeId()      const override;
     QString getDisplayName() const override;
+
+protected:
+    void addInnerTopCode(AbstractEngine &engine,
+                             int             websiteIndex,
+                             QString        &html,
+                             QString        &css,
+                             QString        &js,
+                             QSet<QString>  &cssDoneIds,
+                             QSet<QString>  &jsDoneIds) const override;
 };
 
 #endif // PAGETYPELEGAL_H

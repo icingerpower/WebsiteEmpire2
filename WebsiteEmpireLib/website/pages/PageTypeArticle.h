@@ -95,6 +95,19 @@ public:
      */
     bool hasSvg() const override;
 
+protected:
+    /**
+     * Renders article-specific bottom content (AI disclaimer) inside <main>
+     * before </main> by calling AbstractTheme::addCodeArticle().
+     */
+    void addInnerTopCode(AbstractEngine &engine,
+                             int             websiteIndex,
+                             QString        &html,
+                             QString        &css,
+                             QString        &js,
+                             QSet<QString>  &cssDoneIds,
+                             QSet<QString>  &jsDoneIds) const override;
+
 private:
     QScopedPointer<PageBlocCategory> m_categoryBloc;
     PageBlocText                     m_textBloc;

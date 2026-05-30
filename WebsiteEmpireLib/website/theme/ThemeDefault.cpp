@@ -29,12 +29,17 @@ QString ThemeDefault::getName() const
 
 QList<AbstractCommonBloc *> ThemeDefault::getTopBlocs()
 {
-    return {&m_header, &m_menuTop};
+    return {&m_header, &m_search, &m_menuTop};
 }
 
 QList<AbstractCommonBloc *> ThemeDefault::getBottomBlocs()
 {
     return {&m_menuBottom, &m_footer, &m_cookies};
+}
+
+QList<AbstractCommonBloc *> ThemeDefault::getArticleBlocs()
+{
+    return {&m_disclaimer};
 }
 
 QList<Param> ThemeDefault::getParams() const

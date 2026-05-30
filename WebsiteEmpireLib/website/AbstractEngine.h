@@ -146,6 +146,10 @@ public:
     // Returns an empty list if init() has not been called or HostTable has no rows.
     QStringList availableHostNames() const;
 
+    // Returns true when deploy/{lang}/content.db exists under the working directory.
+    // Used by hreflang generation to emit only actually-published languages.
+    bool isLangDeployed(const QString &lang) const;
+
     // QAbstractTableModel
     int           rowCount  (const QModelIndex &parent = QModelIndex()) const override;
     int           columnCount(const QModelIndex &parent = QModelIndex()) const override;

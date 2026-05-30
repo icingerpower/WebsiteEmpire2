@@ -22,5 +22,9 @@ set(COMMONBLOCS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/CommonBlocMenuBottom.cpp
     ${CMAKE_CURRENT_LIST_DIR}/CommonBlocCookies.h
     ${CMAKE_CURRENT_LIST_DIR}/CommonBlocCookies.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocAiDisclaimer.h
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocAiDisclaimer.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocSearch.h
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocSearch.cpp
     ${COMMONBLOCS_WIDGETS_FILES}
 )

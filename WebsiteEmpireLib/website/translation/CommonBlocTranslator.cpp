@@ -106,7 +106,7 @@ void CommonBlocTranslator::_processNextJob()
              .arg(m_currentJob.blocId, m_currentJob.targetLang));
 
     const QList<AbstractCommonBloc *> allBlocs =
-        m_theme.getTopBlocs() + m_theme.getBottomBlocs();
+        m_theme.getTopBlocs() + m_theme.getBottomBlocs() + m_theme.getArticleBlocs();
     for (AbstractCommonBloc *b : std::as_const(allBlocs)) {
         if (b && b->getId() == m_currentJob.blocId) {
             m_currentBloc = b;

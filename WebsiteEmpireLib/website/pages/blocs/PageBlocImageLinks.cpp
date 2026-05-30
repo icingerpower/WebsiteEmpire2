@@ -138,7 +138,7 @@ void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
         const QString &displayLabel = tr.isEmpty() ? item.label : tr;
 
         html += QStringLiteral("<a href=\"");
-        html += href;
+        html += href.mid(href.startsWith(QLatin1Char('/')) ? 1 : 0);
         html += QStringLiteral("\" class=\"image-link\" data-link-id=\"");
         html += QString::number(visibleIndex);
         html += QStringLiteral("\"><img src=\"");
@@ -165,9 +165,9 @@ void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
             ".image-links-grid{display:grid;grid-template-columns:repeat(var(--cols-d,4),1fr);gap:1rem;margin:0;padding:0}"
             "@media(max-width:1023px){.image-links-grid{grid-template-columns:repeat(var(--cols-t,2),1fr)}}"
             "@media(max-width:639px){.image-links-grid{grid-template-columns:repeat(var(--cols-m,1),1fr)}}"
-            ".image-link{display:block;overflow:hidden;text-decoration:none;border-radius:4px;transition:transform .18s,box-shadow .18s}"
+            ".image-link{display:flex;flex-direction:column;overflow:hidden;text-decoration:none;border-radius:4px;transition:transform .18s,box-shadow .18s}"
             ".image-link:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.35)}"
-            ".image-link img{width:100%;height:auto;display:block;object-fit:cover;cursor:pointer;transition:opacity .18s}"
+            ".image-link img{width:100%;flex:1;min-height:0;display:block;object-fit:cover;cursor:pointer;transition:opacity .18s}"
             ".image-link:hover img{opacity:.88}"
             ".image-link-label{display:block;padding:.4rem .6rem;background:#0a1628;color:#cce4f7;font-size:.82rem;font-weight:500;text-align:center;letter-spacing:.02em;transition:background .18s,color .18s}"
             ".image-link:hover .image-link-label{background:#0e2244;color:#fff}");

@@ -457,7 +457,7 @@ void PageBlocHubGrid::addCode(QStringView     /*origContent*/,
         html += entry.effectivePermalink;
         html += QStringLiteral("\">");
         html += QStringLiteral("<a href=\"");
-        html += entry.effectivePermalink;
+        html += entry.effectivePermalink.mid(entry.effectivePermalink.startsWith(QLatin1Char('/')) ? 1 : 0);
         html += QStringLiteral("\" class=\"hub-card__link\">");
         html += QStringLiteral("<h3 class=\"hub-card__title\">");
         html += entry.title;

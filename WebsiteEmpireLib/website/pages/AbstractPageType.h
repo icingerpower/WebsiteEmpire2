@@ -226,10 +226,41 @@ protected:
     QString     m_sourceLang;
     QStringList m_targetLangs;
 
+    /**
+     * Hook called by addCode() inside <main>, after all page blocs and before
+     * </main>.  Default: no-op.  Override in page types that need extra content
+     * injected at the bottom of the content area (e.g. PageTypeArticle renders
+     * the AI disclaimer here via AbstractTheme::addCodeArticle()).
+     */
+    virtual void addInnerTopCode(AbstractEngine &engine,
+                                     int             websiteIndex,
+                                     QString        &html,
+                                     QString        &css,
+                                     QString        &js,
+                                     QSet<QString>  &cssDoneIds,
+                                     QSet<QString>  &jsDoneIds) const;
+
 private:
     QString m_authorLang;  ///< set by setAuthorLang(); compared in isTranslationComplete()
     mutable QList<const AbstractAttribute *> m_cachedAttributes;
     mutable bool m_attributesCached = false;
+
+    /**
+     * Builds <link rel="alternate" hreflang="…"> tags for every language row
+     * in the engine that has the current page available.
+     *
+     * Same-domain setup (all rows share one domain — path-based routing):
+     *   EN → https://domain/permalink
+     *   others → https://domain/{langCode}/resolvedPermalink
+     *
+     * Different-domain setup:
+     *   each → https://{rowDomain}/resolvedPermalink
+     *
+     * Also emits an x-default tag pointing to the English version (or the
+     * first available language when no English row is present).
+     * Returns an empty string when the engine has only one language row.
+     */
+    QString _buildHreflangTags(AbstractEngine &engine, int websiteIndex) const;
 };
 
 /**

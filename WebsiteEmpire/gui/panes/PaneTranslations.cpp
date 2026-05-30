@@ -118,6 +118,7 @@ void PaneTranslations::_initModels()
     if (m_theme) {
         blocs += m_theme->getTopBlocs();
         blocs += m_theme->getBottomBlocs();
+        blocs += m_theme->getArticleBlocs();
     }
 
     m_fieldModel = std::make_unique<TranslationFieldTable>(blocs, langs);

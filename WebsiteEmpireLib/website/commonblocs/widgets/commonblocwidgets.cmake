@@ -8,6 +8,12 @@ set(COMMONBLOCS_WIDGETS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocCookies.h
     ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocCookies.cpp
     ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocCookies.ui
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocAiDisclaimer.h
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocAiDisclaimer.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocAiDisclaimer.ui
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocSearch.h
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocSearch.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/WidgetCommonBlocSearch.ui
     ${CMAKE_CURRENT_LIST_DIR}/DialogMenuItemEdit.h
     ${CMAKE_CURRENT_LIST_DIR}/DialogMenuItemEdit.cpp
     ${CMAKE_CURRENT_LIST_DIR}/DialogMenuItemEdit.ui

@@ -111,7 +111,7 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
     // Build jobs and run — common blocs first, then categories
     // -------------------------------------------------------------------------
     const QList<AbstractCommonBloc *> blocs =
-        theme->getTopBlocs() + theme->getBottomBlocs();
+        theme->getTopBlocs() + theme->getBottomBlocs() + theme->getArticleBlocs();
     const QList<CommonBlocTranslator::TranslationJob> blocJobs =
         CommonBlocTranslator::buildJobs(blocs, sourceLang, targetLangs);
 

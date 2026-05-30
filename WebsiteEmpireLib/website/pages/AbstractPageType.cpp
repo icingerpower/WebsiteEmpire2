@@ -143,6 +143,75 @@ void AbstractPageType::setGenerationContext(const QString     &permalink,
 }
 
 // =============================================================================
+// _buildHreflangTags
+// =============================================================================
+
+QString AbstractPageType::_buildHreflangTags(AbstractEngine &engine, int /*websiteIndex*/) const
+{
+    const int rowCount = engine.rowCount();
+    if (rowCount <= 1) {
+        return {};
+    }
+
+    // Detect same-domain setup: all rows share the same non-empty domain.
+    QString firstDomain;
+    for (int i = 0; i < rowCount; ++i) {
+        const QString d = engine.data(engine.index(i, AbstractEngine::COL_DOMAIN)).toString();
+        if (d.isEmpty()) {
+            continue;
+        }
+        if (firstDomain.isEmpty()) {
+            firstDomain = d;
+        } else if (d != firstDomain) {
+            firstDomain.clear();
+            break;
+        }
+    }
+    const bool sameDomain = !firstDomain.isEmpty();
+
+    QString result;
+    QString xDefaultUrl;
+
+    for (int i = 0; i < rowCount; ++i) {
+        const QString lang   = engine.getLangCode(i);
+        const QString domain = engine.data(engine.index(i, AbstractEngine::COL_DOMAIN)).toString();
+        if (lang.isEmpty() || domain.isEmpty()) {
+            continue;
+        }
+        // Only include languages with a published deploy/{lang}/content.db.
+        if (!engine.isLangDeployed(lang)) {
+            continue;
+        }
+
+        const QString resolved = engine.resolvePermalink(m_permalink, i);
+
+        QString url = QStringLiteral("https://") + domain;
+        if (sameDomain && lang != QStringLiteral("en")) {
+            url += QLatin1Char('/') + lang;
+        }
+        url += resolved;
+
+        result += QStringLiteral("<link rel=\"alternate\" hreflang=\"");
+        result += lang;
+        result += QStringLiteral("\" href=\"");
+        result += url;
+        result += QStringLiteral("\">");
+
+        if (xDefaultUrl.isEmpty() || lang == QStringLiteral("en")) {
+            xDefaultUrl = url;
+        }
+    }
+
+    if (!xDefaultUrl.isEmpty()) {
+        result += QStringLiteral("<link rel=\"alternate\" hreflang=\"x-default\" href=\"");
+        result += xDefaultUrl;
+        result += QStringLiteral("\">");
+    }
+
+    return result;
+}
+
+// =============================================================================
 // buildHeadMetaTags / hasSvg
 // =============================================================================
 
@@ -155,6 +224,16 @@ QString AbstractPageType::buildHeadMetaTags(const QString & /*baseUrl*/,
 bool AbstractPageType::hasSvg() const
 {
     return false;
+}
+
+void AbstractPageType::addInnerTopCode(AbstractEngine & /*engine*/,
+                                        int              /*websiteIndex*/,
+                                        QString        & /*html*/,
+                                        QString        & /*css*/,
+                                        QString        & /*js*/,
+                                        QSet<QString>  & /*cssDoneIds*/,
+                                        QSet<QString>  & /*jsDoneIds*/) const
+{
 }
 
 // =============================================================================
@@ -218,6 +297,7 @@ void AbstractPageType::addCode(QStringView     origContent,
     // Page blocs are wrapped in <main class="page-content"> so they get
     // the centred, max-width container styles without affecting the header/footer.
     bodyHtml += QStringLiteral("<main class=\"page-content\">");
+    addInnerTopCode(engine, websiteIndex, bodyHtml, innerCss, innerJs, cssDoneIds, jsDoneIds);
     for (const AbstractPageBloc *bloc : getPageBlocs()) {
         bloc->addCode(origContent, engine, websiteIndex, bodyHtml, innerCss, innerJs, cssDoneIds, jsDoneIds);
     }
@@ -346,6 +426,7 @@ void AbstractPageType::addCode(QStringView     origContent,
     if (!baseUrl.isEmpty()) {
         html += buildHeadMetaTags(baseUrl, langCode);
     }
+    html += _buildHreflangTags(engine, websiteIndex);
     html += QStringLiteral("</head><body>");
     html += bodyHtml;
 

@@ -1,7 +1,9 @@
 #include "PageTypeArticle.h"
 
+#include "website/AbstractEngine.h"
 #include "website/pages/blocs/PageBlocCategory.h"
 #include "website/social/AbstractSocialMedia.h"
+#include "website/theme/AbstractTheme.h"
 
 #include <QHash>
 
@@ -136,44 +138,6 @@ QString PageTypeArticle::buildHeadMetaTags(const QString &baseUrl,
         result += QStringLiteral("\"/>\n");
     }
 
-    // ---- hreflang links ------------------------------------------------------
-    // When this is a target-language page its permalink starts with /{lang}/.
-    // Strip that prefix to recover the source permalink, then reconstruct all
-    // language variants.  This covers the common /{lang}/slug convention; pages
-    // with custom translated slugs will have slightly imprecise hreflang links.
-    if (!m_permalink.isEmpty() && !m_sourceLang.isEmpty()) {
-        QString sourcePermalink = m_permalink;
-        if (!langCode.isEmpty() && langCode != m_sourceLang) {
-            const QString prefix = QLatin1Char('/') + langCode + QLatin1Char('/');
-            if (sourcePermalink.startsWith(prefix)) {
-                sourcePermalink = sourcePermalink.mid(langCode.size() + 1); // keep leading /
-            }
-        }
-
-        result += QStringLiteral("<link rel=\"alternate\" hreflang=\"x-default\" href=\"");
-        result += baseUrl;
-        result += sourcePermalink;
-        result += QStringLiteral("\"/>\n");
-
-        result += QStringLiteral("<link rel=\"alternate\" hreflang=\"");
-        result += m_sourceLang;
-        result += QStringLiteral("\" href=\"");
-        result += baseUrl;
-        result += sourcePermalink;
-        result += QStringLiteral("\"/>\n");
-
-        for (const QString &tl : std::as_const(m_targetLangs)) {
-            result += QStringLiteral("<link rel=\"alternate\" hreflang=\"");
-            result += tl;
-            result += QStringLiteral("\" href=\"");
-            result += baseUrl;
-            result += QLatin1Char('/');
-            result += tl;
-            result += sourcePermalink;
-            result += QStringLiteral("\"/>\n");
-        }
-    }
-
     // ---- Per-platform social <meta> tags from PageBlocSocial -----------------
     for (const AbstractSocialMedia *platform : AbstractSocialMedia::all()) {
         const QString &id = platform->getId();
@@ -216,5 +180,19 @@ QString PageTypeArticle::buildHeadMetaTags(const QString &baseUrl,
 }
 
 bool PageTypeArticle::hasSvg() const { return true; }
+
+void PageTypeArticle::addInnerTopCode(AbstractEngine &engine,
+                                          int             websiteIndex,
+                                          QString        &html,
+                                          QString        &css,
+                                          QString        &js,
+                                          QSet<QString>  &cssDoneIds,
+                                          QSet<QString>  &jsDoneIds) const
+{
+    AbstractTheme *theme = engine.getActiveTheme();
+    if (theme) {
+        theme->addCodeArticle(engine, websiteIndex, html, css, js, cssDoneIds, jsDoneIds);
+    }
+}
 
 DECLARE_PAGE_TYPE(PageTypeArticle)

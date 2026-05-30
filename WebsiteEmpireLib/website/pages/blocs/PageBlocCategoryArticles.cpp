@@ -270,7 +270,7 @@ void PageBlocCategoryArticles::addCode(QStringView     /*origContent*/,
 
             html += QStringLiteral("<li class=\"cat-art__item\">");
             html += QStringLiteral("<a href=\"");
-            html += article.permalink;
+            html += article.permalink.mid(article.permalink.startsWith(QLatin1Char('/')) ? 1 : 0);
             html += QStringLiteral("\" class=\"cat-art__link\" data-link-id=\"");
             html += QString::number(entryIdx);
             html += QStringLiteral("-");

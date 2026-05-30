@@ -6,6 +6,7 @@
 #include "website/pages/attributes/CategoryTable.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QLocale>
 #include <QSet>
 #include <QTextStream>
@@ -155,6 +156,15 @@ QStringList AbstractEngine::availableHostNames() const
         names << m_hostTable->data(m_hostTable->index(i, HostTable::COL_NAME)).toString();
     }
     return names;
+}
+
+bool AbstractEngine::isLangDeployed(const QString &lang) const
+{
+    if (m_workingDir.path().isEmpty() || lang.isEmpty()) {
+        return false;
+    }
+    return QFileInfo(m_workingDir.filePath(
+        QStringLiteral("deploy/") + lang + QStringLiteral("/content.db"))).exists();
 }
 
 // ---- QAbstractTableModel ----------------------------------------------------

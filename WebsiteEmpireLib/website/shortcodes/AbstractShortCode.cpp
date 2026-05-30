@@ -95,7 +95,7 @@ AbstractShortCode::ParsedShortCode AbstractShortCode::parse(QStringView text)
                 tr("Duplicate argument '%1' in shortcode [%2].").arg(key, openTag));
             ex.raise();
         }
-        arguments.insert(key, value);
+        arguments.insert(key, value.trimmed());
     }
 
     return { openTag, arguments, content };

@@ -21,6 +21,7 @@ QList<CommonBlocTranslator::Job> CommonBlocTranslator::pendingJobs() const
     QList<AbstractCommonBloc *> allBlocs;
     allBlocs.append(m_theme.getTopBlocs());
     allBlocs.append(m_theme.getBottomBlocs());
+    allBlocs.append(m_theme.getArticleBlocs());
 
     for (AbstractCommonBloc *bloc : std::as_const(allBlocs)) {
         const auto sourceMap = bloc->sourceTexts();

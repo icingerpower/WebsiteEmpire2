@@ -140,6 +140,7 @@ void PaneTheme::_rebuildBlocsToolBox()
 
     addBlocsFromList(m_theme->getTopBlocs());
     addBlocsFromList(m_theme->getBottomBlocs());
+    addBlocsFromList(m_theme->getArticleBlocs());
 }
 
 // ---------------------------------------------------------------------------

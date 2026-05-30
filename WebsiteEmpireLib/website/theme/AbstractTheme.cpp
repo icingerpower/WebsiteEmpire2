@@ -194,6 +194,11 @@ QString AbstractTheme::_blocsSettingsPath() const
     return m_workingDir.filePath(getId() + QStringLiteral("_blocs.ini"));
 }
 
+QList<AbstractCommonBloc *> AbstractTheme::getArticleBlocs()
+{
+    return {};
+}
+
 void AbstractTheme::saveBlocsData()
 {
     QSettings settings(_blocsSettingsPath(), QSettings::IniFormat);
@@ -210,6 +215,7 @@ void AbstractTheme::saveBlocsData()
     };
     persist(getTopBlocs());
     persist(getBottomBlocs());
+    persist(getArticleBlocs());
 }
 
 void AbstractTheme::_loadBlocsData()
@@ -232,6 +238,7 @@ void AbstractTheme::_loadBlocsData()
     };
     hydrate(getTopBlocs());
     hydrate(getBottomBlocs());
+    hydrate(getArticleBlocs());
 }
 
 QString AbstractTheme::primaryColor() const
@@ -318,6 +325,20 @@ void AbstractTheme::addCodeBottom(AbstractEngine &engine,
                                    QSet<QString>  &jsDoneIds)
 {
     for (AbstractCommonBloc *bloc : getBottomBlocs()) {
+        bloc->addCode(QStringView{}, engine, websiteIndex,
+                      html, css, js, cssDoneIds, jsDoneIds);
+    }
+}
+
+void AbstractTheme::addCodeArticle(AbstractEngine &engine,
+                                    int             websiteIndex,
+                                    QString        &html,
+                                    QString        &css,
+                                    QString        &js,
+                                    QSet<QString>  &cssDoneIds,
+                                    QSet<QString>  &jsDoneIds)
+{
+    for (AbstractCommonBloc *bloc : getArticleBlocs()) {
         bloc->addCode(QStringView{}, engine, websiteIndex,
                       html, css, js, cssDoneIds, jsDoneIds);
     }

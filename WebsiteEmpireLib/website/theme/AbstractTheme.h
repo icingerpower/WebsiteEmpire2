@@ -96,6 +96,14 @@ public:
     virtual QList<AbstractCommonBloc *> getBottomBlocs() = 0;
 
     /**
+     * Common blocs rendered only at the bottom of article pages, in render order.
+     * Called by addCodeArticle(), which is invoked from PageTypeArticle.
+     * These blocs are persisted and translated alongside top/bottom blocs.
+     * Default: returns an empty list (no article-specific blocs).
+     */
+    virtual QList<AbstractCommonBloc *> getArticleBlocs();
+
+    /**
      * Full list of configurable parameters for this theme.
      * These become the rows of the QAbstractTableModel.
      * Do not call from subclass constructors — virtual dispatch is not yet
@@ -188,6 +196,18 @@ public:
                        QString        &js,
                        QSet<QString>  &cssDoneIds,
                        QSet<QString>  &jsDoneIds);
+
+    /**
+     * Calls addCode() on each bloc returned by getArticleBlocs(), in order.
+     * Called by PageTypeArticle::addInnerBottomCode() just before </main>.
+     */
+    void addCodeArticle(AbstractEngine &engine,
+                        int             websiteIndex,
+                        QString        &html,
+                        QString        &css,
+                        QString        &js,
+                        QSet<QString>  &cssDoneIds,
+                        QSet<QString>  &jsDoneIds);
 
     // -------------------------------------------------------------------------
     // Common-bloc persistence
