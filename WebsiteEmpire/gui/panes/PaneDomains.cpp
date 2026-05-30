@@ -400,10 +400,16 @@ void PaneDomains::deployLocally()
                 continue;
             }
             seenLangs.insert(lang);
-            const QString rawDomain = m_engine->data(
+            const QString domain = m_engine->data(
                 m_engine->index(i, AbstractEngine::COL_DOMAIN)).toString().trimmed();
-            const QString domain = rawDomain.isEmpty()
-                                   ? QStringLiteral("localhost") : rawDomain;
+            if (domain.isEmpty()) {
+                ExceptionWithTitleText ex(tr("Generate & Publish"),
+                                          tr("Domain is empty for language '%1'.\n"
+                                             "Set the domain (e.g. example.com) in the Domains tab before publishing.")
+                                             .arg(lang));
+                ex.raise();
+                return;
+            }
             targets.append({i, lang, domain, 8080 + portOffset});
             ++portOffset;
         }

@@ -125,10 +125,14 @@ void LauncherPublish::run(const QString & /*value*/)
             continue;
         }
         seenLangs.insert(lang);
-        const QString rawDomain = engine->data(
+        const QString domain = engine->data(
             engine->index(i, AbstractEngine::COL_DOMAIN)).toString().trimmed();
-        const QString domain = rawDomain.isEmpty()
-                               ? QStringLiteral("localhost") : rawDomain;
+        if (domain.isEmpty()) {
+            out << QStringLiteral("ERROR: domain is empty for lang=%1 — set it in the Domains tab.\n")
+                   .arg(lang);
+            out.flush();
+            return;
+        }
         const int port = basePort + portOffset;
         targets.append({i, lang, domain, port});
         ++portOffset;
