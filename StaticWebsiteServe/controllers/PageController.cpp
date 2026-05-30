@@ -80,7 +80,7 @@ void PageController::serveFile(const drogon::HttpRequestPtr                     
 
     auto resp = drogon::HttpResponse::newHttpResponse();
     resp->setStatusCode(drogon::k200OK);
-    resp->addHeader("Content-Type", contentType);
+    resp->setContentTypeString(contentType);
     resp->addHeader("Content-Encoding", "gzip");
     resp->addHeader("ETag", etag);
     resp->addHeader("Cache-Control", "no-cache");
@@ -161,7 +161,7 @@ void PageController::servePage(const drogon::HttpRequestPtr                     
     // 6. Send response.
     auto resp = drogon::HttpResponse::newHttpResponse();
     resp->setStatusCode(drogon::k200OK);
-    resp->addHeader("Content-Type", "text/html; charset=utf-8");
+    resp->setContentTypeString("text/html; charset=utf-8");
     resp->addHeader("Content-Encoding", "gzip");
     resp->addHeader("ETag", etag);
     resp->addHeader("Cache-Control", "no-cache");
