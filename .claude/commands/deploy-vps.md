@@ -190,6 +190,8 @@ ssh root@{IP} "curl -s --compressed https://{domain}/{lang}/index.html | head -3
 
 If all return expected HTML, deployment is complete. Tell the user the site is live at https://{domain}.
 
+Remind the user to submit `https://{domain}/sitemap.xml` to Google Search Console.
+
 ## Redeploying after a republish
 
 ```bash
