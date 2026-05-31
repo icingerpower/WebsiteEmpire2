@@ -103,16 +103,19 @@ QString extractExcerpt(const QString &rawText, qsizetype maxSentences, qsizetype
     const qsizetype len = plain.size();
     for (qsizetype i = 0; i < len; ++i) {
         const QChar c = plain.at(i);
-        if (c != QLatin1Char('.') && c != QLatin1Char('!') && c != QLatin1Char('?')) {
+        const bool isAscii = c == QLatin1Char('.') || c == QLatin1Char('!') || c == QLatin1Char('?');
+        // 。(U+3002)  ！(U+FF01)  ？(U+FF1F) — CJK/full-width terminators need no trailing space
+        const bool isCjk   = c == QChar(0x3002) || c == QChar(0xFF01) || c == QChar(0xFF1F);
+        if (!isAscii && !isCjk) {
             continue;
         }
-        if (i + 1 < len && plain.at(i + 1) != QLatin1Char(' ')) {
+        if (isAscii && i + 1 < len && plain.at(i + 1) != QLatin1Char(' ')) {
             continue;
         }
         const QString sentence = plain.mid(start, i - start + 1).trimmed();
         sentences.append(sentence);
         totalChars += sentence.size();
-        start = i + 2;
+        start = i + (isAscii ? 2 : 1);
         if (sentences.size() >= maxSentences || (targetChars > 0 && totalChars >= targetChars)) {
             break;
         }
@@ -120,8 +123,15 @@ QString extractExcerpt(const QString &rawText, qsizetype maxSentences, qsizetype
     const bool underLimit = sentences.size() < maxSentences
                             && (targetChars == 0 || totalChars < targetChars);
     if (underLimit && start < len) {
-        const QString &tail = plain.mid(start).trimmed();
+        QString tail = plain.mid(start).trimmed();
         if (!tail.isEmpty()) {
+            // Cap the fallback so we never dump the whole article when no sentence
+            // boundary was matched (e.g. single very long sentence, or a script with
+            // no recognised terminators).
+            if (targetChars > 0 && totalChars + tail.size() > targetChars * 2) {
+                tail = tail.left(targetChars - totalChars).trimmed()
+                       + QStringLiteral("…"); // …
+            }
             sentences.append(tail);
         }
     }
