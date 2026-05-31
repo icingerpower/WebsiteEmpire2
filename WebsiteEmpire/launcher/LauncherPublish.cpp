@@ -224,7 +224,12 @@ void LauncherPublish::run(const QString & /*value*/)
         out << QStringLiteral("Generating pages for lang=%1 domain=%2...\n")
                .arg(t.lang, t.domain);
         out.flush();
-        const int n = generator.generateAll(workingDir, ddir, t.domain, *engine, t.engineIndex);
+        // Non-primary languages are served behind a /<lang>/ nginx path prefix,
+        // so their sitemap URLs must include that prefix (e.g. https://example.com/fr).
+        const QString primaryLang = engine->getLangCode(0);
+        const QString sitemapBase = QStringLiteral("https://") + t.domain
+            + (t.lang == primaryLang ? QString{} : QStringLiteral("/") + t.lang);
+        const int n = generator.generateAll(workingDir, ddir, t.domain, *engine, t.engineIndex, sitemapBase);
         totalPages += n;
         out << QStringLiteral("  → %1 page(s) written to %2\n").arg(n).arg(destDir);
         out.flush();

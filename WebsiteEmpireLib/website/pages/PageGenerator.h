@@ -57,12 +57,18 @@ public:
      * data (e.g. stats.db), while outputDir receives content.db.  Use this
      * for per-language deployments where each language writes to its own
      * deploy directory rather than the shared working directory.
+     *
+     * sitemapBaseUrl overrides the base URL written into the sitemap index and
+     * chunk <loc> elements.  Pass the full URL root including any language path
+     * prefix, e.g. "https://example.com/fr" for the French deployment.
+     * When empty (default), falls back to "https://" + domain.
      */
     int generateAll(const QDir     &workingDir,
                     const QDir     &outputDir,
                     const QString  &domain,
                     AbstractEngine &engine,
-                    int             websiteIndex);
+                    int             websiteIndex,
+                    const QString  &sitemapBaseUrl = {});
 
     /**
      * Generates only the pages whose IDs are listed in pageIds and writes them

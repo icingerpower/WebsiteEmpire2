@@ -29,6 +29,7 @@
 #include <QPushButton>
 #include <QThread>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QStyledItemDelegate>
 #include <QUrl>
 
@@ -190,6 +191,16 @@ void PaneDomains::upload()
         return;
     }
 
+    const bool anyHostNeedsPassword = std::any_of(hosts.begin(), hosts.end(),
+        [](const HostInfo &h) { return !h.password.isEmpty(); });
+    if (anyHostNeedsPassword && QStandardPaths::findExecutable(QStringLiteral("sshpass")).isEmpty()) {
+        QMessageBox::warning(this, tr("Upload"),
+                             tr("sshpass is not installed.\n\n"
+                                "Install it with:\n"
+                                "  sudo apt install sshpass"));
+        return;
+    }
+
     // Auto-deploy if needed
     if (_deployNeeded()) {
         try {
@@ -201,60 +212,46 @@ void PaneDomains::upload()
     }
 
     const QString deployPath = _resolveDeployPath();
-    const QString contentDbLocal = QDir(deployPath).filePath(QStringLiteral("content.db"));
     const QString imagesDbLocal = m_workingDir.filePath(QStringLiteral("images.db"));
     const bool hasImagesDb = QFile::exists(imagesDbLocal);
+    const QStringList qualifying = _qualifyingLangCodes();
 
-    QSettings settings;
     bool anyError = false;
+    QStringList skippedLangs;
 
     for (const auto &host : std::as_const(hosts)) {
-        // First-time server setup check
-        const QString setupKey = QStringLiteral("PaneDomains/serverSetup/") + host.uniqueKey();
-        if (!settings.value(setupKey).toBool()) {
-            QString setupText;
-            setupText += QStringLiteral("# 1. Create the remote folder (run on server):\n");
-            setupText += QStringLiteral("mkdir -p ") + host.hostFolder + QStringLiteral("\n\n");
-            setupText += QStringLiteral("# 2. Upload the server binary (run locally, replace path as needed):\n");
-            setupText += QStringLiteral("sshpass -p '") + host.password
-                         + QStringLiteral("' scp -P ") + host.port
-                         + QStringLiteral(" /path/to/StaticWebsiteServe ")
-                         + host.username + QStringLiteral("@") + host.url
-                         + QStringLiteral(":") + host.hostFolder
-                         + QStringLiteral("/StaticWebsiteServe\n\n");
-            setupText += QStringLiteral("# 3. Make it executable and start it (run on server):\n");
-            setupText += QStringLiteral("chmod +x ") + host.hostFolder
-                         + QStringLiteral("/StaticWebsiteServe\n");
-            setupText += QStringLiteral("cd ") + host.hostFolder
-                         + QStringLiteral(" && nohup ./StaticWebsiteServe > server.log 2>&1 &\n");
+        // Apply the same qualification gate as deployLocally(): skip languages
+        // that don't have enough translated pages or weren't locally generated.
+        const QString lang = host.langCodes.isEmpty() ? QString() : host.langCodes.first();
+        if (!lang.isEmpty() && !qualifying.contains(lang)) {
+            skippedLangs.append(lang);
+            continue;
+        }
 
-            QMessageBox msgBox(this);
-            msgBox.setWindowTitle(tr("First-time server setup"));
-            msgBox.setText(tr("Have you completed the server setup for %1 (%2)?")
-                               .arg(host.name, host.url));
-            msgBox.setDetailedText(setupText);
-            msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-            msgBox.setDefaultButton(QMessageBox::No);
-            if (msgBox.exec() != QMessageBox::Yes) {
-                return;
+        QString contentDbLocal;
+        if (!lang.isEmpty()) {
+            const QString perLang = QDir(deployPath).filePath(lang + QStringLiteral("/content.db"));
+            if (QFile::exists(perLang)) {
+                contentDbLocal = perLang;
             }
-            settings.setValue(setupKey, true);
+        }
+        if (contentDbLocal.isEmpty() && lang.isEmpty()) {
+            const QString flat = QDir(deployPath).filePath(QStringLiteral("content.db"));
+            if (QFile::exists(flat)) {
+                contentDbLocal = flat;
+            }
+        }
+        if (contentDbLocal.isEmpty()) {
+            skippedLangs.append(lang.isEmpty() ? host.name : lang);
+            continue;
         }
 
         // Upload content.db
         const QString remoteContent = host.username + QStringLiteral("@") + host.url
                                       + QStringLiteral(":") + host.hostFolder
                                       + QStringLiteral("/content.db");
-        const QStringList contentArgs = {
-            QStringLiteral("-p"), host.password,
-            QStringLiteral("scp"),
-            QStringLiteral("-P"), host.port,
-            QStringLiteral("-o"), QStringLiteral("StrictHostKeyChecking=no"),
-            contentDbLocal,
-            remoteContent
-        };
         QString errorOutput;
-        if (!_runScp(contentArgs, errorOutput)) {
+        if (!_runRsync(host, contentDbLocal, remoteContent, errorOutput)) {
             QMessageBox::critical(this, tr("Upload"),
                                   tr("Failed to upload content.db to %1:\n%2")
                                       .arg(host.name, errorOutput));
@@ -262,21 +259,24 @@ void PaneDomains::upload()
             continue;
         }
 
+        // Restart the systemd service for the language just deployed
+        if (!lang.isEmpty()) {
+            const QString restartCmd = QStringLiteral("systemctl restart website-") + lang;
+            QString restartError;
+            if (!_runSshCommand(host, restartCmd, restartError)) {
+                QMessageBox::warning(this, tr("Upload"),
+                                     tr("Uploaded %1 to %2 but failed to restart website-%3:\n%4")
+                                         .arg(lang, host.name, lang, restartError));
+            }
+        }
+
         // Upload images.db if present
         if (hasImagesDb) {
             const QString remoteImages = host.username + QStringLiteral("@") + host.url
                                          + QStringLiteral(":") + host.hostFolder
                                          + QStringLiteral("/images.db");
-            const QStringList imagesArgs = {
-                QStringLiteral("-p"), host.password,
-                QStringLiteral("scp"),
-                QStringLiteral("-P"), host.port,
-                QStringLiteral("-o"), QStringLiteral("StrictHostKeyChecking=no"),
-                imagesDbLocal,
-                remoteImages
-            };
             QString imgErrorOutput;
-            if (!_runScp(imagesArgs, imgErrorOutput)) {
+            if (!_runRsync(host, imagesDbLocal, remoteImages, imgErrorOutput)) {
                 QMessageBox::critical(this, tr("Upload"),
                                       tr("Failed to upload images.db to %1:\n%2")
                                           .arg(host.name, imgErrorOutput));
@@ -287,7 +287,13 @@ void PaneDomains::upload()
     }
 
     if (!anyError) {
-        QMessageBox::information(this, tr("Upload"), tr("Upload completed."));
+        QString msg = tr("Upload completed.");
+        if (!skippedLangs.isEmpty()) {
+            msg += QStringLiteral("\n\n")
+                   + tr("Skipped (no local content generated): %1")
+                         .arg(skippedLangs.join(QStringLiteral(", ")));
+        }
+        QMessageBox::information(this, tr("Upload"), msg);
     }
 }
 
@@ -306,6 +312,16 @@ void PaneDomains::download()
         return;
     }
 
+    const bool anyHostNeedsPassword = std::any_of(hosts.begin(), hosts.end(),
+        [](const HostInfo &h) { return !h.password.isEmpty(); });
+    if (anyHostNeedsPassword && QStandardPaths::findExecutable(QStringLiteral("sshpass")).isEmpty()) {
+        QMessageBox::warning(this, tr("Download"),
+                             tr("sshpass is not installed.\n\n"
+                                "Install it with:\n"
+                                "  sudo apt install sshpass"));
+        return;
+    }
+
     const QString localStatsDb = m_workingDir.filePath(QStringLiteral("stats.db"));
     bool anyError = false;
 
@@ -313,16 +329,8 @@ void PaneDomains::download()
         const QString remoteStats = host.username + QStringLiteral("@") + host.url
                                     + QStringLiteral(":") + host.hostFolder
                                     + QStringLiteral("/stats.db");
-        const QStringList args = {
-            QStringLiteral("-p"), host.password,
-            QStringLiteral("scp"),
-            QStringLiteral("-P"), host.port,
-            QStringLiteral("-o"), QStringLiteral("StrictHostKeyChecking=no"),
-            remoteStats,
-            localStatsDb
-        };
         QString errorOutput;
-        if (!_runScp(args, errorOutput)) {
+        if (!_runRsync(host, remoteStats, localStatsDb, errorOutput)) {
             QMessageBox::critical(this, tr("Download"),
                                   tr("Failed to download stats.db from %1:\n%2")
                                       .arg(host.name, errorOutput));
@@ -364,21 +372,8 @@ void PaneDomains::deployLocally()
             return;
         }
 
-        // ── Determine qualifying languages (≥ 5 fully-translated pages) ────────
-        PageDb           pageDb(m_workingDir);
-        PageRepositoryDb pageRepo(pageDb);
-        CategoryTable    categoryTable(m_workingDir);
-
-        QStringList engineLangs;
-        const int rows = m_engine->rowCount();
-        for (int i = 0; i < rows; ++i) {
-            const QString lang = m_engine->getLangCode(i);
-            if (!lang.isEmpty() && !engineLangs.contains(lang)) {
-                engineLangs.append(lang);
-            }
-        }
-        const QHash<QString, int> translatedCounts =
-            TranslationStatusTable::countCompletedPerLang(pageRepo, categoryTable, engineLangs);
+        // ── Determine qualifying languages ────────────────────────────────────
+        const QStringList qualifying = _qualifyingLangCodes();
 
         struct LangTarget {
             int     engineIndex;
@@ -390,13 +385,10 @@ void PaneDomains::deployLocally()
         QList<LangTarget> targets;
         QSet<QString>     seenLangs;
         int portOffset = 0;
+        const int rows = m_engine->rowCount();
         for (int i = 0; i < rows; ++i) {
             const QString lang = m_engine->getLangCode(i);
-            if (lang.isEmpty() || seenLangs.contains(lang)) {
-                continue;
-            }
-            const int count = translatedCounts.value(lang, 0);
-            if (count < 10) {
+            if (lang.isEmpty() || seenLangs.contains(lang) || !qualifying.contains(lang)) {
                 continue;
             }
             seenLangs.insert(lang);
@@ -416,13 +408,16 @@ void PaneDomains::deployLocally()
 
         if (targets.isEmpty()) {
             ExceptionWithTitleText ex(tr("Generate & Publish"),
-                                      tr("No language has 5 or more pages yet.\n"
-                                         "Create or translate at least 5 pages before publishing."));
+                                      tr("No language has enough translated pages yet.\n"
+                                         "Create or translate at least 10 pages before publishing."));
             ex.raise();
             return;
         }
 
         // ── Generate each qualifying language directly into its deploy dir ──────
+        PageDb           pageDb(m_workingDir);
+        PageRepositoryDb pageRepo(pageDb);
+        CategoryTable    categoryTable(m_workingDir);
         PageGenerator       generator(pageRepo, categoryTable);
         CategoryHubDirtySet hubDirtySet(m_workingDir);
         CategoryHubSyncer   hubSyncer(pageRepo, categoryTable, hubDirtySet, generator);
@@ -481,7 +476,10 @@ void PaneDomains::deployLocally()
             QFile::remove(ddir.filePath(QStringLiteral("content.db-shm")));
             QFile::remove(ddir.filePath(QStringLiteral("content.db")));
 
-            totalPages += generator.generateAll(m_workingDir, ddir, t.domain, *m_engine, t.engineIndex);
+            const QString primaryLang = m_engine->getLangCode(0);
+            const QString sitemapBase = QStringLiteral("https://") + t.domain
+                + (t.lang == primaryLang ? QString{} : QStringLiteral("/") + t.lang);
+            totalPages += generator.generateAll(m_workingDir, ddir, t.domain, *m_engine, t.engineIndex, sitemapBase);
 
             _restartLocalDrogon(destDir, binaryPath, t.port, sharedImages);
 
@@ -636,6 +634,8 @@ QList<PaneDomains::HostInfo> PaneDomains::_resolveHosts() const
             m_engine->index(row, AbstractEngine::COL_HOST)).toString().trimmed();
         const QString hostFolder = m_engine->data(
             m_engine->index(row, AbstractEngine::COL_HOST_FOLDER)).toString().trimmed();
+        const QString langCode = m_engine->data(
+            m_engine->index(row, AbstractEngine::COL_LANG_CODE)).toString().trimmed();
 
         if (hostName.isEmpty() || hostFolder.isEmpty()) {
             continue;
@@ -661,16 +661,56 @@ QList<PaneDomains::HostInfo> PaneDomains::_resolveHosts() const
         info.url        = m_hostTable->data(m_hostTable->index(hostRow, HostTable::COL_URL)).toString();
         info.port       = m_hostTable->data(m_hostTable->index(hostRow, HostTable::COL_PORT)).toString();
         info.username   = m_hostTable->data(m_hostTable->index(hostRow, HostTable::COL_USERNAME)).toString();
-        info.password   = m_hostTable->data(m_hostTable->index(hostRow, HostTable::COL_PASSWORD)).toString();
+        info.password   = m_hostTable->data(m_hostTable->index(hostRow, HostTable::COL_PASSWORD), Qt::EditRole).toString();
         info.hostFolder = hostFolder;
 
         const QString key = info.uniqueKey();
         if (!seenKeys.contains(key)) {
             seenKeys.insert(key);
+            if (!langCode.isEmpty()) {
+                info.langCodes.append(langCode);
+            }
             result.append(info);
+        } else if (!langCode.isEmpty()) {
+            for (HostInfo &existing : result) {
+                if (existing.uniqueKey() == key && !existing.langCodes.contains(langCode)) {
+                    existing.langCodes.append(langCode);
+                    break;
+                }
+            }
         }
     }
 
+    return result;
+}
+
+QStringList PaneDomains::_qualifyingLangCodes() const
+{
+    if (!m_engine) {
+        return {};
+    }
+    PageDb           pageDb(m_workingDir);
+    PageRepositoryDb pageRepo(pageDb);
+    CategoryTable    categoryTable(m_workingDir);
+
+    QStringList engineLangs;
+    const int rows = m_engine->rowCount();
+    for (int i = 0; i < rows; ++i) {
+        const QString lang = m_engine->getLangCode(i);
+        if (!lang.isEmpty() && !engineLangs.contains(lang)) {
+            engineLangs.append(lang);
+        }
+    }
+
+    const QHash<QString, int> counts =
+        TranslationStatusTable::countCompletedPerLang(pageRepo, categoryTable, engineLangs);
+
+    QStringList result;
+    for (const QString &lang : std::as_const(engineLangs)) {
+        if (counts.value(lang, 0) >= 10) {
+            result.append(lang);
+        }
+    }
     return result;
 }
 
@@ -714,24 +754,88 @@ void PaneDomains::_restartLocalDrogon(const QString &deployPath,
     QProcess::startDetached(binaryPath, args, deployPath);
 }
 
-bool PaneDomains::_runScp(const QStringList &args, QString &errorOutput) const
+bool PaneDomains::_runSshCommand(const HostInfo &host, const QString &command,
+                                  QString &errorOutput) const
 {
+    const QString remote = host.username + QStringLiteral("@") + host.url;
     QProcess process;
-    process.start(QStringLiteral("sshpass"), args);
-    if (!process.waitForFinished(60000)) {
-        if (process.error() == QProcess::FailedToStart) {
-            errorOutput = tr("sshpass is not installed. Install it with: sudo apt install sshpass");
-        } else {
-            errorOutput = tr("SCP process timed out.");
-        }
-        return false;
+
+    if (host.password.isEmpty()) {
+        process.start(QStringLiteral("ssh"), {
+            QStringLiteral("-p"), host.port,
+            QStringLiteral("-o"), QStringLiteral("StrictHostKeyChecking=no"),
+            remote,
+            command
+        });
+    } else {
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        env.insert(QStringLiteral("SSHPASS"), host.password);
+        process.setProcessEnvironment(env);
+        process.start(QStringLiteral("sshpass"), {
+            QStringLiteral("-e"),
+            QStringLiteral("ssh"),
+            QStringLiteral("-p"), host.port,
+            QStringLiteral("-o"), QStringLiteral("StrictHostKeyChecking=no"),
+            remote,
+            command
+        });
     }
-    if (process.error() == QProcess::FailedToStart) {
-        errorOutput = tr("sshpass is not installed. Install it with: sudo apt install sshpass");
+
+    if (!process.waitForFinished(30000)) {
+        errorOutput = tr("SSH command timed out.");
         return false;
     }
     if (process.exitCode() != 0) {
         errorOutput = QString::fromUtf8(process.readAllStandardError());
+        return false;
+    }
+    return true;
+}
+
+bool PaneDomains::_runRsync(const HostInfo &host, const QString &src, const QString &dst,
+                             QString &errorOutput) const
+{
+    QProcess process;
+    process.setProcessChannelMode(QProcess::MergedChannels);
+
+    QString authMode;
+    if (host.password.isEmpty()) {
+        authMode = QStringLiteral("SSH key (no password in host table)");
+        const QString sshCmd = QStringLiteral("ssh -p ") + host.port
+                               + QStringLiteral(" -o StrictHostKeyChecking=no");
+        process.start(QStringLiteral("rsync"), {
+            QStringLiteral("-az"),
+            QStringLiteral("--checksum"),
+            QStringLiteral("--mkpath"),
+            QStringLiteral("-e"), sshCmd,
+            src,
+            dst
+        });
+    } else {
+        authMode = QStringLiteral("password via sshpass (port %1, password length %2)")
+                       .arg(host.port).arg(host.password.length());
+        const QString rsh = QStringLiteral("sshpass -e ssh -p ") + host.port
+                            + QStringLiteral(" -o StrictHostKeyChecking=no");
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        env.insert(QStringLiteral("SSHPASS"), host.password);
+        process.setProcessEnvironment(env);
+        process.start(QStringLiteral("rsync"), {
+            QStringLiteral("-az"),
+            QStringLiteral("--checksum"),
+            QStringLiteral("--mkpath"),
+            QStringLiteral("--rsh"), rsh,
+            src,
+            dst
+        });
+    }
+
+    if (!process.waitForFinished(120000)) {
+        errorOutput = tr("rsync timed out. Auth: %1").arg(authMode);
+        return false;
+    }
+    if (process.exitCode() != 0) {
+        errorOutput = tr("Auth: %1\n%2").arg(authMode,
+                         QString::fromUtf8(process.readAll()));
         return false;
     }
     return true;

@@ -221,7 +221,8 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                                const QDir     &outputDir,
                                const QString  &domain,
                                AbstractEngine &engine,
-                               int             websiteIndex)
+                               int             websiteIndex,
+                               const QString  &sitemapBaseUrl)
 {
     static std::atomic<int> s_counter{0};
     const QString connName = QStringLiteral("page_generator_all_")
@@ -411,8 +412,10 @@ int PageGenerator::generateAll(const QDir     &workingDir,
     }
 
     if (!domain.isEmpty()) {
-        SitemapOrchestrator::generate(
-            connName, domain, QStringLiteral("https://") + domain);
+        const QString &effectiveSitemapBase = sitemapBaseUrl.isEmpty()
+            ? QStringLiteral("https://") + domain
+            : sitemapBaseUrl;
+        SitemapOrchestrator::generate(connName, domain, effectiveSitemapBase);
     }
 
     {
