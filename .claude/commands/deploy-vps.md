@@ -272,12 +272,18 @@ Remind the user to submit `https://{domain}/sitemap.xml` to Google Search Consol
 
 ## Redeploying after a republish (content update only)
 
+> ⚠️ `systemctl restart` alone is not always enough — the old Drogon process may still hold
+> the port open. Always kill the old PID first, then restart via systemctl.
+
 ```bash
 # 1. Rsync each updated language dir individually to avoid disrupting other languages
 ! rsync -avz --progress {workingDir}/deploy/{lang}/ root@{IP}:/opt/websiteempire/deploy/{lang}/
 
-# 2. Restart the affected service(s)
-! ssh root@{IP} "systemctl restart website-{lang}.service"
+# 2. Kill the old process and restart cleanly
+! ssh root@{IP} "systemctl stop website-{lang}.service && pkill -f 'StaticWebsiteServe.*--lang {lang}' 2>/dev/null; systemctl start website-{lang}.service"
+
+# 3. Wait 2 seconds, then verify the new content is live
+! ssh root@{IP} "sleep 2 && curl -s --compressed http://localhost:{port}/index.html | head -3"
 ```
 
 Do NOT touch the nginx config during a content redeploy.
