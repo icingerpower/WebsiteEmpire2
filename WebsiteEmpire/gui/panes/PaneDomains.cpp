@@ -259,8 +259,16 @@ void PaneDomains::upload()
             continue;
         }
 
-        // Restart the systemd service for the language just deployed
+        // Restart the systemd service for the language just deployed.
+        // Kill any manually-started StaticWebsiteServe first — a rogue process
+        // holding the port causes systemctl restart to silently fail, leaving
+        // the old binary (and its stale content.db) serving requests.
         if (!lang.isEmpty()) {
+            const QString killCmd = QStringLiteral("pkill -f 'StaticWebsiteServe.*--lang ")
+                                    + lang + QStringLiteral("' 2>/dev/null; true");
+            QString killError;
+            _runSshCommand(host, killCmd, killError); // best-effort; ignore failure
+
             const QString restartCmd = QStringLiteral("systemctl restart website-") + lang;
             QString restartError;
             if (!_runSshCommand(host, restartCmd, restartError)) {
