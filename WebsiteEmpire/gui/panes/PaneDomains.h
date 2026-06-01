@@ -2,6 +2,7 @@
 #define PANEDOMAINS_H
 
 #include <QDir>
+#include <QStringList>
 #include <QWidget>
 
 class AbstractEngine;
@@ -51,12 +52,13 @@ public slots:
 
 private:
     struct HostInfo {
-        QString name;
-        QString url;
-        QString port;
-        QString username;
-        QString password;
-        QString hostFolder;
+        QString     name;
+        QString     url;
+        QString     port;
+        QString     username;
+        QString     password;
+        QString     hostFolder;
+        QStringList langCodes; // language codes from engine rows mapped to this host
         /// Returns a QSettings-safe key (no raw slashes -- uses | as separator).
         QString uniqueKey() const;
     };
@@ -94,6 +96,13 @@ private:
     bool _deployNeeded() const;
 
     /**
+     * Returns the language codes from the engine table that have at least 10
+     * fully-translated pages. Used by both deployLocally() and upload() so both
+     * apply the same qualification gate.
+     */
+    QStringList _qualifyingLangCodes() const;
+
+    /**
      * Kills any StaticWebsiteServe process whose working directory is
      * deployPath, then starts a fresh instance of binaryPath from deployPath
      * listening on port.
@@ -104,10 +113,21 @@ private:
                               const QString &imagesDbPath = {});
 
     /**
-     * Runs sshpass with the given arguments. Returns true on success.
-     * On failure, errorOutput is populated with the error message.
+     * Runs rsync via sshpass to transfer a single file. src and dst may each be
+     * a local path or a "user@host:path" remote path — pass them in whichever
+     * order matches the direction (upload vs download).
+     * Returns true on success; on failure errorOutput is populated.
      */
-    bool _runScp(const QStringList &args, QString &errorOutput) const;
+    bool _runRsync(const HostInfo &host, const QString &src, const QString &dst,
+                   QString &errorOutput) const;
+
+    /**
+     * Runs a single command on the remote host over SSH.
+     * Uses sshpass when host.password is set, direct SSH otherwise.
+     * Returns true on success; on failure errorOutput is populated.
+     */
+    bool _runSshCommand(const HostInfo &host, const QString &command,
+                        QString &errorOutput) const;
 
     Ui::PaneDomains  *ui;
     QDir              m_workingDir;
