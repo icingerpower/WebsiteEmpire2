@@ -88,6 +88,16 @@
       </widget>
      </item>
      <item>
+      <widget class="QPushButton" name="buttonUploadFull">
+       <property name="text">
+        <string>Upload Full</string>
+       </property>
+       <property name="toolTip">
+        <string>Upload StaticWebsiteServe binary + images.db + content.db and restart all services</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QPushButton" name="buttonDownload">
        <property name="text">
         <string>Download</string>

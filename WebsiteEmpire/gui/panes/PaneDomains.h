@@ -44,6 +44,7 @@ public slots:
     void applyPerLang();
     void editHosts();
     void upload();
+    void uploadFull();
     void download();
     void viewCommands();
 

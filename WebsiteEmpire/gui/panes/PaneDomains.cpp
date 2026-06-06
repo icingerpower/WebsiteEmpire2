@@ -219,6 +219,44 @@ void PaneDomains::upload()
     bool anyError = false;
     QStringList skippedLangs;
 
+    // ── Phase 1: upload images.db BEFORE any service restarts ────────────────
+    // images.db is shared across all languages on a host and lives ONE level
+    // above each per-lang hostFolder (e.g. deploy/images.db, not deploy/en/images.db).
+    // Uploading it after the restart (old code) meant the server restarted with
+    // the stale file; uploading to hostFolder (old code) put it in the wrong place.
+    // We deduplicate so multi-language hosts only upload once.
+    if (hasImagesDb) {
+        QSet<QString> uploadedImagesTo;
+        for (const auto &host : std::as_const(hosts)) {
+            const QString lang = host.langCodes.isEmpty() ? QString() : host.langCodes.first();
+            if (!lang.isEmpty() && !qualifying.contains(lang)) {
+                continue;
+            }
+            // Parent of the per-lang folder is the shared deploy root on the server.
+            const QString remoteParent = QFileInfo(host.hostFolder).path();
+            const QString dedupeKey   = host.url + QLatin1Char(':') + remoteParent;
+            if (uploadedImagesTo.contains(dedupeKey)) {
+                continue;
+            }
+            uploadedImagesTo.insert(dedupeKey);
+
+            const QString remoteImages = host.username + QStringLiteral("@") + host.url
+                                         + QStringLiteral(":") + remoteParent
+                                         + QStringLiteral("/images.db");
+            QString imgError;
+            if (!_runRsync(host, imagesDbLocal, remoteImages, imgError)) {
+                QMessageBox::critical(this, tr("Upload"),
+                                      tr("Failed to upload images.db to %1:\n%2")
+                                          .arg(host.name, imgError));
+                anyError = true;
+            }
+        }
+        if (anyError) {
+            return;
+        }
+    }
+
+    // ── Phase 2: upload content.db and restart each language service ──────────
     for (const auto &host : std::as_const(hosts)) {
         // Apply the same qualification gate as deployLocally(): skip languages
         // that don't have enough translated pages or weren't locally generated.
@@ -277,21 +315,6 @@ void PaneDomains::upload()
                                          .arg(lang, host.name, lang, restartError));
             }
         }
-
-        // Upload images.db if present
-        if (hasImagesDb) {
-            const QString remoteImages = host.username + QStringLiteral("@") + host.url
-                                         + QStringLiteral(":") + host.hostFolder
-                                         + QStringLiteral("/images.db");
-            QString imgErrorOutput;
-            if (!_runRsync(host, imagesDbLocal, remoteImages, imgErrorOutput)) {
-                QMessageBox::critical(this, tr("Upload"),
-                                      tr("Failed to upload images.db to %1:\n%2")
-                                          .arg(host.name, imgErrorOutput));
-                anyError = true;
-                continue;
-            }
-        }
     }
 
     if (!anyError) {
@@ -302,6 +325,165 @@ void PaneDomains::upload()
                          .arg(skippedLangs.join(QStringLiteral(", ")));
         }
         QMessageBox::information(this, tr("Upload"), msg);
+    }
+}
+
+void PaneDomains::uploadFull()
+{
+    if (!m_engine || m_engine->rowCount() == 0) {
+        QMessageBox::warning(this, tr("Upload Full"),
+                             tr("No engine data available."));
+        return;
+    }
+
+    const QList<HostInfo> hosts = _resolveHosts();
+    if (hosts.isEmpty()) {
+        QMessageBox::warning(this, tr("Upload Full"),
+                             tr("No host configured in the engine table."));
+        return;
+    }
+
+    // Locate the local StaticWebsiteServe binary (Release build preferred).
+    const QString appDir = QCoreApplication::applicationDirPath();
+    QString localBinary;
+    const QStringList candidates = {
+        appDir + QStringLiteral("/StaticWebsiteServe"),
+        appDir + QStringLiteral("/../StaticWebsiteServe/StaticWebsiteServe"),
+        appDir + QStringLiteral("/../../build/StaticWebsiteServe/StaticWebsiteServe"),
+        appDir + QStringLiteral("/../../StaticWebsiteServe/StaticWebsiteServe"),
+    };
+    for (const QString &c : std::as_const(candidates)) {
+        if (QFile::exists(c)) {
+            localBinary = QDir::cleanPath(c);
+            break;
+        }
+    }
+    if (localBinary.isEmpty()) {
+        QMessageBox::critical(this, tr("Upload Full"),
+                              tr("Could not find the StaticWebsiteServe binary.\n\n"
+                                 "Build it first (Release configuration), then try again."));
+        return;
+    }
+
+    const bool anyHostNeedsPassword = std::any_of(hosts.begin(), hosts.end(),
+        [](const HostInfo &h) { return !h.password.isEmpty(); });
+    if (anyHostNeedsPassword && QStandardPaths::findExecutable(QStringLiteral("sshpass")).isEmpty()) {
+        QMessageBox::warning(this, tr("Upload Full"),
+                             tr("sshpass is not installed.\n\n"
+                                "Install it with:\n"
+                                "  sudo apt install sshpass"));
+        return;
+    }
+
+    // ── Phase 1: upload binary to each unique host ────────────────────────────
+    // Binary lives at the grandparent of hostFolder:
+    //   hostFolder   = /opt/websiteempire/deploy/en
+    //   parent       = /opt/websiteempire/deploy      (images.db)
+    //   grandparent  = /opt/websiteempire              (StaticWebsiteServe)
+    QSet<QString> binaryUploadedTo;
+    for (const auto &host : std::as_const(hosts)) {
+        const QString remoteGrandparent =
+            QFileInfo(QFileInfo(host.hostFolder).path()).path();
+        const QString dedupeKey = host.url + QLatin1Char(':') + remoteGrandparent;
+        if (binaryUploadedTo.contains(dedupeKey)) {
+            continue;
+        }
+        binaryUploadedTo.insert(dedupeKey);
+
+        const QString remoteBinary = host.username + QStringLiteral("@") + host.url
+                                     + QStringLiteral(":") + remoteGrandparent
+                                     + QStringLiteral("/StaticWebsiteServe");
+        QString binaryError;
+        if (!_runRsync(host, localBinary, remoteBinary, binaryError)) {
+            QMessageBox::critical(this, tr("Upload Full"),
+                                  tr("Failed to upload StaticWebsiteServe to %1:\n%2")
+                                      .arg(host.name, binaryError));
+            return;
+        }
+
+        // Make executable and stop all running instances — they must be down
+        // before the new binary starts so the ports are free.
+        const QString prepCmd =
+            QStringLiteral("chmod +x ") + remoteGrandparent
+            + QStringLiteral("/StaticWebsiteServe"
+                             " && pkill -f StaticWebsiteServe 2>/dev/null; true");
+        QString prepError;
+        _runSshCommand(host, prepCmd, prepError); // best-effort
+    }
+
+    // ── Phase 2: upload images.db (before any restarts) ──────────────────────
+    const QString imagesDbLocal = m_workingDir.filePath(QStringLiteral("images.db"));
+    if (QFile::exists(imagesDbLocal)) {
+        QSet<QString> imagesUploadedTo;
+        for (const auto &host : std::as_const(hosts)) {
+            const QString remoteParent = QFileInfo(host.hostFolder).path();
+            const QString dedupeKey   = host.url + QLatin1Char(':') + remoteParent;
+            if (imagesUploadedTo.contains(dedupeKey)) {
+                continue;
+            }
+            imagesUploadedTo.insert(dedupeKey);
+
+            const QString remoteImages = host.username + QStringLiteral("@") + host.url
+                                         + QStringLiteral(":") + remoteParent
+                                         + QStringLiteral("/images.db");
+            QString imgError;
+            if (!_runRsync(host, imagesDbLocal, remoteImages, imgError)) {
+                QMessageBox::critical(this, tr("Upload Full"),
+                                      tr("Failed to upload images.db to %1:\n%2")
+                                          .arg(host.name, imgError));
+                return;
+            }
+        }
+    }
+
+    // ── Phase 3: upload content.db and restart each language service ──────────
+    const QString deployPath     = _resolveDeployPath();
+    const QStringList qualifying = _qualifyingLangCodes();
+    bool anyError = false;
+
+    for (const auto &host : std::as_const(hosts)) {
+        const QString lang = host.langCodes.isEmpty() ? QString() : host.langCodes.first();
+        if (!lang.isEmpty() && !qualifying.contains(lang)) {
+            continue;
+        }
+
+        QString contentDbLocal;
+        if (!lang.isEmpty()) {
+            const QString perLang = QDir(deployPath).filePath(lang + QStringLiteral("/content.db"));
+            if (QFile::exists(perLang)) {
+                contentDbLocal = perLang;
+            }
+        }
+        if (contentDbLocal.isEmpty()) {
+            continue;
+        }
+
+        const QString remoteContent = host.username + QStringLiteral("@") + host.url
+                                      + QStringLiteral(":") + host.hostFolder
+                                      + QStringLiteral("/content.db");
+        QString contentError;
+        if (!_runRsync(host, contentDbLocal, remoteContent, contentError)) {
+            QMessageBox::critical(this, tr("Upload Full"),
+                                  tr("Failed to upload content.db to %1:\n%2")
+                                      .arg(host.name, contentError));
+            anyError = true;
+            continue;
+        }
+
+        if (!lang.isEmpty()) {
+            const QString restartCmd = QStringLiteral("systemctl restart website-") + lang;
+            QString restartError;
+            if (!_runSshCommand(host, restartCmd, restartError)) {
+                QMessageBox::warning(this, tr("Upload Full"),
+                                     tr("Uploaded content to %1 but failed to restart website-%2:\n%3")
+                                         .arg(host.name, lang, restartError));
+            }
+        }
+    }
+
+    if (!anyError) {
+        QMessageBox::information(this, tr("Upload Full"),
+                                 tr("Full upload completed: binary, images.db, and all content deployed."));
     }
 }
 
@@ -470,6 +652,7 @@ void PaneDomains::deployLocally()
         int totalPages = 0;
 
         QStringList urls;
+        QStringList langSummaries;
         for (const LangTarget &t : std::as_const(targets)) {
             const QString destDir = QDir(deployBase).filePath(t.lang);
 
@@ -487,12 +670,14 @@ void PaneDomains::deployLocally()
             const QString primaryLang = m_engine->getLangCode(0);
             const QString sitemapBase = QStringLiteral("https://") + t.domain
                 + (t.lang == primaryLang ? QString{} : QStringLiteral("/") + t.lang);
-            totalPages += generator.generateAll(m_workingDir, ddir, t.domain, *m_engine, t.engineIndex, sitemapBase);
+            const int langPages = generator.generateAll(m_workingDir, ddir, t.domain, *m_engine, t.engineIndex, sitemapBase);
+            totalPages += langPages;
 
             _restartLocalDrogon(destDir, binaryPath, t.port, sharedImages);
 
             urls.append(QStringLiteral("http://localhost:%1/index.html  [%2]")
                            .arg(t.port).arg(t.lang));
+            langSummaries.append(QStringLiteral("[%1] %2 page(s)").arg(t.lang).arg(langPages));
         }
 
         hubDirtySet.clear();
@@ -502,8 +687,10 @@ void PaneDomains::deployLocally()
         const QString urlList  = urls.join(QStringLiteral("\n"));
         const QString firstUrl = QStringLiteral("http://localhost:%1/index.html")
                                      .arg(targets.first().port);
-        const QString msg = tr("Generated %1 page(s).\n\nServing:\n%2")
-                               .arg(totalPages).arg(urlList);
+        const QString msg = tr("Generated %1 page(s):\n%2\n\nServing:\n%3")
+                               .arg(totalPages)
+                               .arg(langSummaries.join(QStringLiteral("\n")))
+                               .arg(urlList);
 
         QMessageBox msgBox(this);
         msgBox.setWindowTitle(tr("Generate & Publish"));
@@ -592,6 +779,7 @@ void PaneDomains::_connectSlots()
     connect(ui->buttonApplyPerLang, &QPushButton::clicked, this, &PaneDomains::applyPerLang);
     connect(ui->buttonEdithosts,    &QPushButton::clicked, this, &PaneDomains::editHosts);
     connect(ui->buttonUpload,       &QPushButton::clicked, this, &PaneDomains::upload);
+    connect(ui->buttonUploadFull,   &QPushButton::clicked, this, &PaneDomains::uploadFull);
     connect(ui->buttonDownload,     &QPushButton::clicked, this, &PaneDomains::download);
     connect(ui->buttonViewCommands, &QPushButton::clicked, this, &PaneDomains::viewCommands);
     connect(ui->buttonBrowseLocally, &QPushButton::clicked, this, &PaneDomains::browseLocalDeployFolder);
