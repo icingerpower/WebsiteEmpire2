@@ -35,6 +35,7 @@ public:
     static const QString OPTION_STRATEGY;
     static const QString OPTION_PROMPT;
     static const QString OPTION_LIMIT;
+    static const QString OPTION_PAGES; ///< comma-separated page IDs to restrict the run
 
     QString getOptionName() const override;
     bool    isFlag()        const override; // true — no value after --update
