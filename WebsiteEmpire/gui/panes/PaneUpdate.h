@@ -2,6 +2,7 @@
 #define PANEUPDATE_H
 
 #include <QDir>
+#include <QList>
 #include <QModelIndex>
 #include <QWidget>
 
@@ -45,6 +46,7 @@ public slots:
     void updateAll();
     void updateOne();
     void updateN();
+    void updateSelection();
     void stop();
     void viewUpdateCommand();
     void viewUpdated();
@@ -57,8 +59,11 @@ private slots:
 private:
     void _connectSlots();
 
-    /** Launches an update process; limit < 0 means no limit (update all). */
-    void _runUpdate(int limit);
+    /**
+     * Launches an update process; limit < 0 means no limit.
+     * When pageIds is non-empty the run is restricted to those specific pages.
+     */
+    void _runUpdate(int limit, const QList<int> &pageIds = {});
 
     /**
      * Persists the current textEditPrompt content to the selected prompt node.

@@ -57,6 +57,9 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickArticlesToReset.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickArticlesToReset.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickArticlesToReset.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickArticlesToUpdate.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickArticlesToUpdate.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPickArticlesToUpdate.ui
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogViewUpdatedArticles.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogViewUpdatedArticles.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogViewUpdatedArticles.ui

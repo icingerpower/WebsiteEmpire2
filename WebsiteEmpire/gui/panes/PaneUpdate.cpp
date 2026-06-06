@@ -5,6 +5,7 @@
 #include "../dialogs/DialogAddUpdateStrategy.h"
 #include "../dialogs/DialogAddUpdatePrompt.h"
 #include "../dialogs/DialogPickArticlesToReset.h"
+#include "../dialogs/DialogPickArticlesToUpdate.h"
 #include "../dialogs/DialogViewUpdatedArticles.h"
 #include "launcher/LauncherUpdate.h"
 #include "launcher/AbstractLauncher.h"
@@ -171,6 +172,40 @@ void PaneUpdate::updateN()
     _runUpdate(ui->spinBoxUpdateCount->value());
 }
 
+void PaneUpdate::updateSelection()
+{
+    if (!m_isSetup) {
+        return;
+    }
+    const QString promptId = _currentPromptId();
+    if (promptId.isEmpty()) {
+        return;
+    }
+    const QModelIndex current = ui->treeViewStrategies->currentIndex();
+    const QString typeId = m_strategies->pageTypeIdFor(current);
+
+    PageDb           pageDb(m_workingDir);
+    PageRepositoryDb pageRepo(pageDb);
+
+    const QList<PageRecord> pages = pageRepo.findPagesForUpdate(typeId, promptId, -1, {});
+    if (pages.isEmpty()) {
+        QMessageBox::information(this,
+            tr("Update selection"),
+            tr("No pages found for this prompt."));
+        return;
+    }
+
+    DialogPickArticlesToUpdate dialog(pages, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    const QList<int> selected = dialog.selectedPageIds();
+    if (selected.isEmpty()) {
+        return;
+    }
+    _runUpdate(-1, selected);
+}
+
 void PaneUpdate::stop()
 {
     if (m_activeProcess) {
@@ -178,7 +213,7 @@ void PaneUpdate::stop()
     }
 }
 
-void PaneUpdate::_runUpdate(int limit)
+void PaneUpdate::_runUpdate(int limit, const QList<int> &pageIds)
 {
     if (!m_isSetup) {
         return;
@@ -205,6 +240,15 @@ void PaneUpdate::_runUpdate(int limit)
     if (!promptId.isEmpty()) {
         args << QStringLiteral("--") + LauncherUpdate::OPTION_PROMPT << promptId;
     }
+    if (!pageIds.isEmpty()) {
+        QStringList idStrs;
+        idStrs.reserve(pageIds.size());
+        for (int id : std::as_const(pageIds)) {
+            idStrs << QString::number(id);
+        }
+        args << QStringLiteral("--") + LauncherUpdate::OPTION_PAGES
+             << idStrs.join(QLatin1Char(','));
+    }
 
     ui->textEditOutput->clear();
     m_outputBuffer.clear();
@@ -215,6 +259,7 @@ void PaneUpdate::_runUpdate(int limit)
     ui->buttonUpdateAll->setEnabled(false);
     ui->buttonUpdateOne->setEnabled(false);
     ui->buttonUpdateN->setEnabled(false);
+    ui->buttonUpdateSelection->setEnabled(false);
     ui->buttonStop->setEnabled(true);
 
     auto *process = new QProcess(this);
@@ -279,6 +324,7 @@ void PaneUpdate::_runUpdate(int limit)
                 ui->buttonUpdateAll->setEnabled(true);
                 ui->buttonUpdateOne->setEnabled(true);
                 ui->buttonUpdateN->setEnabled(true);
+                ui->buttonUpdateSelection->setEnabled(!_currentPromptId().isEmpty());
                 ui->buttonStop->setEnabled(false);
                 const QString statusMsg = (exitStatus == QProcess::CrashExit)
                     ? tr("\nProcess CRASHED (signal %1).").arg(exitCode)
@@ -393,6 +439,7 @@ void PaneUpdate::_onSelectionChanged(const QModelIndex &current,
         ui->buttonUpdateAll->setEnabled(false);
         ui->buttonUpdateOne->setEnabled(false);
         ui->buttonUpdateN->setEnabled(false);
+        ui->buttonUpdateSelection->setEnabled(false);
         ui->buttonCommandUpdate->setEnabled(false);
         ui->buttonViewUpdated->setEnabled(false);
         ui->buttonResetAttempt->setEnabled(false);
@@ -410,7 +457,8 @@ void PaneUpdate::_onSelectionChanged(const QModelIndex &current,
     ui->buttonUpdateOne->setEnabled(true);
     ui->buttonUpdateN->setEnabled(true);
     ui->buttonCommandUpdate->setEnabled(true);
-    // These two only make sense when a specific prompt is selected.
+    // These three only make sense when a specific prompt is selected.
+    ui->buttonUpdateSelection->setEnabled(!isStrat);
     ui->buttonViewUpdated->setEnabled(!isStrat);
     ui->buttonResetAttempt->setEnabled(!isStrat);
 
@@ -441,6 +489,8 @@ void PaneUpdate::_connectSlots()
             this, &PaneUpdate::updateOne);
     connect(ui->buttonUpdateN, &QPushButton::clicked,
             this, &PaneUpdate::updateN);
+    connect(ui->buttonUpdateSelection, &QPushButton::clicked,
+            this, &PaneUpdate::updateSelection);
     connect(ui->buttonStop, &QPushButton::clicked,
             this, &PaneUpdate::stop);
     connect(ui->buttonCommandUpdate, &QPushButton::clicked,

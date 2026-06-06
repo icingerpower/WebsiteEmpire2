@@ -181,6 +181,19 @@
           </widget>
          </item>
          <item>
+          <widget class="QPushButton" name="buttonUpdateSelection">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="toolTip">
+            <string>Pick specific articles to update with the selected prompt</string>
+           </property>
+           <property name="text">
+            <string>Update selection</string>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QPushButton" name="buttonStop">
            <property name="enabled">
             <bool>false</bool>
