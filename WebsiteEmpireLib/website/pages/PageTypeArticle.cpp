@@ -139,8 +139,21 @@ QString PageTypeArticle::buildHeadMetaTags(const QString &baseUrl,
     }
 
     // ---- Per-platform social <meta> tags from PageBlocSocial -----------------
+    // Only one Twitter card type per page: large-image when a landscape image
+    // exists, summary otherwise. LinkedIn and Pinterest share og:title /
+    // og:description with OpenGraph (they all read the same property), so only
+    // OpenGraph emits those tags — LinkedIn and Pinterest contribute their
+    // platform-specific image aspect ratios only.
+    const bool hasLandscapeImage = !m_socialBloc.imgOg().isEmpty();
     for (const AbstractSocialMedia *platform : AbstractSocialMedia::all()) {
         const QString &id = platform->getId();
+
+        if (id == QLatin1String("twitter") && !hasLandscapeImage) {
+            continue;
+        }
+        if (id == QLatin1String("twitter_summary") && hasLandscapeImage) {
+            continue;
+        }
 
         QString platformTitle, platformDesc;
         if (id == QLatin1String("opengraph")) {
@@ -149,13 +162,9 @@ QString PageTypeArticle::buildHeadMetaTags(const QString &baseUrl,
         } else if (id == QLatin1String("twitter") || id == QLatin1String("twitter_summary")) {
             platformTitle = m_socialTextBloc.twitterTitle();
             platformDesc  = m_socialTextBloc.twitterDesc();
-        } else if (id == QLatin1String("pinterest")) {
-            platformTitle = m_socialTextBloc.pinterestTitle();
-            platformDesc  = m_socialTextBloc.pinterestDesc();
-        } else if (id == QLatin1String("linkedin")) {
-            platformTitle = m_socialTextBloc.linkedinTitle();
-            platformDesc  = m_socialTextBloc.linkedinDesc();
         }
+        // linkedin / pinterest: image only — og:title/og:description are
+        // already emitted by opengraph above.
 
         QString webpFilename;
         switch (platform->requiredImageSize()) {

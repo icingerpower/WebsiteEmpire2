@@ -30,8 +30,16 @@ QString PageTypeCategory::buildHeadMetaTags(const QString &baseUrl, const QStrin
 {
     QString result;
 
+    const bool hasLandscapeImage = !m_socialBloc.imgOg().isEmpty();
     for (const AbstractSocialMedia *platform : AbstractSocialMedia::all()) {
         const QString &id = platform->getId();
+
+        if (id == QLatin1String("twitter") && !hasLandscapeImage) {
+            continue;
+        }
+        if (id == QLatin1String("twitter_summary") && hasLandscapeImage) {
+            continue;
+        }
 
         QString title, desc;
         if (id == QLatin1String("opengraph")) {
@@ -40,13 +48,9 @@ QString PageTypeCategory::buildHeadMetaTags(const QString &baseUrl, const QStrin
         } else if (id == QLatin1String("twitter") || id == QLatin1String("twitter_summary")) {
             title = m_socialTextBloc.twitterTitle();
             desc  = m_socialTextBloc.twitterDesc();
-        } else if (id == QLatin1String("pinterest")) {
-            title = m_socialTextBloc.pinterestTitle();
-            desc  = m_socialTextBloc.pinterestDesc();
-        } else if (id == QLatin1String("linkedin")) {
-            title = m_socialTextBloc.linkedinTitle();
-            desc  = m_socialTextBloc.linkedinDesc();
         }
+        // linkedin / pinterest: image only — og:title/og:description are
+        // already emitted by opengraph above.
 
         QString webpFilename;
         switch (platform->requiredImageSize()) {

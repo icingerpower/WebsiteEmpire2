@@ -1,5 +1,6 @@
 #include "PageGenerator.h"
 
+#include "ExceptionWithTitleText.h"
 #include "website/AbstractEngine.h"
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/IPageRepository.h"
@@ -137,7 +138,15 @@ bool PageGenerator::_writePage(AbstractPageType &type,
 
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    type.addCode(QStringView{}, engine, websiteIndex, html, css, js, cssDoneIds, jsDoneIds);
+    try {
+        type.addCode(QStringView{}, engine, websiteIndex, html, css, js, cssDoneIds, jsDoneIds);
+    } catch (ExceptionWithTitleText &ex) {
+        const QString lang = engine.getLangCode(websiteIndex);
+        ExceptionWithTitleText enriched(
+            ex.errorTitle(),
+            record.permalink + QStringLiteral(" [") + lang + QStringLiteral("]\n\n") + ex.errorText());
+        enriched.raise();
+    }
 
     const QByteArray &htmlGz = gzipCompress(html.toUtf8());
     const QString    &etag   = computeEtag(htmlGz);
@@ -287,12 +296,27 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                 }
             }
 
-            if (r.langCodesToTranslate.isEmpty()) {
-                availablePages[currentLang].insert(r.permalink);
-            } else {
-                availablePages[r.lang].insert(r.permalink);
-                for (const QString &lang : std::as_const(r.langCodesToTranslate)) {
-                    availablePages[lang].insert(r.permalink);
+            availablePages[r.lang].insert(r.permalink);
+            if (!r.langCodesToTranslate.isEmpty()) {
+                if (r.typeId == QStringLiteral("category_hub")) {
+                    // Hub pages render in any language via addCode — no inline data needed.
+                    for (const QString &lang : std::as_const(r.langCodesToTranslate)) {
+                        availablePages[lang].insert(r.permalink);
+                    }
+                } else {
+                    // Non-hub pages: only mark a target language available when inline
+                    // translation data actually exists. Pages assessed for translation but
+                    // not yet translated are excluded so hreflang never points to missing pages.
+                    const QHash<QString, QString> &data = m_pageRepo.loadData(r.id);
+                    for (const QString &lang : std::as_const(r.langCodesToTranslate)) {
+                        const QString marker = QStringLiteral("_tr:") + lang + QLatin1Char(':');
+                        for (auto it = data.constBegin(); it != data.constEnd(); ++it) {
+                            if (it.key().contains(marker)) {
+                                availablePages[lang].insert(r.permalink);
+                                break;
+                            }
+                        }
+                    }
                 }
             }
 
