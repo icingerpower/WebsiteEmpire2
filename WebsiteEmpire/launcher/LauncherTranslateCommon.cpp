@@ -1,5 +1,6 @@
 #include "LauncherTranslateCommon.h"
 
+#include "aicli/AbstractCli.h"
 #include "website/AbstractEngine.h"
 #include "website/HostTable.h"
 #include "website/commonblocs/AbstractCommonBloc.h"
@@ -83,6 +84,28 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
                                    ? args.at(langIdx + 1)
                                    : QString();
 
+    // --cli <name>: select AI CLI; falls back to the first registered CLI.
+    AbstractCli *cli = nullptr;
+    const int cliIdx = args.indexOf(QStringLiteral("--") + AbstractLauncher::OPTION_CLI);
+    if (cliIdx >= 0 && cliIdx + 1 < args.size()) {
+        const QString cliName = args.at(cliIdx + 1);
+        for (AbstractCli *c : AbstractCli::ALL_CLIS()) {
+            if (c->getName() == cliName) {
+                cli = c;
+                break;
+            }
+        }
+    }
+    if (!cli) {
+        cli = AbstractCli::ALL_CLIS().isEmpty() ? nullptr : AbstractCli::ALL_CLIS().first();
+    }
+    if (!cli) {
+        qDebug() << "LauncherTranslateCommon: no AI CLI available.";
+        holder->deleteLater();
+        QCoreApplication::quit();
+        return;
+    }
+
     QStringList targetLangs;
     if (!languageFilter.isEmpty()) {
         if (languageFilter != sourceLang) {
@@ -122,8 +145,8 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
     qDebug() << "[TranslateCommon] Bloc jobs:" << blocJobs.size()
              << " Category jobs:" << catJobs.size();
 
-    auto *blocTranslator = new CommonBlocTranslator(*theme, workingDir, holder);
-    auto *catTranslator  = new CategoryTranslator(*categoryTable, workingDir, holder);
+    auto *blocTranslator = new CommonBlocTranslator(*theme, workingDir, cli, holder);
+    auto *catTranslator  = new CategoryTranslator(*categoryTable, workingDir, cli, holder);
 
     QObject::connect(blocTranslator, &CommonBlocTranslator::logMessage, holder,
                      [](const QString &msg) {

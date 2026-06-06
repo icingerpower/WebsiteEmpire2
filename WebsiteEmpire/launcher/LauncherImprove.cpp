@@ -30,6 +30,8 @@
 #include <QCoro/QCoroProcess>
 #include <QCoro/QCoroTask>
 
+#include "aicli/AbstractCli.h"
+
 const QString LauncherImprove::OPTION_NAME           = QStringLiteral("improve");
 const QString LauncherImprove::OPTION_SESSIONS        = QStringLiteral("sessions");
 const QString LauncherImprove::OPTION_LIMIT           = QStringLiteral("limit");
@@ -69,10 +71,10 @@ struct ImproveJob {
 };
 
 // ---------------------------------------------------------------------------
-// claude CLI helper — mirrors ClaudeRunner in WebsiteAspire; no API key needed
+// AI CLI helper — mirrors ClaudeRunner in WebsiteAspire; no API key needed.
 // ---------------------------------------------------------------------------
 
-static QCoro::Task<QString> runClaudePrompt(QString prompt)
+static QCoro::Task<QString> runClaudePrompt(QString prompt, AbstractCli *cli)
 {
     QString result;
 
@@ -91,16 +93,16 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt)
     }
 
     QProcess process;
-    process.setProgram(QStringLiteral("claude"));
-    process.setArguments({QStringLiteral("-p"), QStringLiteral("-"),
-                          QStringLiteral("--dangerously-skip-permissions")});
+    process.setProgram(cli->getExecutable());
+    process.setArguments(cli->promptArgs());
     process.setStandardInputFile(promptPath);
 
     co_await qCoro(process).start();
     co_await qCoro(process).waitForFinished(-1);
 
     if (process.error() == QProcess::FailedToStart) {
-        result = QStringLiteral("__ERROR__: claude executable not found in PATH");
+        result = QStringLiteral("__ERROR__: %1 executable not found in PATH")
+                     .arg(cli->getExecutable());
     } else if (process.exitCode() != 0) {
         result = QStringLiteral("__ERROR__: ")
                  + QString::fromUtf8(process.readAllStandardError()).trimmed();
@@ -127,7 +129,8 @@ static QCoro::Task<bool> processImproveJob(const ImproveJob &job,
                                             AbstractEngine   *engine,
                                             CategoryTable    *categoryTable,
                                             QTextStream      *out,
-                                            int               sNum)
+                                            int               sNum,
+                                            AbstractCli      *cli)
 {
     QDir             workDir = WorkingDirectoryManager::instance()->workingDir();
     PageDb           pageDb(workDir);
@@ -138,7 +141,7 @@ static QCoro::Task<bool> processImproveJob(const ImproveJob &job,
     // ---- Call 1: write article content as free-form text ------------------
     const QString contentPrompt = queue.buildContentPrompt(
         job.page, *engine, 0, job.extraContext);
-    const QString articleText = co_await runClaudePrompt(contentPrompt);
+    const QString articleText = co_await runClaudePrompt(contentPrompt, cli);
 
     if (articleText.startsWith(QStringLiteral("__ERROR__"))) {
         *out << QStringLiteral("[S%1] FAIL (content): %2 — %3\n")
@@ -153,7 +156,7 @@ static QCoro::Task<bool> processImproveJob(const ImproveJob &job,
 
     // ---- Call 2: metadata JSON from the article ---------------------------
     const QString metadataPrompt = queue.buildMetadataPrompt(job.page, articleText);
-    const QString metadataJson = co_await runClaudePrompt(metadataPrompt);
+    const QString metadataJson = co_await runClaudePrompt(metadataPrompt, cli);
 
     const QString safeMetadata = metadataJson.startsWith(QStringLiteral("__ERROR__"))
                                  ? QString{} : metadataJson;
@@ -179,7 +182,8 @@ static QCoro::Task<void> runImproveSession(const QList<ImproveJob> *jobs,
                                             AbstractEngine          *engine,
                                             ImproveRunState         *state,
                                             int                      sessionIndex,
-                                            CategoryTable           *categoryTable)
+                                            CategoryTable           *categoryTable,
+                                            AbstractCli             *cli)
 {
     int sNum = sessionIndex + 1;
 
@@ -201,7 +205,7 @@ static QCoro::Task<void> runImproveSession(const QList<ImproveJob> *jobs,
         state->out->flush();
 
         bool ok = co_await processImproveJob(job, engine, categoryTable,
-                                              state->out, sNum);
+                                              state->out, sNum, cli);
         if (ok) {
             state->jobsCompleted.fetch_add(1);
             *(state->out) << QStringLiteral("[S%1] OK: %2\n")
@@ -234,9 +238,10 @@ void LauncherImprove::run(const QString & /*value*/)
 
     const QStringList args = QCoreApplication::arguments();
 
-    int numSessions    = 1;
-    int jobsLimit      = -1;
-    int maxImpressions = 0;
+    int         numSessions    = 1;
+    int         jobsLimit      = -1;
+    int         maxImpressions = 0;
+    AbstractCli *cli           = nullptr;
 
     for (int i = 0; i < args.size() - 1; ++i) {
         const QString &arg = args.at(i);
@@ -252,7 +257,27 @@ void LauncherImprove::run(const QString & /*value*/)
             bool ok = false;
             const int n = args.at(i + 1).toInt(&ok);
             if (ok && n >= 0) { maxImpressions = n; }
+        } else if (arg == QStringLiteral("--") + AbstractLauncher::OPTION_CLI) {
+            const QString name = args.at(i + 1);
+            for (AbstractCli *c : AbstractCli::ALL_CLIS()) {
+                if (c->getName() == name) {
+                    cli = c;
+                    break;
+                }
+            }
         }
+    }
+
+    if (!cli && !AbstractCli::ALL_CLIS().isEmpty()) {
+        cli = AbstractCli::ALL_CLIS().first();
+    }
+    if (!cli) {
+        *out << QStringLiteral("ERROR: no AI CLI registered.\n");
+        out->flush();
+        QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                  &QCoreApplication::quit,
+                                  Qt::QueuedConnection);
+        return;
     }
 
     // ---- Resolve engine --------------------------------------------------------
@@ -449,7 +474,7 @@ void LauncherImprove::run(const QString & /*value*/)
     state->activeCount = numSessions;
 
     for (int s = 0; s < numSessions; ++s) {
-        runImproveSession(jobs, cursor, engine, state, s, categoryTable);
+        runImproveSession(jobs, cursor, engine, state, s, categoryTable, cli);
     }
 
     out->flush();

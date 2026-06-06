@@ -1,5 +1,8 @@
 #include "PageTranslator.h"
 
+#include "ExceptionWithTitleText.h"
+#include "aicli/AbstractCli.h"
+
 #include "website/AbstractEngine.h"
 #include "website/pages/AbstractLegalPageDef.h"
 #include "website/pages/AbstractPageType.h"
@@ -39,11 +42,13 @@
 PageTranslator::PageTranslator(IPageRepository &repo,
                                 CategoryTable   &categoryTable,
                                 const QDir      &workingDir,
+                                AbstractCli     *cli,
                                 QObject         *parent)
     : QObject(parent)
     , m_repo(repo)
     , m_categoryTable(categoryTable)
     , m_workingDir(workingDir)
+    , m_cli(cli)
 {
 }
 
@@ -74,7 +79,8 @@ void PageTranslator::start(AbstractEngine *engine, const QString &editingLang)
         return;
     }
 
-    m_queue = _buildJobQueue(engine, editingLang);
+    m_engine = engine;
+    m_queue  = _buildJobQueue(engine, editingLang);
     _log(QStringLiteral("Translation started. %1 job(s) queued.").arg(m_queue.size()));
 
     if (m_queue.isEmpty()) {
@@ -498,7 +504,7 @@ void PageTranslator::_processNextJob()
         m_processOutput.clear();
 
         m_process = new QProcess(this);
-        m_process->setProgram(QStringLiteral("claude"));
+        m_process->setProgram(m_cli->getExecutable());
         m_process->setArguments({QStringLiteral("-p"), QStringLiteral("-"),
                                   QStringLiteral("--dangerously-skip-permissions"),
                                   QStringLiteral("--no-session-persistence"),
@@ -524,8 +530,9 @@ void PageTranslator::_processNextJob()
 
     // Load source page record — needed for endPermalink slug translation.
     const auto srcRec = m_repo.findById(m_currentJob.pageId);
+    m_currentPermalink = srcRec ? srcRec->permalink : QString{};
     {
-        const QString permalink = srcRec ? srcRec->permalink : QStringLiteral("?");
+        const QString permalink = m_currentPermalink.isEmpty() ? QStringLiteral("?") : m_currentPermalink;
         _log(QStringLiteral("Processing page %1 → %2  (%3)  job %4")
                  .arg(m_currentJob.targetLang, permalink)
                  .arg(m_currentJob.pageId)
@@ -1262,6 +1269,42 @@ void PageTranslator::_finalizeTextTranslations(const QHash<QString, QString> &tr
                                 + QStringLiteral(":_permalink_slug");
             finalData.insert(key, trSlug);
             _log(QStringLiteral("  Slug translated: %1").arg(trSlug));
+        }
+    }
+
+    // Render validation: trial-render the translated page before saving.
+    // Catches shortcode errors (e.g. missing mandatory arguments introduced by
+    // the translation) so corrupt data is never persisted.
+    if (m_engine && !m_currentPermalink.isEmpty()) {
+        int engineIdx = 0;
+        for (int i = 0; i < m_engine->rowCount(); ++i) {
+            if (m_engine->getLangCode(i) == m_currentJob.targetLang) {
+                engineIdx = i;
+                break;
+            }
+        }
+        auto validateType = AbstractPageType::createForTypeId(m_currentJob.typeId, m_categoryTable);
+        if (validateType) {
+            validateType->load(finalData);
+            validateType->setAuthorLang(m_currentJob.sourceLang);
+            validateType->bindGenerationContext(m_repo, m_workingDir);
+            validateType->setGenerationContext(m_currentPermalink,
+                                               m_currentJob.targetLang,
+                                               QStringList{});
+            QString html, css, js;
+            QSet<QString> cssDoneIds, jsDoneIds;
+            try {
+                validateType->addCode(QStringView{}, *m_engine, engineIdx,
+                                      html, css, js, cssDoneIds, jsDoneIds);
+            } catch (const ExceptionWithTitleText &ex) {
+                _log(QStringLiteral("  Render validation FAILED for %1 [%2]: %3 — %4 — skipping save")
+                         .arg(m_currentPermalink, m_currentJob.targetLang,
+                              ex.errorTitle(), ex.errorText()),
+                     true);
+                ++m_errors;
+                _processNextJob();
+                return;
+            }
         }
     }
 

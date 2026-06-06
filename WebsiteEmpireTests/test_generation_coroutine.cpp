@@ -41,11 +41,15 @@
 #include "website/pages/PageRepositoryDb.h"
 #include "website/pages/attributes/CategoryTable.h"
 
+#include "aicli/AbstractCli.h"
+
 // ---------------------------------------------------------------------------
-// Mirrors runClaudePrompt from LauncherGeneration.cpp
+// Mirrors runClaudePrompt from LauncherGeneration.cpp.
+// Uses AbstractCli so the test exercises the same executable/args path as
+// production, while the fake binary in PATH intercepts the actual call.
 // ---------------------------------------------------------------------------
 
-static QCoro::Task<QString> runClaudePromptTest(QString prompt)
+static QCoro::Task<QString> runClaudePromptTest(QString prompt, AbstractCli *cli)
 {
     QString result;
 
@@ -65,16 +69,16 @@ static QCoro::Task<QString> runClaudePromptTest(QString prompt)
 
     QProcess process;
     process.setWorkingDirectory(tempDir.path());
-    process.setProgram(QStringLiteral("claude"));
-    process.setArguments({QStringLiteral("-p"), QStringLiteral("-"),
-                          QStringLiteral("--dangerously-skip-permissions")});
+    process.setProgram(cli->getExecutable());
+    process.setArguments(cli->promptArgs());
     process.setStandardInputFile(promptPath);
 
     co_await qCoro(process).start();
     co_await qCoro(process).waitForFinished(-1);
 
     if (process.error() == QProcess::FailedToStart) {
-        result = QStringLiteral("__ERROR__: claude executable not found in PATH");
+        result = QStringLiteral("__ERROR__: %1 executable not found in PATH")
+                     .arg(cli->getExecutable());
     } else if (process.exitCode() != 0) {
         result = QStringLiteral("__ERROR__: ")
                  + QString::fromUtf8(process.readAllStandardError()).trimmed();
@@ -93,7 +97,8 @@ static QCoro::Task<QString> runClaudePromptTest(QString prompt)
 
 static QCoro::Task<bool> runFullPipelineOnce(GenPageQueue   &queue,
                                               const QDir     &workDir,
-                                              const QString  &contentPrompt)
+                                              const QString  &contentPrompt,
+                                              AbstractCli    *cli)
 {
     // IMPORTANT: declared before first co_await — mirrors production code.
     PageDb           pageDb(workDir);
@@ -103,7 +108,7 @@ static QCoro::Task<bool> runFullPipelineOnce(GenPageQueue   &queue,
     queue.advance();
 
     // ---- Call 1: content (same suspension point as production) ---------------
-    const QString articleText = co_await runClaudePromptTest(contentPrompt);
+    const QString articleText = co_await runClaudePromptTest(contentPrompt, cli);
 
     if (articleText.startsWith(QStringLiteral("__ERROR__"))) {
         qWarning() << "Content call failed:" << articleText;
@@ -112,7 +117,7 @@ static QCoro::Task<bool> runFullPipelineOnce(GenPageQueue   &queue,
 
     // ---- Call 2: metadata (same suspension point as production) --------------
     const QString metadataJson = co_await runClaudePromptTest(
-        queue.buildMetadataPrompt(page, articleText));
+        queue.buildMetadataPrompt(page, articleText), cli);
 
     const QString safeMetadata = metadataJson.startsWith(QStringLiteral("__ERROR__"))
                                  ? QString{} : metadataJson;
@@ -234,11 +239,15 @@ private slots:
         QEventLoop loop;
         QString result;
 
+        AbstractCli *cli = AbstractCli::ALL_CLIS().isEmpty()
+                           ? nullptr : AbstractCli::ALL_CLIS().first();
+        QVERIFY(cli);
+
         // Keep the lambda alive through loop.exec() so the coroutine frame has
         // a valid closure pointer when it resumes after co_await.
-        auto coro = [&]() -> QCoro::Task<> {
+        auto coro = [&, cli]() -> QCoro::Task<> {
             result = co_await runClaudePromptTest(
-                QStringLiteral("small prompt"));
+                QStringLiteral("small prompt"), cli);
             loop.quit();
         };
         auto task = coro();
@@ -270,9 +279,13 @@ private slots:
         QEventLoop loop;
         QString result;
 
+        AbstractCli *cli = AbstractCli::ALL_CLIS().isEmpty()
+                           ? nullptr : AbstractCli::ALL_CLIS().first();
+        QVERIFY(cli);
+
         // Keep the lambda alive through loop.exec().
-        auto coro = [&]() -> QCoro::Task<> {
-            result = co_await runClaudePromptTest(largePrompt);
+        auto coro = [&, cli]() -> QCoro::Task<> {
+            result = co_await runClaudePromptTest(largePrompt, cli);
             loop.quit();
         };
         auto task = coro();
@@ -315,13 +328,17 @@ private slots:
         const QString contentPrompt = QStringLiteral(
             "Write a short article about osteoarthritis.");
 
+        AbstractCli *cli = AbstractCli::ALL_CLIS().isEmpty()
+                           ? nullptr : AbstractCli::ALL_CLIS().first();
+        QVERIFY(cli);
+
         QEventLoop loop;
         bool pipelineOk = false;
 
         // Keep the lambda alive through loop.exec().
-        auto coro = [&]() -> QCoro::Task<> {
+        auto coro = [&, cli]() -> QCoro::Task<> {
             pipelineOk = co_await runFullPipelineOnce(
-                queue, workDir, contentPrompt);
+                queue, workDir, contentPrompt, cli);
             loop.quit();
         };
         auto task = coro();
@@ -380,13 +397,17 @@ private slots:
 
         QVERIFY(contentPrompt.size() >= 7800);
 
+        AbstractCli *cli = AbstractCli::ALL_CLIS().isEmpty()
+                           ? nullptr : AbstractCli::ALL_CLIS().first();
+        QVERIFY(cli);
+
         QEventLoop loop;
         bool pipelineOk = false;
 
         // Keep the lambda alive through loop.exec().
-        auto coro = [&]() -> QCoro::Task<> {
+        auto coro = [&, cli]() -> QCoro::Task<> {
             pipelineOk = co_await runFullPipelineOnce(
-                queue, workDir, contentPrompt);
+                queue, workDir, contentPrompt, cli);
             loop.quit();
         };
         auto task = coro();

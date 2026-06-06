@@ -14,6 +14,7 @@
 
 #include <QProcess>
 
+class AbstractCli;
 class AbstractCommonBloc;
 class AbstractTheme;
 class QFile;
@@ -62,6 +63,7 @@ public:
 
     explicit CommonBlocTranslator(AbstractTheme &theme,
                                    const QDir    &workingDir,
+                                   AbstractCli   *cli,
                                    QObject       *parent = nullptr);
     ~CommonBlocTranslator() override;
 
@@ -97,6 +99,7 @@ private:
 
     AbstractTheme            &m_theme;
     QDir                      m_workingDir;
+    AbstractCli              *m_cli;
 
     QProcess                 *m_process     = nullptr;
     QByteArray                m_processOutput;

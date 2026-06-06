@@ -13,6 +13,7 @@
 
 #include <QProcess>
 
+class AbstractCli;
 class CategoryTable;
 class QFile;
 class QTemporaryDir;
@@ -43,6 +44,7 @@ public:
 
     explicit CategoryTranslator(CategoryTable &categoryTable,
                                  const QDir    &workingDir,
+                                 AbstractCli   *cli,
                                  QObject       *parent = nullptr);
     ~CategoryTranslator() override;
 
@@ -76,6 +78,7 @@ private:
 
     CategoryTable            &m_categoryTable;
     QDir                      m_workingDir;
+    AbstractCli              *m_cli;
 
     QProcess                 *m_process   = nullptr;
     QByteArray                m_processOutput;

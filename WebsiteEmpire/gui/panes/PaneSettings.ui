@@ -41,13 +41,61 @@
     </widget>
    </item>
    <item>
-    <widget class="QTableView" name="tableViewSettings">
-     <property name="selectionMode">
-      <enum>QAbstractItemView::SelectionMode::SingleSelection</enum>
+    <widget class="QSplitter" name="splitter">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
      </property>
-     <attribute name="horizontalHeaderStretchLastSection">
-      <bool>true</bool>
-     </attribute>
+     <widget class="QTableView" name="tableViewSettings">
+      <property name="selectionMode">
+       <enum>QAbstractItemView::SelectionMode::SingleSelection</enum>
+      </property>
+      <attribute name="horizontalHeaderStretchLastSection">
+       <bool>true</bool>
+      </attribute>
+     </widget>
+     <widget class="QWidget" name="widgetCliSection">
+      <layout class="QVBoxLayout" name="verticalLayoutCli">
+       <property name="margin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QWidget" name="widgetCliComboRow">
+         <layout class="QHBoxLayout" name="horizontalLayoutCli">
+          <property name="margin">
+           <number>0</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="labelDefaultCli">
+            <property name="text">
+             <string>Default CLI:</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="comboDefaultCli">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>1</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTableView" name="tableViewCli">
+         <property name="selectionMode">
+          <enum>QAbstractItemView::SelectionMode::NoSelection</enum>
+         </property>
+         <attribute name="horizontalHeaderStretchLastSection">
+          <bool>true</bool>
+         </attribute>
+        </widget>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
   </layout>

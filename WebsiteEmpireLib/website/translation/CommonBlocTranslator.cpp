@@ -1,5 +1,7 @@
 #include "CommonBlocTranslator.h"
 
+#include "aicli/AbstractCli.h"
+
 #include "TranslationProtocol.h"
 #include "website/commonblocs/AbstractCommonBloc.h"
 #include "website/theme/AbstractTheme.h"
@@ -20,10 +22,12 @@
 
 CommonBlocTranslator::CommonBlocTranslator(AbstractTheme &theme,
                                              const QDir    &workingDir,
+                                             AbstractCli   *cli,
                                              QObject       *parent)
     : QObject(parent)
     , m_theme(theme)
     , m_workingDir(workingDir)
+    , m_cli(cli)
 {
 }
 
@@ -174,7 +178,7 @@ void CommonBlocTranslator::_processNextJob()
     m_processOutput.clear();
 
     m_process = new QProcess(this);
-    m_process->setProgram(QStringLiteral("claude"));
+    m_process->setProgram(m_cli->getExecutable());
     m_process->setArguments({QStringLiteral("-p"), QStringLiteral("-"),
                               QStringLiteral("--dangerously-skip-permissions"),
                               QStringLiteral("--tools"), QStringLiteral(""),

@@ -24,6 +24,10 @@ public:
     // Option name (without "--") for the working-directory argument.
     static const QString OPTION_WORKING_DIR;
 
+    // Option name (without "--") for selecting the AI CLI (e.g. "Claude", "Gemini").
+    // Shared by all launchers that spawn an AI CLI process.
+    static const QString OPTION_CLI;
+
     // The CLI option name (without "--") that triggers this launcher, e.g. "translate".
     virtual QString getOptionName() const = 0;
 

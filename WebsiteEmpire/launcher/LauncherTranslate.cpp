@@ -1,5 +1,6 @@
 #include "LauncherTranslate.h"
 
+#include "aicli/AbstractCli.h"
 #include "website/AbstractEngine.h"
 #include "website/HostTable.h"
 #include "website/WebsiteSettingsTable.h"
@@ -110,6 +111,27 @@ void LauncherTranslate::run(const QString & /*value*/)
     const bool textOnly = args.contains(QStringLiteral("--") + OPTION_TEXT);
     bool runBoth        = !svgOnly && !textOnly;
 
+    // --cli <name>: select AI CLI; falls back to the first registered CLI.
+    AbstractCli *cli = nullptr;
+    const int cliIdx = args.indexOf(QStringLiteral("--") + AbstractLauncher::OPTION_CLI);
+    if (cliIdx >= 0 && cliIdx + 1 < args.size()) {
+        const QString cliName = args.at(cliIdx + 1);
+        for (AbstractCli *c : AbstractCli::ALL_CLIS()) {
+            if (c->getName() == cliName) {
+                cli = c;
+                break;
+            }
+        }
+    }
+    if (!cli) {
+        cli = AbstractCli::ALL_CLIS().isEmpty() ? nullptr : AbstractCli::ALL_CLIS().first();
+    }
+    if (!cli) {
+        qDebug() << "LauncherTranslate: no AI CLI available.";
+        QCoreApplication::quit();
+        return;
+    }
+
     const QDir workingDir = WorkingDirectoryManager::instance()->workingDir();
 
     // -------------------------------------------------------------------------
@@ -200,7 +222,7 @@ void LauncherTranslate::run(const QString & /*value*/)
     effectiveSettings.limitPerRun       = translationSettings.limitPerRun;
     effectiveSettings.priorityPageTypes = translationSettings.priorityPageTypes;
 
-    auto *translator = new PageTranslator(*pageRepo, *categoryTable, workingDir, holder);
+    auto *translator = new PageTranslator(*pageRepo, *categoryTable, workingDir, cli, holder);
 
     QObject::connect(translator, &PageTranslator::logMessage, holder, [](const QString &msg) {
         qDebug() << "[Translate]" << qPrintable(msg);

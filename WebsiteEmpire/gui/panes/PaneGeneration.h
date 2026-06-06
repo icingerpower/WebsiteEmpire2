@@ -66,7 +66,7 @@ private:
      * Disables the generation buttons, streams output to textEditOutput, and
      * re-enables them on completion.  Calls computeRemainingToDo() when done.
      */
-    void _startProcess(const QStringList &args);
+    void _startProcess(QStringList args);
 
     /**
      * Reads textEditPrompt and persists it to the currently selected strategy row.

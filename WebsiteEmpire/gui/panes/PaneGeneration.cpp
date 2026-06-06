@@ -5,6 +5,7 @@
 #include "../dialogs/DialogAddGeneration.h"
 #include "../dialogs/DialogGeneratePhase2.h"
 #include "../dialogs/DialogShowCommand.h"
+#include "launcher/AbstractLauncher.h"
 #include "launcher/LauncherGeneration.h"
 #include "website/AbstractEngine.h"
 #include "website/WebsiteSettingsTable.h"
@@ -239,10 +240,16 @@ void PaneGeneration::generatePhase2()
     });
 }
 
-void PaneGeneration::_startProcess(const QStringList &args)
+void PaneGeneration::_startProcess(QStringList args)
 {
     if (m_activeProcess) {
         return; // already running
+    }
+
+    const QString cliName = WorkingDirectoryManager::instance()->settings()
+                                ->value(QStringLiteral("defaultCli")).toString();
+    if (!cliName.isEmpty()) {
+        args << QStringLiteral("--") + AbstractLauncher::OPTION_CLI << cliName;
     }
 
     const QString exe = QCoreApplication::applicationFilePath();
@@ -319,14 +326,21 @@ void PaneGeneration::viewGenCommand()
 
     const QString exe     = QCoreApplication::applicationFilePath();
     const QString workDir = m_workingDir.absolutePath();
-    const QString cmd = QStringLiteral("%1 --%2 \"%3\" --%4 --%5 %6 --%7 1")
-                            .arg(exe,
-                                 AbstractLauncher::OPTION_WORKING_DIR,
-                                 workDir,
-                                 LauncherGeneration::OPTION_NAME,
-                                 LauncherGeneration::OPTION_STRATEGY,
-                                 strategyId,
-                                 LauncherGeneration::OPTION_LIMIT);
+    QString cmd = QStringLiteral("%1 --%2 \"%3\" --%4 --%5 %6 --%7 1")
+                      .arg(exe,
+                           AbstractLauncher::OPTION_WORKING_DIR,
+                           workDir,
+                           LauncherGeneration::OPTION_NAME,
+                           LauncherGeneration::OPTION_STRATEGY,
+                           strategyId,
+                           LauncherGeneration::OPTION_LIMIT);
+
+    const QString cliName = WorkingDirectoryManager::instance()->settings()
+                                ->value(QStringLiteral("defaultCli")).toString();
+    if (!cliName.isEmpty()) {
+        cmd += QStringLiteral(" --") + AbstractLauncher::OPTION_CLI
+               + QLatin1Char(' ') + cliName;
+    }
 
     DialogShowCommand dlg(tr("Generation command"),
                           tr("Run this command in a terminal to generate one page for the selected strategy:"),

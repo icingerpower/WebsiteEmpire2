@@ -1,6 +1,7 @@
 #include "AbstractLauncher.h"
 
 const QString AbstractLauncher::OPTION_WORKING_DIR = QStringLiteral("workingDir");
+const QString AbstractLauncher::OPTION_CLI         = QStringLiteral("cli");
 
 bool AbstractLauncher::isFlag() const
 {

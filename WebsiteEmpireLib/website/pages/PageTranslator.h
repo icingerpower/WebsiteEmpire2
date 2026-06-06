@@ -14,6 +14,7 @@
 
 #include <QProcess>
 
+class AbstractCli;
 class AbstractEngine;
 class AbstractPageType;
 class CategoryTable;
@@ -87,6 +88,7 @@ public:
     explicit PageTranslator(IPageRepository &repo,
                              CategoryTable   &categoryTable,
                              const QDir      &workingDir,
+                             AbstractCli     *cli,
                              QObject         *parent = nullptr);
     ~PageTranslator() override;
 
@@ -178,6 +180,9 @@ private:
     IPageRepository &m_repo;
     CategoryTable   &m_categoryTable;
     QDir             m_workingDir;
+    AbstractCli     *m_cli;
+    AbstractEngine  *m_engine          = nullptr; ///< stored from start(); used for render validation
+    QString          m_currentPermalink;           ///< permalink of the page currently being translated
 
     QProcess                  *m_process   = nullptr;
     QByteArray                 m_processOutput; // accumulated stdout from running process

@@ -5,9 +5,14 @@
 #include "website/theme/AbstractTheme.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
 
+#include "aicli/AbstractCli.h"
+#include "aicli/AvailableCliList.h"
+#include "aicli/AvailableCliTable.h"
+
 #include <QAbstractItemModel>
 #include <QComboBox>
 #include <QLocale>
+#include <QSignalBlocker>
 #include <QStyledItemDelegate>
 
 namespace {
@@ -103,6 +108,20 @@ PaneSettings::PaneSettings(QWidget *parent)
         connect(ui->comboTheme, &QComboBox::currentIndexChanged,
                 this, &PaneSettings::onThemeChanged);
     }
+
+    // CLI availability table (all CLIs + async status) and filtered list (available only).
+    m_cliTable = new AvailableCliTable(this);
+    m_cliList  = new AvailableCliList(m_cliTable, this);
+    ui->tableViewCli->setModel(m_cliTable);
+    ui->comboDefaultCli->setModel(m_cliList);
+
+    // Restore saved selection now and again each time a new CLI becomes available.
+    connect(m_cliList, &QAbstractListModel::rowsInserted, this,
+            [this](const QModelIndex &, int, int) { _restoreDefaultCli(); });
+    _restoreDefaultCli();
+
+    connect(ui->comboDefaultCli, &QComboBox::currentIndexChanged,
+            this, &PaneSettings::onDefaultCliChanged);
 }
 
 PaneSettings::~PaneSettings()
@@ -120,4 +139,30 @@ void PaneSettings::onThemeChanged(int index)
     const QString themeId = ui->comboTheme->itemData(index).toString();
     const auto settings   = WorkingDirectoryManager::instance()->settings();
     settings->setValue(AbstractTheme::settingsKey(), themeId);
+}
+
+void PaneSettings::onDefaultCliChanged(int index)
+{
+    AbstractCli *cli = m_cliList->cliAt(index);
+    const QString name = cli ? cli->getName() : QString{};
+    WorkingDirectoryManager::instance()->settings()
+        ->setValue(QStringLiteral("defaultCli"), name);
+}
+
+void PaneSettings::_restoreDefaultCli()
+{
+    const QString saved = WorkingDirectoryManager::instance()->settings()
+                              ->value(QStringLiteral("defaultCli")).toString();
+    if (saved.isEmpty()) {
+        return;
+    }
+    for (int i = 0; i < m_cliList->rowCount(); ++i) {
+        const QString name =
+            m_cliList->data(m_cliList->index(i, 0), Qt::DisplayRole).toString();
+        if (name == saved) {
+            const QSignalBlocker blocker(ui->comboDefaultCli);
+            ui->comboDefaultCli->setCurrentIndex(i);
+            return;
+        }
+    }
 }

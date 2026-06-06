@@ -1,5 +1,7 @@
 #include "CategoryTranslator.h"
 
+#include "aicli/AbstractCli.h"
+
 #include "TranslationProtocol.h"
 #include "website/pages/attributes/CategoryTable.h"
 
@@ -19,10 +21,12 @@
 
 CategoryTranslator::CategoryTranslator(CategoryTable &categoryTable,
                                          const QDir    &workingDir,
+                                         AbstractCli   *cli,
                                          QObject       *parent)
     : QObject(parent)
     , m_categoryTable(categoryTable)
     , m_workingDir(workingDir)
+    , m_cli(cli)
 {
 }
 
@@ -146,7 +150,7 @@ void CategoryTranslator::_processNextJob()
     m_processOutput.clear();
 
     m_process = new QProcess(this);
-    m_process->setProgram(QStringLiteral("claude"));
+    m_process->setProgram(m_cli->getExecutable());
     m_process->setArguments({QStringLiteral("-p"), QStringLiteral("-"),
                               QStringLiteral("--dangerously-skip-permissions"),
                               QStringLiteral("--tools"), QStringLiteral(""),

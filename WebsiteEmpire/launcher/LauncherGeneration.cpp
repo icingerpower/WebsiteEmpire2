@@ -42,6 +42,8 @@
 #include <QCoro/QCoroTask>
 #include <QCoro/QCoroTimer>
 
+#include "aicli/AbstractCli.h"
+
 const QString LauncherGeneration::OPTION_NAME     = QStringLiteral("generation");
 const QString LauncherGeneration::OPTION_SESSIONS = QStringLiteral("sessions");
 const QString LauncherGeneration::OPTION_LIMIT    = QStringLiteral("limit");
@@ -101,10 +103,11 @@ static bool isArticleValid(const QString &text)
 }
 
 // ---------------------------------------------------------------------------
-// claude CLI helper — mirrors ClaudeRunner in WebsiteAspire; no API key needed
+// AI CLI helper — spawns the selected CLI process for content generation.
+// No API key needed; the CLI handles authentication itself.
 // ---------------------------------------------------------------------------
 
-static QCoro::Task<QString> runClaudePrompt(QString prompt)
+static QCoro::Task<QString> runClaudePrompt(QString prompt, AbstractCli *cli)
 {
     // result declared first — single co_return at end, mirrors ClaudeRunner.
     QString result;
@@ -129,7 +132,7 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt)
         f.write(prompt.toUtf8());
     }
 
-    // Claude's response is redirected to a file instead of a pipe.
+    // CLI response is redirected to a file instead of a pipe.
     // For large articles (50 000+ chars), the OS pipe buffer (≈64 KB) fills up
     // before QProcess can drain it, causing the beginning of the output to be
     // silently dropped.  Writing to a file bypasses this limitation entirely.
@@ -137,9 +140,8 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt)
 
     QProcess process;
     process.setWorkingDirectory(tempDir.path());
-    process.setProgram(QStringLiteral("claude"));
-    process.setArguments({QStringLiteral("-p"), QStringLiteral("-"),
-                          QStringLiteral("--dangerously-skip-permissions")});
+    process.setProgram(cli->getExecutable());
+    process.setArguments(cli->promptArgs());
     process.setStandardInputFile(promptPath);
     process.setStandardOutputFile(outputPath);
 
@@ -149,7 +151,8 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt)
 
     // All error checks and output reading happen after both co_awaits.
     if (process.error() == QProcess::FailedToStart) {
-        result = QStringLiteral("__ERROR__: claude executable not found in PATH");
+        result = QStringLiteral("__ERROR__: %1 executable not found in PATH")
+                     .arg(cli->getExecutable());
     } else if (process.exitCode() != 0) {
         const QString errMsg = QString::fromUtf8(process.readAllStandardError()).trimmed();
         // Errors go to stderr; stdout (the output file) is not read on failure.
@@ -190,7 +193,8 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                                                int             websiteIndex,
                                                CategoryTable  &categoryTable,
                                                GenRunState    *state,
-                                               int             sessionIndex)
+                                               int             sessionIndex,
+                                               AbstractCli    *cli)
 {
     int sNum = sessionIndex + 1;
     // PageRepositoryDb holds a PageDb& (reference member) so both types have deleted
@@ -274,7 +278,7 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                         continue;
                     }
                     const QString svgPrompt = queue->buildSvgPrompt(ref, page.permalink, lang);
-                    const QString svgResp   = co_await runClaudePrompt(svgPrompt);
+                    const QString svgResp   = co_await runClaudePrompt(svgPrompt, cli);
                     if (svgResp.startsWith(QStringLiteral("__ERROR__"))) {
                         *(state->out) << QStringLiteral("[S%1] WARN (SVG regen): %2\n")
                                              .arg(sNum).arg(svgResp);
@@ -350,7 +354,7 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                                 .arg(sNum).arg(bIdx).arg(vi + 1).arg(prompts.size()).arg(webpFilename);
                             state->out->flush();
 
-                            const QString svgRaw = co_await runClaudePrompt(prompts.at(vi));
+                            const QString svgRaw = co_await runClaudePrompt(prompts.at(vi), cli);
                             if (svgRaw.startsWith(QStringLiteral("__ERROR__"))) {
                                 *(state->out) << QStringLiteral("[S%1] WARN (2nd pass retry): %2\n")
                                                      .arg(sNum).arg(svgRaw);
@@ -461,7 +465,7 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                   .arg(articleText.left(200))
                   + contentPrompt;
 
-            const QString raw = co_await runClaudePrompt(prompt);
+            const QString raw = co_await runClaudePrompt(prompt, cli);
 
             if (raw.startsWith(QStringLiteral("__ERROR__"))) {
                 *(state->out) << QStringLiteral("[S%1] FAIL (content attempt %2): %3\n")
@@ -497,7 +501,7 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
 
             const QString repairPrompt =
                 queue->buildSvgRepairPrompt(page, articleText, lang);
-            const QString repairResponse = co_await runClaudePrompt(repairPrompt);
+            const QString repairResponse = co_await runClaudePrompt(repairPrompt, cli);
 
             if (!repairResponse.startsWith(QStringLiteral("__ERROR__"))) {
                 static const QRegularExpression reImgFix(
@@ -527,7 +531,7 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
         QString metadataJson;
         if (!g_stopRequested) {
             const QString metadataPrompt = queue->buildMetadataPrompt(page, articleText);
-            metadataJson = co_await runClaudePrompt(metadataPrompt);
+            metadataJson = co_await runClaudePrompt(metadataPrompt, cli);
             // Metadata failures are tolerated: processContentAndMetadata() falls back
             // to saving 1_text only if metadataJson is empty or unparseable.
             if (metadataJson.startsWith(QStringLiteral("__ERROR__"))) {
@@ -595,7 +599,7 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                 state->out->flush();
 
                 const QString svgPrompt = queue->buildSvgPrompt(ref, page.permalink, lang);
-                const QString svgResponse = co_await runClaudePrompt(svgPrompt);
+                const QString svgResponse = co_await runClaudePrompt(svgPrompt, cli);
 
                 if (svgResponse.startsWith(QStringLiteral("__ERROR__"))) {
                     *(state->out) << QStringLiteral("[S%1] WARN (SVG): %2 — %3\n")
@@ -704,13 +708,14 @@ void LauncherGeneration::run(const QString & /*value*/)
     // ---- Parse sub-options from raw args ----------------------------------
     const QStringList args = QCoreApplication::arguments();
 
-    int     numSessions      = 1;
-    int     jobsLimit        = -1;
-    int     interPageDelayMs = 0;
-    QString strategyFilter; // empty = all priority-1 strategies
+    int         numSessions      = 1;
+    int         jobsLimit        = -1;
+    int         interPageDelayMs = 0;
+    QString     strategyFilter; // empty = all priority-1 strategies
     QStringList customTopics; // non-empty = GUI "Custom topic" bypass (one entry per --topic)
-    bool    newOnly          = false; // true = skip retry queue, only generate new articles
-    bool    retryOnly        = false; // true = skip new items, only process retry queue
+    bool        newOnly          = false; // true = skip retry queue, only generate new articles
+    bool        retryOnly        = false; // true = skip new items, only process retry queue
+    AbstractCli *cli             = nullptr;
 
     for (int i = 0; i < args.size() - 1; ++i) {
         const QString &arg = args.at(i);
@@ -739,11 +744,32 @@ void LauncherGeneration::run(const QString & /*value*/)
             if (!t.isEmpty()) {
                 customTopics.append(t);
             }
+        } else if (arg == QStringLiteral("--") + AbstractLauncher::OPTION_CLI) {
+            const QString name = args.at(i + 1);
+            for (AbstractCli *c : AbstractCli::ALL_CLIS()) {
+                if (c->getName() == name) {
+                    cli = c;
+                    break;
+                }
+            }
         }
     }
     // --new-only and --retry-only are flags (no value), check for presence separately.
     newOnly    = args.contains(QStringLiteral("--") + OPTION_NEW_ONLY);
     retryOnly  = args.contains(QStringLiteral("--") + OPTION_RETRY_ONLY);
+
+    // Resolve CLI: fall back to the first registered CLI (CliClaude) when not specified.
+    if (!cli && !AbstractCli::ALL_CLIS().isEmpty()) {
+        cli = AbstractCli::ALL_CLIS().first();
+    }
+    if (!cli) {
+        *out << QStringLiteral("ERROR: no AI CLI registered.\n");
+        out->flush();
+        QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                  &QCoreApplication::quit,
+                                  Qt::QueuedConnection);
+        return;
+    }
 
     // ---- Resolve engine and API key ---------------------------------------
     const QDir workingDir = WorkingDirectoryManager::instance()->workingDir();
@@ -924,7 +950,7 @@ void LauncherGeneration::run(const QString & /*value*/)
                                         info.customInstructions);
         runGenerationSession(queue, info.strategyId, info.endPermalink,
                               engine, editingLangIndex,
-                              *categoryTable, state, 0);
+                              *categoryTable, state, 0, cli);
         return;
     }
 
@@ -1212,7 +1238,8 @@ void LauncherGeneration::run(const QString & /*value*/)
             runGenerationSession(queue, alloc.strategyId, alloc.endPermalink,
                                   engine, editingLangIndex,
                                   *categoryTable,
-                                  state, state->activeCount - alloc.sessionCount + s);
+                                  state, state->activeCount - alloc.sessionCount + s,
+                                  cli);
         }
     }
 

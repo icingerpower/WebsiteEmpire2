@@ -3,6 +3,8 @@
 
 #include <QWidget>
 
+class AvailableCliList;
+class AvailableCliTable;
 class WebsiteSettingsTable;
 
 namespace Ui {
@@ -22,9 +24,16 @@ public:
 
 private slots:
     void onThemeChanged(int index);
+    void onDefaultCliChanged(int index);
 
 private:
-    Ui::PaneSettings *ui;
+    // Selects the comboDefaultCli row whose name matches the "defaultCli" setting.
+    // Called on construction and each time a new CLI becomes available.
+    void _restoreDefaultCli();
+
+    Ui::PaneSettings  *ui;
+    AvailableCliTable *m_cliTable = nullptr;
+    AvailableCliList  *m_cliList  = nullptr;
 };
 
 #endif // PANESETTINGS_H

@@ -1,6 +1,8 @@
 #include "PanePages.h"
 #include "ui_PanePages.h"
 
+#include "aicli/AbstractCli.h"
+
 #include "../dialogs/DialogPreviewPage.h"
 #include "website/AbstractEngine.h"
 #include "website/ImageWriter.h"
@@ -24,6 +26,7 @@
 
 #include "../../launcher/AbstractLauncher.h"
 #include "../../launcher/LauncherTranslate.h"
+#include "workingdirectory/WorkingDirectoryManager.h"
 
 #include <QClipboard>
 #include <QGuiApplication>
@@ -335,8 +338,27 @@ void PanePages::translate()
 
     qDebug() << "[Translate] Starting. Editing lang:" << editingLang;
 
+    AbstractCli *cli = nullptr;
+    const QString cliName = WorkingDirectoryManager::instance()->settings()
+                                ->value(QStringLiteral("defaultCli")).toString();
+    if (!cliName.isEmpty()) {
+        for (AbstractCli *c : AbstractCli::ALL_CLIS()) {
+            if (c->getName() == cliName) {
+                cli = c;
+                break;
+            }
+        }
+    }
+    if (!cli) {
+        cli = AbstractCli::ALL_CLIS().isEmpty() ? nullptr : AbstractCli::ALL_CLIS().first();
+    }
+    if (!cli) {
+        QMessageBox::warning(this, tr("No AI CLI"), tr("No AI CLI is available."));
+        return;
+    }
+
     auto *translator = new PageTranslator(*m_pageRepo, *m_categoryTable,
-                                          m_workingDir, this);
+                                          m_workingDir, cli, this);
 
     connect(translator, &PageTranslator::logMessage, this, [](const QString &msg) {
         qDebug() << "[Translate]" << qPrintable(msg);

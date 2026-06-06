@@ -11,6 +11,7 @@ find_package(ZLIB REQUIRED)
 setup_qcoro(COMPONENTS Network Core)
 
 include(../../common/utils/utils.cmake)
+include(../../common/aicli/aicli.cmake)
 
 include(aspire/aspire.cmake)
 include(website/website.cmake)
@@ -25,6 +26,7 @@ add_library(WebsiteEmpireLib STATIC
     ${ASPIRE_FILES}
     ${WEBSITE_FILES}
     ${UTILS_FILES}
+    ${AICLI_FILES}
 )
 
 target_link_libraries(WebsiteEmpireLib
