@@ -12,6 +12,8 @@
 
 #include <QCoro/QCoroProcess>
 
+#include "aicli/AbstractCli.h"
+
 // ---------------------------------------------------------------------------
 // JSON extraction from Claude's raw stdout (fallback when reply.json absent)
 // ---------------------------------------------------------------------------
@@ -51,7 +53,7 @@ static QString extractJson(const QString &output)
 
 // ---------------------------------------------------------------------------
 
-QCoro::Task<ClaudeJobResult> runClaudeJob(const QString &jobJson)
+QCoro::Task<ClaudeJobResult> runClaudeJob(const QString &jobJson, AbstractCli *cli)
 {
     ClaudeJobResult res;
 
@@ -88,12 +90,8 @@ QCoro::Task<ClaudeJobResult> runClaudeJob(const QString &jobJson)
 
     QProcess process;
     process.setWorkingDirectory(tempDir.path());
-    process.setProgram(QStringLiteral("claude"));
-    process.setArguments({
-        QStringLiteral("-p"),
-        QStringLiteral("-"),                      // read prompt from stdin
-        QStringLiteral("--dangerously-skip-permissions"),
-    });
+    process.setProgram(cli->getExecutable());
+    process.setArguments(cli->promptArgs());
     process.setStandardInputFile(promptPath);
 
     co_await qCoro(process).start();

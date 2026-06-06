@@ -3,6 +3,7 @@
 #include <QCommandLineParser>
 
 const QString AbstractLauncher::OPTION_WORKING_DIR = QStringLiteral("workingDir");
+const QString AbstractLauncher::OPTION_CLI         = QStringLiteral("cli");
 
 void AbstractLauncher::registerOptions(QCommandLineParser &)
 {

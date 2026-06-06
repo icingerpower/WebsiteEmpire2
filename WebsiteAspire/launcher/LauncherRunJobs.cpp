@@ -17,6 +17,7 @@
 #include "ClaudeRunner.h"
 #include "aspire/generator/AbstractGenerator.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
+#include "aicli/AbstractCli.h"
 
 const QString LauncherRunJobs::OPTION_NAME     = QStringLiteral("runjobs");
 const QString LauncherRunJobs::OPTION_SESSIONS = QStringLiteral("sessions");
@@ -46,7 +47,8 @@ static QCoro::Task<void> runSession(AbstractGenerator *gen,
                                     QDir               logDir,
                                     QTextStream       *out,
                                     int                sessionIndex,
-                                    int               *activeCount)
+                                    int               *activeCount,
+                                    AbstractCli       *cli)
 {
     const int sNum = sessionIndex + 1; // 1-based for display
 
@@ -67,11 +69,12 @@ static QCoro::Task<void> runSession(AbstractGenerator *gen,
                     .arg(gen->pendingCount());
         out->flush();
 
-        const ClaudeJobResult result = co_await runClaudeJob(jobJson);
+        const ClaudeJobResult result = co_await runClaudeJob(jobJson, cli);
         writeClaudeJobLog(logDir, jobId, result);
 
         if (!result.processStarted) {
-            *out << QStringLiteral("[S%1] FATAL: 'claude' not found in PATH. Stopping.\n").arg(sNum);
+            *out << QStringLiteral("[S%1] FATAL: '%2' not found in PATH. Stopping.\n")
+                        .arg(sNum).arg(cli->getExecutable());
             out->flush();
             break;
         }
@@ -145,17 +148,36 @@ void LauncherRunJobs::run(const QString &value)
         return;
     }
 
-    // Read --sessions from the parsed options.
+    // Read --sessions and --cli from the raw argument list.
     const QStringList args = QCoreApplication::arguments();
     int numSessions = 1;
+    AbstractCli *cli = nullptr;
     for (int i = 0; i < args.size() - 1; ++i) {
-        if (args.at(i) == QStringLiteral("--") + OPTION_SESSIONS) {
+        const QString &arg = args.at(i);
+        if (arg == QStringLiteral("--") + OPTION_SESSIONS) {
             bool ok = false;
             const int n = args.at(i + 1).toInt(&ok);
             if (ok && n >= 1 && n <= 10) {
                 numSessions = n;
             }
+        } else if (arg == QStringLiteral("--") + AbstractLauncher::OPTION_CLI) {
+            const QString name = args.at(i + 1);
+            for (AbstractCli *c : AbstractCli::ALL_CLIS()) {
+                if (c->getName() == name) {
+                    cli = c;
+                    break;
+                }
+            }
         }
+    }
+    if (!cli && !AbstractCli::ALL_CLIS().isEmpty()) {
+        cli = AbstractCli::ALL_CLIS().first();
+    }
+    if (!cli) {
+        *out << QStringLiteral("FAILURE\nNo AI CLI registered.\n");
+        out->flush();
+        QCoreApplication::quit();
+        return;
     }
 
     QDir workDir(WorkingDirectoryManager::instance()->workingDir().path()
@@ -173,11 +195,11 @@ void LauncherRunJobs::run(const QString &value)
     std::signal(SIGINT,  handleSignal);
     std::signal(SIGTERM, handleSignal);
 
-    *out << QStringLiteral("Starting %1 session(s) for generator '%2'.\n"
-                           "Logs: %3\n"
+    *out << QStringLiteral("Starting %1 session(s) for generator '%2' using %3.\n"
+                           "Logs: %4\n"
                            "Press Ctrl+C to stop after the current job(s) finish.\n")
                 .arg(numSessions)
-                .arg(value, logDir.path());
+                .arg(value, cli->getName(), logDir.path());
     out->flush();
 
     // activeCount is heap-allocated so it outlives this stack frame.
@@ -187,7 +209,7 @@ void LauncherRunJobs::run(const QString &value)
     for (int i = 0; i < numSessions; ++i) {
         // Fire-and-forget: QCoro keeps the coroutine alive via the awaitable
         // registered with the event loop for each co_await inside runSession().
-        runSession(gen, logDir, out, i, activeCount);
+        runSession(gen, logDir, out, i, activeCount, cli);
     }
     // exec() in main() drives the event loop until all sessions call quit().
 }

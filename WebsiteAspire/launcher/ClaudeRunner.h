@@ -6,19 +6,21 @@
 
 #include <QCoro/QCoroTask>
 
+class AbstractCli;
+
 // Result returned by runClaudeJob().
 struct ClaudeJobResult {
     QString json;            // Extracted JSON reply — empty on any failure.
-    QString rawOutput;       // Full stdout from the Claude process.
-    QString stderrOutput;    // Stderr from the Claude process.
+    QString rawOutput;       // Full stdout from the CLI process.
+    QString stderrOutput;    // Stderr from the CLI process.
     int     exitCode       = -1;
     qint64  durationMs     = 0;
-    bool    processStarted = false; // false when the claude executable was not found.
+    bool    processStarted = false; // false when the CLI executable was not found.
 };
 
-// Runs a single generator job through the Claude CLI and returns a ClaudeJobResult.
+// Runs a single generator job through the given AI CLI and returns a ClaudeJobResult.
 //
-// Spawns: claude -p <jobJson> --dangerously-skip-permissions
+// Spawns: <cli->getExecutable()> <cli->promptArgs()>
 // in a fresh QTemporaryDir so each session is fully isolated.
 //
 // ClaudeJobResult::json is populated only when processStarted is true,
@@ -26,7 +28,7 @@ struct ClaudeJobResult {
 //   1. Whole stdout is valid JSON.
 //   2. A ```json...``` (or ``` ... ```) fenced code block contains JSON.
 //   3. The substring starting at the first '{' or '[' is valid JSON.
-QCoro::Task<ClaudeJobResult> runClaudeJob(const QString &jobJson);
+QCoro::Task<ClaudeJobResult> runClaudeJob(const QString &jobJson, AbstractCli *cli);
 
 // Writes a per-job log file to logDir/<timestamp>_<jobId>.txt.
 // Creates logDir if it does not exist.  Silent on write failure.

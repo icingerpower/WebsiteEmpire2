@@ -28,6 +28,7 @@
 #include "launcher/ClaudeRunner.h"
 #include "launcher/LancherGenerator.h"
 #include "launcher/LauncherRunJobs.h"
+#include "aicli/AbstractCli.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
 
 WidgetGenerator::WidgetGenerator(QWidget *parent)
@@ -424,13 +425,21 @@ QCoro::Task<void> WidgetGenerator::_runSession(int sessionIndex)
             tr("[S%1] Running: %2 (%3 pending)")
                 .arg(QString::number(sNum), jobId, QString::number(m_generator->pendingCount())));
 
-        const ClaudeJobResult result = co_await runClaudeJob(jobJson);
+        AbstractCli *cli = AbstractCli::ALL_CLIS().isEmpty()
+                           ? nullptr : AbstractCli::ALL_CLIS().first();
+        if (!cli) {
+            ui->labelLog->setText(tr("[S%1] FATAL: no AI CLI registered.").arg(sNum));
+            ++m_jobsFailed;
+            break;
+        }
+
+        const ClaudeJobResult result = co_await runClaudeJob(jobJson, cli);
         writeClaudeJobLog(logDir, jobId, result);
 
         if (!result.processStarted) {
-            // 'claude' executable not found — no point retrying any job.
             ui->labelLog->setText(
-                tr("[S%1] FATAL: 'claude' not found in PATH. Logs: claude_logs/").arg(sNum));
+                tr("[S%1] FATAL: '%2' not found in PATH. Logs: claude_logs/")
+                    .arg(sNum).arg(cli->getExecutable()));
             ++m_jobsFailed;
             break;
         }
