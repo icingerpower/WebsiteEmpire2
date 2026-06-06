@@ -64,9 +64,9 @@ private:
 
     void _renderPage(const PreviewEntry &entry);
     // Replaces <img src="/file.svg"> tags in html with PNG data URIs rendered
-    // from the SVG blobs in images.db.  Prefers the blob stored under domain=lang
-    // and falls back to domain="" (source).  No-op if images.db does not exist.
-    void _inlineSvgs(QString &html, const QString &lang);
+    // from the SVG blobs in images.db.  Priority: lang code > website domain >
+    // domain="" (source).  No-op if images.db does not exist.
+    void _inlineSvgs(QString &html, const QString &domain, const QString &lang);
     // Replaces <img src="/images/{domain}/{file}"> tags with base64 data URIs
     // loaded from images.db.  Prefers website domain, then language code (for
     // translated social WebP variants), then falls back to domain="".
