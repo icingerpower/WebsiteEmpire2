@@ -28,7 +28,7 @@ void ImageController::serveImage(const drogon::HttpRequestPtr                   
 
     auto resp = drogon::HttpResponse::newHttpResponse();
     resp->setStatusCode(drogon::k200OK);
-    resp->addHeader("Content-Type", imageOpt->mimeType);
+    resp->setContentTypeString(imageOpt->mimeType);
     resp->addHeader("Cache-Control", "public, max-age=31536000, immutable");
     resp->setBody(std::string(reinterpret_cast<const char *>(imageOpt->blob.data()),
                                imageOpt->blob.size()));
