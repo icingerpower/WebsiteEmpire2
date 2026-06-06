@@ -44,6 +44,8 @@ void AbstractShortCodeImage::addCode(QStringView     origContent,
     const QString         &width    = parsed.arguments.value(QLatin1String(ID_WIDTH));
     const QString         &height   = parsed.arguments.value(QLatin1String(ID_HEIGHT));
 
+    // Plain <img> — the page-level lightbox (AbstractPageType) handles zoom for
+    // all .page-content img[src] elements automatically.
     html += QStringLiteral("<img src=\"/");
     html += fileName;
     html += QStringLiteral("\" alt=\"");
@@ -59,7 +61,7 @@ void AbstractShortCodeImage::addCode(QStringView     origContent,
         html += height;
         html += QStringLiteral("\"");
     }
-    html += QStringLiteral(" />");
+    html += QStringLiteral(">");
     Q_UNUSED(engine)
     Q_UNUSED(websiteIndex)
     Q_UNUSED(css)

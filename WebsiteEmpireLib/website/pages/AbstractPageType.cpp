@@ -178,8 +178,12 @@ QString AbstractPageType::_buildHreflangTags(AbstractEngine &engine, int /*websi
         if (lang.isEmpty() || domain.isEmpty()) {
             continue;
         }
-        // Only include languages with a published deploy/{lang}/content.db.
+        // Only include languages with a published deploy/{lang}/content.db
+        // AND where this specific page is available (translated or source lang).
         if (!engine.isLangDeployed(lang)) {
+            continue;
+        }
+        if (!engine.isPageAvailable(m_permalink, i)) {
             continue;
         }
 
@@ -353,12 +357,12 @@ void AbstractPageType::addCode(QStringView     origContent,
         // Native <dialog> lightbox overlay
         baseCss += QStringLiteral("#img-lightbox{"
             "padding:0;background:transparent;border:none;"
-            "max-width:100vw;max-height:100vh}");
+            "color-scheme:light;max-width:100vw;max-height:100vh}");
         baseCss += QStringLiteral("#img-lightbox::backdrop{"
             "background:rgba(0,0,0,.85);cursor:zoom-out}");
         baseCss += QStringLiteral("#img-lightbox img{"
-            "display:block;max-width:min(90vw,1200px);max-height:90vh;"
-            "object-fit:contain;cursor:zoom-out;border-radius:4px}");
+            "display:block;width:min(90vw,1200px);height:auto;max-height:90vh;"
+            "background:#fff;cursor:zoom-out;border-radius:4px}");
         baseCss += QStringLiteral("#img-lightbox__close{"
             "position:fixed;top:1rem;right:1.25rem;"
             "background:none;border:none;color:#fff;"
