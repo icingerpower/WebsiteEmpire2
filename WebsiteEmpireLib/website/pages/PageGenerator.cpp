@@ -51,6 +51,12 @@ PageGenerator::PageGenerator(IPageRepository &pageRepo, CategoryTable &categoryT
 {
 }
 
+void PageGenerator::setWebsiteContext(const QString &websiteName, const QString &author)
+{
+    m_websiteName   = websiteName;
+    m_websiteAuthor = author;
+}
+
 // =============================================================================
 // gzipCompress
 // =============================================================================
@@ -134,7 +140,20 @@ bool PageGenerator::_writePage(AbstractPageType &type,
                                 AbstractEngine   &engine,
                                 int               websiteIndex)
 {
-    type.setGenerationContext(record.permalink, record.lang, record.langCodesToTranslate);
+    QHash<QString, QString> publishedByLang;
+    QHash<QString, QString> updatedByLang;
+    publishedByLang[record.lang] = record.createdAt;
+    updatedByLang[record.lang]   = record.updatedAt;
+    if (record.id > 0) {
+        for (const PageRecord &tr : m_pageRepo.findTranslations(record.id)) {
+            publishedByLang[tr.lang] = tr.createdAt;
+            updatedByLang[tr.lang]   = tr.updatedAt;
+        }
+    }
+    type.setGenerationContext(record.permalink, record.lang, record.langCodesToTranslate,
+                              publishedByLang, updatedByLang);
+    type.setWebsiteContext(m_websiteName, m_websiteAuthor);
+    type.prepareJsonLdImage(m_workingDir, domain);
 
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
@@ -233,6 +252,7 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                                int             websiteIndex,
                                const QString  &sitemapBaseUrl)
 {
+    m_workingDir = workingDir;
     static std::atomic<int> s_counter{0};
     const QString connName = QStringLiteral("page_generator_all_")
                              + QString::number(s_counter.fetch_add(1));
@@ -465,6 +485,7 @@ int PageGenerator::generateSubset(const QList<int> &pageIds,
         return 0;
     }
 
+    m_workingDir = workingDir;
     static std::atomic<int> s_counter{0};
     const QString connName = QStringLiteral("page_generator_subset_")
                              + QString::number(s_counter.fetch_add(1));

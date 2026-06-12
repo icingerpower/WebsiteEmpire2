@@ -170,10 +170,14 @@ void AbstractTheme::_ensureLoaded() const
             m_values.insert(param.id, settings.value(param.id));
         }
     }
-    // Load source language code (const_cast because _ensureLoaded is const
-    // and m_sourceLangCode is loaded lazily alongside params).
-    const_cast<AbstractTheme *>(this)->m_sourceLangCode =
-        settings.value(QStringLiteral("source_lang")).toString();
+    // Load source language code from theme params file.
+    AbstractTheme *self = const_cast<AbstractTheme *>(this);
+    self->m_sourceLangCode = settings.value(QStringLiteral("source_lang")).toString();
+    // Load favicon filenames from the theme-independent website_favicon.ini.
+    QSettings faviconSettings(_faviconSettingsPath(), QSettings::IniFormat);
+    self->m_faviconSvg        = faviconSettings.value(QStringLiteral("favicon_svg")).toString();
+    self->m_faviconIco        = faviconSettings.value(QStringLiteral("favicon_ico")).toString();
+    self->m_faviconAppleTouch = faviconSettings.value(QStringLiteral("favicon_apple_touch")).toString();
 }
 
 void AbstractTheme::_saveValues() const
@@ -187,6 +191,11 @@ void AbstractTheme::_saveValues() const
 QString AbstractTheme::_settingsPath() const
 {
     return m_workingDir.filePath(getId() + QStringLiteral("_params.ini"));
+}
+
+QString AbstractTheme::_faviconSettingsPath() const
+{
+    return m_workingDir.filePath(QStringLiteral("website_favicon.ini"));
 }
 
 QString AbstractTheme::_blocsSettingsPath() const
@@ -300,6 +309,47 @@ QString AbstractTheme::sourceLangCode() const
 {
     _ensureLoaded();
     return m_sourceLangCode;
+}
+
+// ---- Favicon accessors -------------------------------------------------------
+
+QString AbstractTheme::faviconSvg() const
+{
+    _ensureLoaded();
+    return m_faviconSvg;
+}
+
+void AbstractTheme::setFaviconSvg(const QString &filename)
+{
+    m_faviconSvg = filename;
+    QSettings settings(_faviconSettingsPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("favicon_svg"), filename);
+}
+
+QString AbstractTheme::faviconIco() const
+{
+    _ensureLoaded();
+    return m_faviconIco;
+}
+
+void AbstractTheme::setFaviconIco(const QString &filename)
+{
+    m_faviconIco = filename;
+    QSettings settings(_faviconSettingsPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("favicon_ico"), filename);
+}
+
+QString AbstractTheme::faviconAppleTouch() const
+{
+    _ensureLoaded();
+    return m_faviconAppleTouch;
+}
+
+void AbstractTheme::setFaviconAppleTouch(const QString &filename)
+{
+    m_faviconAppleTouch = filename;
+    QSettings settings(_faviconSettingsPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("favicon_apple_touch"), filename);
 }
 
 void AbstractTheme::addCodeTop(AbstractEngine &engine,

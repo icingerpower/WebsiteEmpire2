@@ -49,6 +49,11 @@ void PageBlocText::save(QHash<QString, QString> &values) const
     m_translations.saveToMap(values);
 }
 
+const QString &PageBlocText::text() const
+{
+    return m_text;
+}
+
 // =============================================================================
 // addCode
 // =============================================================================

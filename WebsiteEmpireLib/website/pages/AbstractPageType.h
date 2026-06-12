@@ -130,14 +130,50 @@ public:
     virtual void bindGenerationContext(IPageRepository &repo, const QDir &workingDir);
 
     /**
-     * Called by PageGenerator before addCode() to supply the page's permalink,
-     * its source language, and the list of target languages for hreflang generation.
-     * Stored in m_permalink / m_sourceLang / m_targetLangs and forwarded to
-     * buildHeadMetaTags() by addCode().
+     * Called by PageGenerator before addCode() to supply website-level metadata
+     * (website name and author name) used by JSON-LD structured data.
+     * Both strings may be empty if the caller does not have settings available.
      */
-    void setGenerationContext(const QString     &permalink,
-                              const QString     &sourceLang,
-                              const QStringList &targetLangs);
+    void setWebsiteContext(const QString &websiteName, const QString &author);
+
+    /**
+     * Called by PageGenerator before addCode() to precompute the JSON-LD image
+     * fallback when no second-pass social-media images have been generated yet.
+     *
+     * domain is the bare hostname used to look up the source SVG in images.db
+     * (e.g. "biomarky.com").  The lookup tries domain="" (global fallback) first,
+     * then the supplied domain, to handle both storage conventions.
+     *
+     * Default: no-op.  PageTypeArticle overrides this to rasterize the article's
+     * primary SVG illustration to a 1200×630 WebP and cache it in images.db under
+     * domain="" (global fallback served to every language/domain variant).
+     *
+     * The result is stored in m_jsonLdFallbackImage (filename only, no domain or
+     * leading slash) and consumed by buildHeadMetaTags().
+     */
+    virtual void prepareJsonLdImage(const QDir &workingDir, const QString &domain);
+
+    /**
+     * Called by PageGenerator before addCode() to supply the page's permalink,
+     * its source language, the list of target languages for hreflang generation,
+     * and per-language creation / update timestamps.
+     *
+     * publishedByLang maps each BCP-47 language code to the ISO 8601 UTC
+     * creation timestamp of that language's page record (i.e. when that
+     * translation was first created).  updatedByLang maps the same codes to the
+     * last-modified timestamp.  Both maps are keyed by the language they
+     * describe; the source language is always present.
+     *
+     * buildHeadMetaTags() implementations use these to emit
+     * article:published_time / article:modified_time Open Graph tags and the
+     * JSON-LD datePublished / dateModified properties, keyed by the langCode
+     * argument they receive.
+     */
+    void setGenerationContext(const QString              &permalink,
+                              const QString              &sourceLang,
+                              const QStringList          &targetLangs,
+                              const QHash<QString, QString> &publishedByLang,
+                              const QHash<QString, QString> &updatedByLang);
 
     /**
      * Returns <title>, canonical, Open Graph and hreflang <meta>/<link> tags
@@ -163,6 +199,14 @@ public:
      * the default false so that missing SVG does not block completion.
      */
     virtual bool hasSvg() const;
+
+    /**
+     * Returns true when this page type should be indexed by search engines.
+     * Default: true.  Override and return false for page types that must never
+     * appear in search results (e.g. PageTypeLegal — privacy policy, ToS).
+     * addCode() emits <meta name="robots" content="noindex,follow"> when false.
+     */
+    virtual bool shouldIndex() const;
 
     /**
      * Aggregates each bloc's getAiKeyClues() into a single flat map, prefixing
@@ -222,9 +266,16 @@ public:
 
 protected:
     // Set by setGenerationContext(); used by buildHeadMetaTags() overrides.
-    QString     m_permalink;
-    QString     m_sourceLang;
-    QStringList m_targetLangs;
+    QString                m_permalink;
+    QString                m_sourceLang;
+    QStringList            m_targetLangs;
+    QHash<QString, QString> m_publishedByLang; ///< lang → ISO 8601 creation timestamp
+    QHash<QString, QString> m_updatedByLang;   ///< lang → ISO 8601 last-modified timestamp
+    // Set by setWebsiteContext(); used by JSON-LD author/publisher fields.
+    QString                m_websiteName;
+    QString                m_websiteAuthor;
+    // Set by prepareJsonLdImage(); used by buildHeadMetaTags() as image fallback.
+    QString                m_jsonLdFallbackImage;
 
     /**
      * Hook called by addCode() inside <main>, after all page blocs and before

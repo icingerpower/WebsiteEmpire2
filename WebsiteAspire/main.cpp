@@ -38,6 +38,11 @@ int main(int argc, char *argv[])
         QStringLiteral("filepath"));
     parser.addOption(urlsOption);
 
+    parser.addOption(QCommandLineOption(
+        AbstractLauncher::OPTION_CLI,
+        QCoreApplication::tr("AI CLI to use (e.g. claude, gemini). Defaults to the first registered CLI."),
+        QStringLiteral("name")));
+
     for (AbstractLauncher *launcher : AbstractLauncher::ALL_LAUNCHERS()) {
         parser.addOption(QCommandLineOption(
             launcher->getOptionName(),

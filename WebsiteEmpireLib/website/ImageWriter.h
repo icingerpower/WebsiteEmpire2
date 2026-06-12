@@ -82,6 +82,12 @@ public:
      */
     QByteArray readSvg(const QString &domain, const QString &filename) const;
 
+    /**
+     * Returns true if (domain, filename) already exists in image_names.
+     * Used to skip re-rasterization when the auto-fallback OG image is already cached.
+     */
+    bool hasName(const QString &domain, const QString &filename) const;
+
 private:
     void _ensureSchema();
 

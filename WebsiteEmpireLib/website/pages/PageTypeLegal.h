@@ -24,6 +24,9 @@ public:
     QString getTypeId()      const override;
     QString getDisplayName() const override;
 
+    /** Legal pages (privacy policy, ToS, etc.) must never appear in search results. */
+    bool shouldIndex() const override;
+
 protected:
     void addInnerTopCode(AbstractEngine &engine,
                              int             websiteIndex,

@@ -21,4 +21,24 @@ const QList<const AbstractPageBloc *> &PageTypeHome::getPageBlocs() const
     return m_blocs;
 }
 
+QString PageTypeHome::buildHeadMetaTags(const QString &baseUrl,
+                                         const QString &/*langCode*/) const
+{
+    if (m_websiteName.isEmpty() || baseUrl.isEmpty()) {
+        return {};
+    }
+    QString result;
+    result += QStringLiteral("<script type=\"application/ld+json\">"
+                              "{\"@context\":\"https://schema.org\","
+                              "\"@type\":\"Organization\","
+                              "\"name\":\"");
+    result += m_websiteName.toHtmlEscaped();
+    result += QStringLiteral("\",\"url\":\"");
+    result += baseUrl;
+    result += QStringLiteral("\",\"logo\":{\"@type\":\"ImageObject\",\"url\":\"");
+    result += baseUrl;
+    result += QStringLiteral("/favicon.svg\"}}</script>\n");
+    return result;
+}
+
 DECLARE_PAGE_TYPE(PageTypeHome)

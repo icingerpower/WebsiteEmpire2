@@ -88,6 +88,16 @@ public:
     // transferred to the caller.
     AbstractPageBlockWidget *createEditWidget() override;
 
+    /**
+     * Returns the breadcrumb chain for the primary (first) selected category,
+     * from root ancestor down to the deepest leaf, as (displayName, permalink)
+     * pairs.  displayName uses langCode if a translation exists.  permalink is
+     * the English-derived hub slug (e.g. "/bone-conditions.html").
+     * Returns an empty list when no category is selected.
+     */
+    struct BreadcrumbItem { QString name; QString permalink; };
+    QList<BreadcrumbItem> primaryChain(const QString &langCode) const;
+
     // Returns AttributeCategory instances for the currently loaded content.
     const QList<const AbstractAttribute *> &getAttributes() const override;
 

@@ -2,6 +2,7 @@
 
 #include "website/AbstractEngine.h"
 #include "website/HostTable.h"
+#include "website/WebsiteSettingsTable.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/CategoryHubDirtySet.h"
 #include "website/pages/CategoryHubSyncer.h"
@@ -152,6 +153,10 @@ void LauncherPublish::run(const QString & /*value*/)
 
     // ── Generate each qualifying language directly into its deploy directory ───
     PageGenerator       generator(pageRepo, categoryTable);
+    {
+        WebsiteSettingsTable siteSettings(workingDir);
+        generator.setWebsiteContext(siteSettings.websiteName(), siteSettings.author());
+    }
     CategoryHubDirtySet hubDirtySet(workingDir);
     CategoryHubSyncer   hubSyncer(pageRepo, categoryTable, hubDirtySet, generator);
 

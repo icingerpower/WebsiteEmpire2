@@ -296,12 +296,22 @@ void WidgetGenerator::copyCommand()
                  LancherGenerator::OPTION_NAME,
                  generatorId);
 
-    const QString runBase =
+    QString runBase =
         QStringLiteral("WebsiteAspire --%1 \"%2\" --%3 %4")
             .arg(AbstractLauncher::OPTION_WORKING_DIR,
                  workingDir,
                  LauncherRunJobs::OPTION_NAME,
                  generatorId);
+
+    QString cliName = WorkingDirectoryManager::instance()->settings()
+                          ->value(QStringLiteral("defaultCli")).toString();
+    if (cliName.isEmpty() && !AbstractCli::ALL_CLIS().isEmpty()) {
+        cliName = AbstractCli::ALL_CLIS().first()->getName();
+    }
+    if (!cliName.isEmpty()) {
+        runBase += QStringLiteral(" --") + AbstractLauncher::OPTION_CLI
+                   + QLatin1Char(' ') + cliName;
+    }
 
     QMessageBox::information(
         this,

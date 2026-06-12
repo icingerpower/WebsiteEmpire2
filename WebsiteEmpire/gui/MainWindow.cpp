@@ -67,6 +67,8 @@ void MainWindow::_init()
     ui->tabGeneration->setup(workingDir, m_engine.data(), m_settingsTable.data());
     ui->tabUpdate->setup(workingDir, m_engine.data(), m_settingsTable.data());
     ui->tabTheme->setTheme(m_theme.data());
+    ui->tabSettings->setWorkingDir(workingDir);
+    ui->tabSettings->setTheme(m_theme.data());
     ui->tabTranslations->setup(workingDir, m_engine.data(), m_theme.data());
 
     connect(ui->tabTheme, &PaneTheme::themeIdSelected,
@@ -95,5 +97,6 @@ void MainWindow::_reloadTheme(const QString &themeId)
     }
 
     ui->tabTheme->setTheme(m_theme.data());
+    ui->tabSettings->setTheme(m_theme.data());
     ui->tabTranslations->setTheme(m_theme.data());
 }

@@ -4,6 +4,7 @@
 #include "../dialogs/DialogEditHosts.h"
 #include "website/AbstractEngine.h"
 #include "website/HostTable.h"
+#include "website/WebsiteSettingsTable.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/CategoryHubDirtySet.h"
 #include "website/pages/CategoryHubSyncer.h"
@@ -609,6 +610,10 @@ void PaneDomains::deployLocally()
         PageRepositoryDb pageRepo(pageDb);
         CategoryTable    categoryTable(m_workingDir);
         PageGenerator       generator(pageRepo, categoryTable);
+        {
+            WebsiteSettingsTable siteSettings(m_workingDir);
+            generator.setWebsiteContext(siteSettings.websiteName(), siteSettings.author());
+        }
         CategoryHubDirtySet hubDirtySet(m_workingDir);
         CategoryHubSyncer   hubSyncer(pageRepo, categoryTable, hubDirtySet, generator);
         hubSyncer.syncStubs(m_engine->getLangCode(0));

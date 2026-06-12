@@ -58,6 +58,9 @@ public:
     /** Returns a new PageBlocTextWidget; ownership is transferred to the caller. */
     AbstractPageBlockWidget *createEditWidget() override;
 
+    /** Returns the raw source text (untranslated). */
+    const QString &text() const;
+
     // ---- Translation protocol ------------------------------------------------
 
     /** Emits {KEY_TEXT, m_text} when m_text is non-empty. */

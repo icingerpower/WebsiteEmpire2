@@ -26,7 +26,7 @@ void PageTypeCategory::bindGenerationContext(IPageRepository &repo, const QDir &
     m_hubGridBloc.bindContext(repo, workingDir);
 }
 
-QString PageTypeCategory::buildHeadMetaTags(const QString &baseUrl, const QString & /*langCode*/) const
+QString PageTypeCategory::buildHeadMetaTags(const QString &baseUrl, const QString &langCode) const
 {
     QString result;
 
@@ -69,6 +69,26 @@ QString PageTypeCategory::buildHeadMetaTags(const QString &baseUrl, const QStrin
         if (!desc.isEmpty()) {
             result += platform->descMetaTagHtml(desc);
         }
+    }
+
+    // ---- JSON-LD WebPage dateModified (hub pages evolve; no published date) -
+    const QString &updated = m_updatedByLang.contains(langCode)
+                             ? m_updatedByLang.value(langCode)
+                             : m_updatedByLang.value(m_sourceLang);
+    if (!updated.isEmpty()) {
+        result += QStringLiteral("<script type=\"application/ld+json\">"
+                                  "{\"@context\":\"https://schema.org\","
+                                  "\"@type\":\"WebPage\","
+                                  "\"dateModified\":\"");
+        result += updated;
+        result += QLatin1Char('"');
+        if (!m_permalink.isEmpty() && !baseUrl.isEmpty()) {
+            result += QStringLiteral(",\"url\":\"");
+            result += baseUrl;
+            result += m_permalink;
+            result += QLatin1Char('"');
+        }
+        result += QStringLiteral("}</script>\n");
     }
 
     return result;

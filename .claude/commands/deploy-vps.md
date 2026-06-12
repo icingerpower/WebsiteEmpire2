@@ -136,11 +136,26 @@ If you see HTML, continue. If you see an error or 404, stop and diagnose.
 > - Write new HTTP-only config (Write tool → scp)
 > - Re-run: `certbot --nginx -d {domain} -d www.{domain} --reinstall`
 
+> ⚠️ **CANONICAL DOMAIN — www vs non-www**
+>
+> The config below uses **non-www as the canonical** (`https://{domain}/`).
+> `www.` always 301-redirects to non-www — on both HTTP and HTTPS.
+> This prevents Google from indexing duplicate homepage versions (learned from biomarky.com).
+> The canonical tag in the generated HTML also points to non-www, so both must agree.
+
 Use the **Write tool** to create `/tmp/{domain}.nginx` (HTTP only — no SSL):
 
 ```nginx
+# Redirect www → non-www (certbot will add SSL to this block)
 server {
-    server_name {domain} www.{domain};
+    server_name www.{domain};
+    listen 80;
+    return 301 https://{domain}$request_uri;
+}
+
+# Main server — non-www only (certbot will add SSL here)
+server {
+    server_name {domain};
 
     location = / {
         if ($http_accept_language ~* "^{lang2}") {
@@ -173,6 +188,7 @@ Rules:
 - Non-English languages: `proxy_pass` URL **must have trailing slash** (strips the language prefix)
 - English catch-all: **no trailing slash** on proxy_pass, always last
 - Use 302 (not 301) for root redirect so Google crawls all language versions
+- **Never put `www.{domain}` in the main server block** — it must only appear in the redirect block above
 
 Upload and enable:
 ```bash

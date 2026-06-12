@@ -279,6 +279,10 @@ void PaneGeneratedPages::_initDb()
     m_pageDb        = std::make_unique<PageDb>(m_workingDir);
     m_pageRepo      = std::make_unique<PageRepositoryDb>(*m_pageDb);
     m_pageGenerator = std::make_unique<PageGenerator>(*m_pageRepo, *m_categoryTable);
+    if (m_settingsTable) {
+        m_pageGenerator->setWebsiteContext(m_settingsTable->websiteName(),
+                                           m_settingsTable->author());
+    }
     m_dirtySet      = std::make_unique<CategoryHubDirtySet>(m_workingDir);
     m_syncer        = std::make_unique<CategoryHubSyncer>(
                           *m_pageRepo, *m_categoryTable, *m_dirtySet, *m_pageGenerator);

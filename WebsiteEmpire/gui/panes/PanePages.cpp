@@ -471,10 +471,18 @@ void PanePages::toggleSocialMedia()
 
 void PanePages::viewCommandTranslate()
 {
-    const QString cmd = QStringLiteral("WebsiteEmpire --%1 \"%2\" --%3")
+    QString cmd = QStringLiteral("WebsiteEmpire --%1 \"%2\" --%3")
         .arg(AbstractLauncher::OPTION_WORKING_DIR,
              m_workingDir.absolutePath(),
              LauncherTranslate::OPTION_NAME);
+
+    const QString cliName = WorkingDirectoryManager::instance()->settings()
+                                ->value(QStringLiteral("defaultCli")).toString();
+    if (!cliName.isEmpty()) {
+        cmd += QStringLiteral(" --") + AbstractLauncher::OPTION_CLI
+               + QLatin1Char(' ') + cliName;
+    }
+
     QMessageBox::information(this,
         tr("Command Line — Translate"),
         tr("Run the following command to translate all pending pages without launching the UI:\n\n%1")

@@ -4,6 +4,7 @@
 
 #include <QHash>
 #include <QString>
+#include <QUrl>
 
 // =============================================================================
 // Registry internals
@@ -130,16 +131,36 @@ void AbstractPageType::bindGenerationContext(IPageRepository & /*repo*/,
 }
 
 // =============================================================================
+// setWebsiteContext
+// =============================================================================
+
+void AbstractPageType::setWebsiteContext(const QString &websiteName, const QString &author)
+{
+    m_websiteName   = websiteName;
+    m_websiteAuthor = author;
+}
+
+// =============================================================================
+// prepareJsonLdImage
+// =============================================================================
+
+void AbstractPageType::prepareJsonLdImage(const QDir & /*workingDir*/, const QString & /*domain*/) {}
+
+// =============================================================================
 // setGenerationContext
 // =============================================================================
 
-void AbstractPageType::setGenerationContext(const QString     &permalink,
-                                             const QString     &sourceLang,
-                                             const QStringList &targetLangs)
+void AbstractPageType::setGenerationContext(const QString              &permalink,
+                                             const QString              &sourceLang,
+                                             const QStringList          &targetLangs,
+                                             const QHash<QString, QString> &publishedByLang,
+                                             const QHash<QString, QString> &updatedByLang)
 {
-    m_permalink   = permalink;
-    m_sourceLang  = sourceLang;
-    m_targetLangs = targetLangs;
+    m_permalink       = permalink;
+    m_sourceLang      = sourceLang;
+    m_targetLangs     = targetLangs;
+    m_publishedByLang = publishedByLang;
+    m_updatedByLang   = updatedByLang;
 }
 
 // =============================================================================
@@ -228,6 +249,11 @@ QString AbstractPageType::buildHeadMetaTags(const QString & /*baseUrl*/,
 bool AbstractPageType::hasSvg() const
 {
     return false;
+}
+
+bool AbstractPageType::shouldIndex() const
+{
+    return true;
 }
 
 void AbstractPageType::addInnerTopCode(AbstractEngine & /*engine*/,
@@ -397,15 +423,48 @@ void AbstractPageType::addCode(QStringView     origContent,
         "if(btn)btn.addEventListener('click',close)"
         "})();");
 
-    // <head> extras: viewport meta + optional web font stylesheet
+    // <head> extras: viewport meta, favicons, optional web font stylesheet
     QString headExtra = QStringLiteral("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
     if (theme) {
+        const QString svgFav = theme->faviconSvg();
+        if (!svgFav.isEmpty()) {
+            headExtra += QStringLiteral("<link rel=\"icon\" type=\"image/svg+xml\" href=\"/");
+            headExtra += svgFav;
+            headExtra += QStringLiteral("\">");
+        }
+        const QString icoFav = theme->faviconIco();
+        if (!icoFav.isEmpty()) {
+            headExtra += QStringLiteral("<link rel=\"icon\" type=\"image/x-icon\" sizes=\"32x32\" href=\"/");
+            headExtra += icoFav;
+            headExtra += QStringLiteral("\">");
+        }
+        const QString appleFav = theme->faviconAppleTouch();
+        if (!appleFav.isEmpty()) {
+            headExtra += QStringLiteral("<link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"/");
+            headExtra += appleFav;
+            headExtra += QStringLiteral("\">");
+        }
         const QString fontUrl = theme->fontUrl();
         if (!fontUrl.isEmpty()) {
+            // Preconnect to the font origin before the stylesheet so the
+            // browser can open the TCP+TLS connection while parsing the link.
+            const QUrl parsedUrl(fontUrl);
+            const QString fontOrigin = parsedUrl.scheme() + QStringLiteral("://") + parsedUrl.host();
+            headExtra += QStringLiteral("<link rel=\"preconnect\" href=\"");
+            headExtra += fontOrigin;
+            headExtra += QStringLiteral("\">");
+            // Google Fonts serves glyph files from a separate CDN origin.
+            if (parsedUrl.host().contains(QStringLiteral("googleapis.com"))) {
+                headExtra += QStringLiteral("<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>");
+            }
             headExtra += QStringLiteral("<link rel=\"stylesheet\" href=\"");
             headExtra += fontUrl;
             headExtra += QStringLiteral("\">");
         }
+    }
+
+    if (!shouldIndex()) {
+        headExtra += QStringLiteral("<meta name=\"robots\" content=\"noindex,follow\">");
     }
 
     const QString langCode = engine.getLangCode(websiteIndex);

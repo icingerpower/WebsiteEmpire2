@@ -126,6 +126,18 @@ QByteArray ImageWriter::readSvg(const QString &domain, const QString &filename) 
     return q.value(0).toByteArray();
 }
 
+bool ImageWriter::hasName(const QString &domain, const QString &filename) const
+{
+    const QString &safeDomain = domain.isNull() ? QStringLiteral("") : domain;
+    QSqlDatabase db = QSqlDatabase::database(m_connName);
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral(
+        "SELECT 1 FROM image_names WHERE domain = :domain AND filename = :filename LIMIT 1"));
+    q.bindValue(QStringLiteral(":domain"),   safeDomain);
+    q.bindValue(QStringLiteral(":filename"), filename);
+    return q.exec() && q.next();
+}
+
 // =============================================================================
 // Private
 // =============================================================================

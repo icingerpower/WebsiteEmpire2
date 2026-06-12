@@ -40,6 +40,14 @@ public:
 
     const QList<const AbstractPageBloc *> &getPageBlocs() const override;
 
+    /**
+     * Emits an Organization JSON-LD block using the site name and base URL
+     * supplied via setWebsiteContext() — helps Google associate the domain
+     * with a named entity without any additional per-page markup.
+     */
+    QString buildHeadMetaTags(const QString &baseUrl,
+                              const QString &langCode) const override;
+
 private:
     PageBlocText                     m_textBlocTop;
     PageBlocImageLinks               m_imageLinksBloc;

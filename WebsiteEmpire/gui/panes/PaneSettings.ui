@@ -98,6 +98,117 @@
      </widget>
     </widget>
    </item>
+   <item>
+    <widget class="QGroupBox" name="groupBoxFavicon">
+     <property name="title">
+      <string>Favicon</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayoutFavicon">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelFaviconSvgType">
+        <property name="text">
+         <string>SVG (primary):</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="labelFaviconSvg">
+        <property name="text">
+         <string>—</string>
+        </property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+          <horstretch>1</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <widget class="QPushButton" name="pushButtonPickFaviconSvg">
+        <property name="text">
+         <string>Pick SVG…</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="3">
+       <widget class="QPushButton" name="pushButtonClearFaviconSvg">
+        <property name="text">
+         <string>Clear</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelFaviconIcoType">
+        <property name="text">
+         <string>ICO (fallback):</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="labelFaviconIco">
+        <property name="text">
+         <string>—</string>
+        </property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+          <horstretch>1</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="2">
+       <widget class="QPushButton" name="pushButtonPickFaviconIco">
+        <property name="text">
+         <string>Pick ICO…</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="3">
+       <widget class="QPushButton" name="pushButtonClearFaviconIco">
+        <property name="text">
+         <string>Clear</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="labelFaviconAppleType">
+        <property name="text">
+         <string>Apple touch:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QLabel" name="labelFaviconApple">
+        <property name="text">
+         <string>—</string>
+        </property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+          <horstretch>1</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="2">
+       <widget class="QPushButton" name="pushButtonPickFaviconApple">
+        <property name="text">
+         <string>Pick PNG…</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="3">
+       <widget class="QPushButton" name="pushButtonClearFaviconApple">
+        <property name="text">
+         <string>Clear</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
   </layout>
  </widget>
  <resources/>

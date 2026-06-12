@@ -89,6 +89,14 @@ public:
                                const QString &langCode) const override;
 
     /**
+     * Rasterizes the article's primary SVG illustration to a 1200×630 WebP and
+     * caches it in images.db under domain="" when no second-pass social-media
+     * images have been generated.  Sets m_jsonLdFallbackImage on success.
+     * No-op when any social image variant is already present.
+     */
+    void prepareJsonLdImage(const QDir &workingDir, const QString &domain) override;
+
+    /**
      * Returns true: PageTypeArticle always requires an SVG image in the first
      * pass.  LauncherGeneration will not mark the page Complete if SVG
      * generation failed — it stays ContentReady for retry on the next run.

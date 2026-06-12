@@ -21,9 +21,6 @@
 #include <QDir>
 #include <QFile>
 #include <QImage>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QMetaObject>
 #include <QPainter>
 #include <QProcess>
@@ -505,12 +502,7 @@ void PageTranslator::_processNextJob()
 
         m_process = new QProcess(this);
         m_process->setProgram(m_cli->getExecutable());
-        m_process->setArguments({QStringLiteral("-p"), QStringLiteral("-"),
-                                  QStringLiteral("--dangerously-skip-permissions"),
-                                  QStringLiteral("--no-session-persistence"),
-                                  QStringLiteral("--tools"), QStringLiteral(""),
-                                  QStringLiteral("--output-format"), QStringLiteral("stream-json"),
-                                  QStringLiteral("--verbose")});
+        m_process->setArguments(m_cli->translationPromptArgs());
         m_process->setWorkingDirectory(m_tempDir->path());
         m_process->setStandardInputFile(promptPath);
 
@@ -680,17 +672,16 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
     bool hasError = false;
 
     if (m_process->error() == QProcess::FailedToStart) {
-        _log(QStringLiteral("  claude executable not found in PATH for page %1 → %2")
-                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
+        _log(QStringLiteral("  %1 executable not found in PATH for page %2 → %3")
+                 .arg(m_cli->getName()).arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
         hasError = true;
     } else if (exitCode != 0) {
-        // Drain remaining stdout — Claude may have produced a valid response before
-        // the error (e.g. hitting max output tokens while still generating).
+        // Drain remaining stdout — CLI may have produced a valid response before the error.
         m_processOutput += m_process->readAllStandardOutput();
 
         const QString err = QString::fromUtf8(m_process->readAllStandardError()).trimmed();
-        _log(QStringLiteral("  claude error for page %1 → %2: %3  (stdout: %4 bytes)")
-                 .arg(m_currentJob.pageId).arg(m_currentJob.targetLang,
+        _log(QStringLiteral("  %1 error for page %2 → %3: %4  (stdout: %5 bytes)")
+                 .arg(m_cli->getName()).arg(m_currentJob.pageId).arg(m_currentJob.targetLang,
                       err.isEmpty() ? QStringLiteral("exit code %1").arg(exitCode) : err)
                  .arg(m_processOutput.size()), true);
 
@@ -724,53 +715,9 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
             }
         }
 
-        // The output is stream-json (one JSON object per line).
-        // We collect text from two sources and use whichever is longer:
-        //   1. {"type":"result","result":"..."} — final compiled response (may be tail-truncated for large outputs)
-        //   2. {"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}} — full assistant turn
-        QString resultText;
-        QString assistantText;
-
-        for (const QByteArray &line : m_processOutput.split('\n')) {
-            const QByteArray trimmed = line.trimmed();
-            if (trimmed.isEmpty()) {
-                continue;
-            }
-            const QJsonDocument doc = QJsonDocument::fromJson(trimmed);
-            if (!doc.isObject()) {
-                continue;
-            }
-            const QJsonObject obj = doc.object();
-            const QString type = obj.value(QStringLiteral("type")).toString();
-
-            if (type == QStringLiteral("result")) {
-                resultText = obj.value(QStringLiteral("result")).toString().trimmed();
-                break; // result is always the last line — no need to scan further
-            }
-
-            if (type == QStringLiteral("assistant")) {
-                const QJsonArray content = obj.value(QStringLiteral("message"))
-                                               .toObject()
-                                               .value(QStringLiteral("content"))
-                                               .toArray();
-                for (const QJsonValue &block : std::as_const(content)) {
-                    const QJsonObject blk = block.toObject();
-                    if (blk.value(QStringLiteral("type")).toString() == QStringLiteral("text")) {
-                        const QString t = blk.value(QStringLiteral("text")).toString().trimmed();
-                        if (!t.isEmpty()) {
-                            if (!assistantText.isEmpty()) {
-                                assistantText += QLatin1Char('\n');
-                            }
-                            assistantText += t;
-                        }
-                    }
-                }
-            }
-        }
-
-        _log(QStringLiteral("  result field: %1 chars  assistant content: %2 chars")
-                 .arg(resultText.size()).arg(assistantText.size()));
-        translatedJson = (assistantText.size() > resultText.size()) ? assistantText : resultText;
+        translatedJson = m_cli->extractTextFromOutput(m_processOutput);
+        _log(QStringLiteral("  Extracted %1 chars from %2 output")
+                 .arg(translatedJson.size()).arg(m_cli->getName()));
     }
 
     m_process->deleteLater();
@@ -1044,8 +991,8 @@ void PageTranslator::_launchTextTranslation(const QList<TranslatableField> &fiel
 {
     const QString prompt = TranslationProtocol::buildPrompt(
         fields, m_currentJob.sourceLang, m_currentJob.targetLang);
-    _log(QStringLiteral("  Sending %1 field(s) to claude, prompt size: %2 chars")
-             .arg(fields.size()).arg(prompt.size()));
+    _log(QStringLiteral("  Sending %1 field(s) to %2, prompt size: %3 chars")
+             .arg(fields.size()).arg(m_cli->getName()).arg(prompt.size()));
 
     m_tempDir = std::make_unique<QTemporaryDir>();
     if (!m_tempDir->isValid()) {
@@ -1076,16 +1023,8 @@ void PageTranslator::_launchTextTranslation(const QList<TranslatableField> &fiel
     m_processOutput.clear();
 
     m_process = new QProcess(this);
-    m_process->setProgram(QStringLiteral("claude"));
-    m_process->setArguments({QStringLiteral("-p"), QStringLiteral("-"),
-                              QStringLiteral("--dangerously-skip-permissions"),
-                              QStringLiteral("--no-session-persistence"),
-                              QStringLiteral("--tools"), QStringLiteral(""),
-                              QStringLiteral("--output-format"), QStringLiteral("stream-json"),
-                              QStringLiteral("--verbose")});
-    // Use the temp dir as cwd so the claude CLI finds no project context.
-    // --no-session-persistence ensures no previous session is resumed even
-    // if the prompt content matches a prior translation attempt.
+    m_process->setProgram(m_cli->getExecutable());
+    m_process->setArguments(m_cli->translationPromptArgs());
     m_process->setWorkingDirectory(m_tempDir->path());
     m_process->setStandardInputFile(promptPath);
 
@@ -1125,8 +1064,8 @@ void PageTranslator::_launchDirectChunkTranslation(const QString &chunkText)
               "Text:\n\n")
         + chunkText;
 
-    _log(QStringLiteral("  Sending direct chunk %1/%2 to claude, prompt size: %3 chars")
-             .arg(m_chunkState->chunkIndex).arg(m_chunkState->totalChunks).arg(prompt.size()));
+    _log(QStringLiteral("  Sending direct chunk %1/%2 to %3, prompt size: %4 chars")
+             .arg(m_chunkState->chunkIndex).arg(m_chunkState->totalChunks).arg(m_cli->getName()).arg(prompt.size()));
 
     m_tempDir = std::make_unique<QTemporaryDir>();
     if (!m_tempDir->isValid()) {
@@ -1158,13 +1097,8 @@ void PageTranslator::_launchDirectChunkTranslation(const QString &chunkText)
     m_isDirectChunkCall = true;
 
     m_process = new QProcess(this);
-    m_process->setProgram(QStringLiteral("claude"));
-    m_process->setArguments({QStringLiteral("-p"), QStringLiteral("-"),
-                              QStringLiteral("--dangerously-skip-permissions"),
-                              QStringLiteral("--no-session-persistence"),
-                              QStringLiteral("--tools"), QStringLiteral(""),
-                              QStringLiteral("--output-format"), QStringLiteral("stream-json"),
-                              QStringLiteral("--verbose")});
+    m_process->setProgram(m_cli->getExecutable());
+    m_process->setArguments(m_cli->translationPromptArgs());
     m_process->setWorkingDirectory(m_tempDir->path());
     m_process->setStandardInputFile(promptPath);
 
@@ -1290,7 +1224,9 @@ void PageTranslator::_finalizeTextTranslations(const QHash<QString, QString> &tr
             validateType->bindGenerationContext(m_repo, m_workingDir);
             validateType->setGenerationContext(m_currentPermalink,
                                                m_currentJob.targetLang,
-                                               QStringList{});
+                                               QStringList{},
+                                               {},
+                                               {});
             QString html, css, js;
             QSet<QString> cssDoneIds, jsDoneIds;
             try {
@@ -1357,6 +1293,13 @@ void PageTranslator::_saveSvgTranslation(const QString    &filename,
                                           const QString    &lang,
                                           const QByteArray &svgData)
 {
+    QSvgRenderer validator;
+    if (!validator.load(svgData)) {
+        _log(QStringLiteral("  _saveSvgTranslation: invalid SVG for %1 [%2] — discarding")
+                 .arg(filename, lang), true);
+        return;
+    }
+
     const QString dbPath = m_workingDir.filePath(QStringLiteral("images.db"));
     const QString connName = QStringLiteral("transl_svg_write_%1")
                                  .arg(reinterpret_cast<quintptr>(this));

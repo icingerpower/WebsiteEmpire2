@@ -6,8 +6,8 @@ enable_testing()
 
 include(../common.cmake)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Test Widgets Sql Network)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test Widgets Sql Network)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Test Widgets Sql Network Svg)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test Widgets Sql Network Svg)
 
 setup_qcoro(COMPONENTS Core)
 
@@ -91,6 +91,15 @@ target_link_libraries(Test_Website_GenStrategyTable PRIVATE
 target_include_directories(Test_Website_GenStrategyTable PRIVATE
     ../WebsiteEmpireLib
     ../WebsiteEmpire/gui/panes)
+
+# SVG validation test — needs Qt::Svg.
+add_executable(Test_Website_SvgValidation test_website_svg_validation.cpp)
+add_test(NAME Test_Website_SvgValidation COMMAND Test_Website_SvgValidation)
+target_link_libraries(Test_Website_SvgValidation PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Svg
+    -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+target_include_directories(Test_Website_SvgValidation PRIVATE ../WebsiteEmpireLib)
 
 # ShortCodes test does not need Sql or Widgets.
 add_executable(Test_Website_ShortCodes test_website_shortcodes.cpp)

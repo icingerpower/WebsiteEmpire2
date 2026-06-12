@@ -41,6 +41,14 @@ public:
                            CategoryTable   &categoryTable);
 
     /**
+     * Supplies website name and author used for JSON-LD structured data on
+     * article pages.  Must be called before generateAll() / generateSubset()
+     * when the caller has access to WebsiteSettingsTable.  Defaults to empty
+     * strings, which simply omits the author/publisher fields from JSON-LD.
+     */
+    void setWebsiteContext(const QString &websiteName, const QString &author);
+
+    /**
      * Generates all pages for the given domain and writes them to content.db
      * in workingDir.  Returns the number of pages successfully written.
      *
@@ -94,6 +102,10 @@ public:
 private:
     IPageRepository &m_pageRepo;
     CategoryTable   &m_categoryTable;
+
+    QString m_websiteName;
+    QString m_websiteAuthor;
+    QDir    m_workingDir; ///< source data dir (images.db); set by generateAll/generateSubset
 
     static void ensureSchema(const QString &connectionName);
 

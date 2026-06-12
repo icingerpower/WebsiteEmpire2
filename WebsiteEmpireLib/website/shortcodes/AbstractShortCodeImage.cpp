@@ -61,7 +61,7 @@ void AbstractShortCodeImage::addCode(QStringView     origContent,
         html += height;
         html += QStringLiteral("\"");
     }
-    html += QStringLiteral(">");
+    html += QStringLiteral(" loading=\"lazy\">");
     Q_UNUSED(engine)
     Q_UNUSED(websiteIndex)
     Q_UNUSED(css)

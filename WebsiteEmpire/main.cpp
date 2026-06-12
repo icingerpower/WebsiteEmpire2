@@ -37,6 +37,11 @@ int main(int argc, char *argv[])
         QStringLiteral("dir"));
     parser.addOption(workingDirOption);
 
+    parser.addOption(QCommandLineOption(
+        AbstractLauncher::OPTION_CLI,
+        QCoreApplication::tr("AI CLI to use (e.g. claude, gemini). Defaults to the first registered CLI."),
+        QStringLiteral("name")));
+
     for (AbstractLauncher *launcher : AbstractLauncher::ALL_LAUNCHERS()) {
         if (launcher->isFlag()) {
             parser.addOption(QCommandLineOption(

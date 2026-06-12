@@ -245,6 +245,57 @@ const QList<const AbstractAttribute *> &PageBlocCategory::getAttributes() const
     return m_attributes;
 }
 
+// ---- primaryChain -----------------------------------------------------------
+
+QList<PageBlocCategory::BreadcrumbItem> PageBlocCategory::primaryChain(const QString &langCode) const
+{
+    if (m_selectedIds.isEmpty()) {
+        return {};
+    }
+
+    // Find the deepest leaf of the first root group (same logic as addCode()).
+    struct RootGroup { int leafId = 0; int depth = -1; };
+    int firstRoot = -1;
+    QMap<int, RootGroup> byRoot;
+
+    for (const int id : std::as_const(m_selectedIds)) {
+        int root = id, cur = id, depth = 0;
+        while (cur != 0) {
+            const CategoryTable::CategoryRow *r = m_table.categoryById(cur);
+            if (!r || r->parentId == cur) { root = cur; break; }
+            root = cur;
+            cur  = r->parentId;
+            ++depth;
+        }
+        if (firstRoot < 0) { firstRoot = root; }
+        RootGroup &g = byRoot[root];
+        if (depth > g.depth) { g.depth = depth; g.leafId = id; }
+    }
+
+    if (firstRoot < 0) { return {}; }
+
+    // Walk from leafId up to the root, prepend each ancestor.
+    QList<int> chain;
+    int cur = byRoot.value(firstRoot).leafId;
+    while (cur != 0) {
+        chain.prepend(cur);
+        const CategoryTable::CategoryRow *r = m_table.categoryById(cur);
+        if (!r || r->parentId == cur) { break; }
+        cur = r->parentId;
+    }
+
+    QList<BreadcrumbItem> result;
+    result.reserve(chain.size());
+    for (const int id : std::as_const(chain)) {
+        const CategoryTable::CategoryRow *row = m_table.categoryById(id);
+        if (!row) { continue; }
+        const QString name = langCode.isEmpty() ? row->name
+                                                : m_table.translationFor(id, langCode);
+        result.append({name, _categoryPermalink(row->name)});
+    }
+    return result;
+}
+
 // ---- Private slots ----------------------------------------------------------
 
 void PageBlocCategory::_onCategoriesRemoved(const QList<int> &removedIds)

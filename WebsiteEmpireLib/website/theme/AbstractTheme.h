@@ -151,6 +151,22 @@ public:
     QString bodyBgColor()      const; ///< "body_bg_color"      default #f4f6fb
     QString bodyTextColor()    const; ///< "body_text_color"    default #1f2937
 
+    // ---- Favicon files ----
+    // Stored as canonical filenames (e.g. "favicon.svg") in website_favicon.ini
+    // (theme-independent — survives theme switches).
+    // Empty string = not configured.  The blob is stored in images.db under
+    // domain="" so ImageRepositorySQLite serves it as a global fallback for
+    // every domain.
+
+    QString faviconSvg()        const; ///< SVG favicon filename, e.g. "favicon.svg"
+    void    setFaviconSvg(const QString &filename);
+
+    QString faviconIco()        const; ///< ICO fallback filename, e.g. "favicon.ico"
+    void    setFaviconIco(const QString &filename);
+
+    QString faviconAppleTouch() const; ///< Apple-touch PNG filename, e.g. "apple-touch-icon.png"
+    void    setFaviconAppleTouch(const QString &filename);
+
     // ---- Source language for translations ----
 
     /**
@@ -240,6 +256,9 @@ protected:
 private:
     QDir    m_workingDir;
     QString m_sourceLangCode;
+    QString m_faviconSvg;
+    QString m_faviconIco;
+    QString m_faviconAppleTouch;
 
     static QMap<QString, const AbstractTheme *> s_themes;
 
@@ -257,6 +276,7 @@ private:
     void _saveValues() const;
 
     QString _settingsPath() const;
+    QString _faviconSettingsPath() const;
     QString _blocsSettingsPath() const;
 
 protected:

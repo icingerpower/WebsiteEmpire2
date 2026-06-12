@@ -1,7 +1,9 @@
 #include "PaneTranslations.h"
 #include "ui_PaneTranslations.h"
 
+#include "aicli/AbstractCli.h"
 #include "launcher/AbstractLauncher.h"
+#include "workingdirectory/WorkingDirectoryManager.h"
 #include "launcher/LauncherTranslate.h"
 #include "launcher/LauncherTranslateCommon.h"
 #include "website/AbstractEngine.h"
@@ -179,6 +181,22 @@ void PaneTranslations::_viewCommands()
         }
     }
 
+    // Collect registered CLI names for the comment, and resolve the configured one.
+    QStringList cliNames;
+    for (const AbstractCli *c : AbstractCli::ALL_CLIS()) {
+        cliNames.append(c->getName());
+    }
+    const QString cliList = cliNames.isEmpty() ? QStringLiteral("Claude") : cliNames.join(QStringLiteral(", "));
+
+    const QString configuredCli = WorkingDirectoryManager::instance()->settings()
+                                      ->value(QStringLiteral("defaultCli")).toString();
+    const QString exampleCli = !configuredCli.isEmpty()
+                               ? configuredCli
+                               : (cliNames.isEmpty() ? QStringLiteral("Claude") : cliNames.first());
+
+    const QString cliSuffix = QStringLiteral(" --") + AbstractLauncher::OPTION_CLI
+                              + QLatin1Char(' ') + exampleCli;
+
     QStringList sections;
 
     // One section per translate mode — driven by LauncherTranslate::translateModes().
@@ -188,6 +206,7 @@ void PaneTranslations::_viewCommands()
         if (!mode.flag.isEmpty()) {
             cmd += QStringLiteral(" --") + mode.flag;
         }
+        cmd += cliSuffix;
 
         QString section = QStringLiteral("# ") + mode.title + QStringLiteral(":\n");
         if (!mode.detail.isEmpty()) {
@@ -201,16 +220,19 @@ void PaneTranslations::_viewCommands()
     }
 
     // Optional filters apply to all modes — shown once with the first mode as example.
+
     const QString filterCmd = prefix
         + QStringLiteral(" --") + LauncherTranslate::OPTION_NAME
+        + cliSuffix
         + QStringLiteral(" --") + LauncherTranslate::OPTION_LANGUAGE
         + QStringLiteral(" ") + exampleLang
         + QStringLiteral(" --") + LauncherTranslate::OPTION_LIMIT
         + QStringLiteral(" 1");
     sections.append(
-        tr("# Optional filters (replace '%1' and '1' as needed):\n"
-           "#   --language  restrict to one target language\n"
-           "#   --limit     stop after N jobs\n").arg(exampleLang)
+        tr("# Optional filters (replace values as needed):\n"
+           "#   --cli       select the AI CLI to use (%1)\n"
+           "#   --language  restrict to one target language (e.g. %2)\n"
+           "#   --limit     stop after N jobs\n").arg(cliList, exampleLang)
         + filterCmd
     );
 
