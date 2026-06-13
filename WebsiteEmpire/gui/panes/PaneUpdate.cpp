@@ -1,6 +1,8 @@
 #include "PaneUpdate.h"
 #include "ui_PaneUpdate.h"
 
+#include "aicli/AbstractCli.h"
+#include "workingdirectory/WorkingDirectoryManager.h"
 #include "UpdateStrategyTree.h"
 #include "../dialogs/DialogAddUpdateStrategy.h"
 #include "../dialogs/DialogAddUpdatePrompt.h"
@@ -63,6 +65,23 @@ void PaneUpdate::setup(const QDir           &workingDir,
             &QItemSelectionModel::currentChanged,
             this,
             &PaneUpdate::_onSelectionChanged);
+
+    for (AbstractCli *c : AbstractCli::ALL_CLIS()) {
+        ui->comboBoxCli->addItem(c->getName(), c->getName());
+    }
+    const QString savedCli = WorkingDirectoryManager::instance()->settings()
+                                 ->value(QStringLiteral("updateCli")).toString();
+    if (!savedCli.isEmpty()) {
+        const int idx = ui->comboBoxCli->findData(savedCli);
+        if (idx >= 0) {
+            ui->comboBoxCli->setCurrentIndex(idx);
+        }
+    }
+    connect(ui->comboBoxCli, &QComboBox::currentIndexChanged, this, [this](int index) {
+        WorkingDirectoryManager::instance()->settings()
+            ->setValue(QStringLiteral("updateCli"),
+                       ui->comboBoxCli->itemData(index).toString());
+    });
 
     m_isSetup = true;
 }
@@ -249,6 +268,10 @@ void PaneUpdate::_runUpdate(int limit, const QList<int> &pageIds)
         args << QStringLiteral("--") + LauncherUpdate::OPTION_PAGES
              << idStrs.join(QLatin1Char(','));
     }
+    const QString cliName = ui->comboBoxCli->currentData().toString();
+    if (!cliName.isEmpty()) {
+        args << QStringLiteral("--") + AbstractLauncher::OPTION_CLI << cliName;
+    }
 
     ui->textEditOutput->clear();
     m_outputBuffer.clear();
@@ -360,6 +383,11 @@ void PaneUpdate::viewUpdateCommand()
     if (!promptId.isEmpty()) {
         cmd += QStringLiteral(" --") + LauncherUpdate::OPTION_PROMPT
                + QStringLiteral(" ") + promptId;
+    }
+    const QString cliName = ui->comboBoxCli->currentData().toString();
+    if (!cliName.isEmpty()) {
+        cmd += QStringLiteral(" --") + AbstractLauncher::OPTION_CLI
+               + QStringLiteral(" ") + cliName;
     }
 
     DialogShowCommand dlg(tr("Update command"),

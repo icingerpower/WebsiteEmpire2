@@ -28,11 +28,11 @@
      <property name="value">
       <number>0</number>
      </property>
-     <property name="format">
-      <string>Updating...</string>
-     </property>
      <property name="textVisible">
       <bool>true</bool>
+     </property>
+     <property name="format">
+      <string>Updating...</string>
      </property>
     </widget>
    </item>
@@ -91,18 +91,18 @@
         <widget class="QTreeView" name="treeViewStrategies">
          <property name="maximumSize">
           <size>
-           <width>260</width>
+           <width>16777215</width>
            <height>16777215</height>
           </size>
          </property>
          <property name="editTriggers">
           <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
          </property>
-         <property name="selectionBehavior">
-          <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
-         </property>
          <property name="selectionMode">
           <enum>QAbstractItemView::SelectionMode::SingleSelection</enum>
+         </property>
+         <property name="selectionBehavior">
+          <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
          </property>
          <property name="headerHidden">
           <bool>false</bool>
@@ -267,6 +267,20 @@
             </size>
            </property>
           </spacer>
+         </item>
+         <item>
+          <widget class="QLabel" name="labelCli">
+           <property name="text">
+            <string>CLI:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="comboBoxCli">
+           <property name="toolTip">
+            <string>AI CLI to use for updates</string>
+           </property>
+          </widget>
          </item>
         </layout>
        </item>
