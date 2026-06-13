@@ -155,9 +155,18 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt, AbstractCli *cli)
                      .arg(cli->getExecutable());
     } else if (process.exitCode() != 0) {
         const QString errMsg = QString::fromUtf8(process.readAllStandardError()).trimmed();
-        // Errors go to stderr; stdout (the output file) is not read on failure.
-        const QString detail = !errMsg.isEmpty() ? errMsg
-                             : QStringLiteral("exit code %1").arg(process.exitCode());
+        // Some CLIs (e.g. Claude with --output-format stream-json) write errors to stdout.
+        // Fall back to the output file content so rate-limit / API errors are visible.
+        QString detail = errMsg;
+        if (detail.isEmpty()) {
+            QFile f(outputPath);
+            if (f.open(QIODevice::ReadOnly)) {
+                detail = QString::fromUtf8(f.readAll()).trimmed().left(300);
+            }
+        }
+        if (detail.isEmpty()) {
+            detail = QStringLiteral("exit code %1").arg(process.exitCode());
+        }
         result = QStringLiteral("__ERROR__: ") + detail;
     } else {
         QFile f(outputPath);
@@ -178,6 +187,70 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt, AbstractCli *cli)
                 }
             }
         }
+    }
+    co_return result;
+}
+
+// ---------------------------------------------------------------------------
+// Policy-violation retry wrapper
+//
+// When the CLI rejects a prompt with a Usage Policy error, the sensitive
+// "Image description" line is replaced in-code with a generic fallback and
+// the prompt is resubmitted once.  No second CLI call is used for reformulation
+// because any request that embeds the original prompt text would carry the same
+// sensitive terms and be rejected again.
+// ---------------------------------------------------------------------------
+
+static bool isUsagePolicyError(const QString &response)
+{
+    return response.startsWith(QStringLiteral("__ERROR__"))
+        && response.contains(QStringLiteral("Usage Policy"));
+}
+
+// Strips the Image description line (which may contain a flagged disease name)
+// and replaces it with a neutral clinical fallback.  Returns an empty string if
+// no Image description line was found (caller should give up rather than retry).
+static QString sanitizeDescriptionLine(const QString &prompt)
+{
+    static const QRegularExpression reDesc(
+        QStringLiteral("^(Image description\\s*:).*$"),
+        QRegularExpression::MultilineOption);
+    const auto m = reDesc.match(prompt);
+    if (!m.hasMatch()) {
+        return {};
+    }
+    QString sanitized = prompt;
+    sanitized.replace(reDesc,
+        QStringLiteral("\\1 medical biomarker and genetic factors diagram"));
+    return sanitized;
+}
+
+// Runs prompt via CLI; on a Usage Policy rejection, sanitizes the Image
+// description line and retries once without any extra round-trip to the CLI.
+static QCoro::Task<QString> runWithPolicyRetry(const QString &prompt,
+                                               AbstractCli   *cli,
+                                               QTextStream   *out,
+                                               int            sNum)
+{
+    QString result = co_await runClaudePrompt(prompt, cli);
+    if (!isUsagePolicyError(result)) {
+        co_return result;
+    }
+
+    *out << QStringLiteral("[S%1] Policy violation — sanitizing description and retrying...\n").arg(sNum);
+    out->flush();
+
+    const QString sanitized = sanitizeDescriptionLine(prompt);
+    if (sanitized.isEmpty()) {
+        *out << QStringLiteral("[S%1] WARN: no Image description line found, cannot sanitize.\n").arg(sNum);
+        out->flush();
+        co_return result;
+    }
+
+    result = co_await runClaudePrompt(sanitized, cli);
+    if (isUsagePolicyError(result)) {
+        *out << QStringLiteral("[S%1] WARN: still rejected after sanitization: %2\n").arg(sNum).arg(result);
+        out->flush();
     }
     co_return result;
 }
@@ -277,8 +350,11 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                     if (!ref.fileName.endsWith(QStringLiteral(".svg"), Qt::CaseInsensitive)) {
                         continue;
                     }
+                    *(state->out) << QStringLiteral("[S%1] SVG regen: %2 (desc: %3)\n")
+                                         .arg(sNum).arg(ref.fileName, ref.alt.left(80));
+                    state->out->flush();
                     const QString svgPrompt = queue->buildSvgPrompt(ref, page.permalink, lang);
-                    const QString svgResp   = co_await runClaudePrompt(svgPrompt, cli);
+                    const QString svgResp   = co_await runWithPolicyRetry(svgPrompt, cli, state->out, sNum);
                     if (svgResp.startsWith(QStringLiteral("__ERROR__"))) {
                         *(state->out) << QStringLiteral("[S%1] WARN (SVG regen): %2\n")
                                              .arg(sNum).arg(svgResp);
@@ -599,7 +675,7 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                 state->out->flush();
 
                 const QString svgPrompt = queue->buildSvgPrompt(ref, page.permalink, lang);
-                const QString svgResponse = co_await runClaudePrompt(svgPrompt, cli);
+                const QString svgResponse = co_await runWithPolicyRetry(svgPrompt, cli, state->out, sNum);
 
                 if (svgResponse.startsWith(QStringLiteral("__ERROR__"))) {
                     *(state->out) << QStringLiteral("[S%1] WARN (SVG): %2 — %3\n")

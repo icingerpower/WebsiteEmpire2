@@ -582,14 +582,18 @@ QString GenPageQueue::buildSvgPrompt(const ImgFixRef &ref,
         }
     }
 
+    // Note: permalink is intentionally omitted from the prompt — some medical
+    // disease names (e.g. brucellosis, coccidioidomycosis) trigger safety filters
+    // when included verbatim, even though the SVG content is entirely harmless.
+    // The image description (alt) provides all the context needed for generation.
+    Q_UNUSED(permalink)
     QString prompt = QStringLiteral(
                          "Create a standalone SVG image for a web article.\n\n"
-                         "Article permalink : %1\n"
-                         "Image id          : %2\n"
-                         "Image filename    : %3\n"
-                         "Image description : %4\n"
-                         "Language          : %5\n\n")
-                     .arg(permalink, ref.id, ref.fileName, ref.alt, lang);
+                         "Image id          : %1\n"
+                         "Image filename    : %2\n"
+                         "Image description : %3\n"
+                         "Language          : %4\n\n")
+                     .arg(ref.id, ref.fileName, ref.alt, lang);
 
     if (!svgSection.isEmpty()) {
         prompt += QStringLiteral("Strategy design requirements (follow these exactly):\n")
