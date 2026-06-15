@@ -125,9 +125,27 @@ void PageTranslator::startSvgJobs(const QString &editingLang,
         return;
     }
 
+    // Derive the source domain from the engine so SVGs stored under the editing
+    // domain (e.g. "biomarky.com") are recognised as source blobs, not translations.
+    m_sourceDomain.clear();
+    if (m_engine) {
+        for (int i = 0; i < m_engine->rowCount(); ++i) {
+            if (m_engine->getLangCode(i) == editingLang) {
+                m_sourceDomain = m_engine->data(
+                    m_engine->index(i, AbstractEngine::COL_DOMAIN)).toString();
+                // Strip trailing slash for consistent comparison.
+                if (m_sourceDomain.endsWith(QLatin1Char('/'))) {
+                    m_sourceDomain.chop(1);
+                }
+                break;
+            }
+        }
+    }
+
     // Load two sets from images.db in one pass:
     //   translatedPairs  — (lang, filename) pairs that are already translated
-    //   sourceSvgNames   — SVG filenames that have a source blob (domain='')
+    //   sourceSvgNames   — SVG filenames that have a source blob (domain='' or
+    //                      domain=sourceDomain — both conventions are accepted)
     // Only SVGs present in sourceSvgNames can be translated; the rest are
     // silently skipped rather than counted as errors.
     QSet<QString> translatedPairs; // encoded as "lang\nfilename"
@@ -146,7 +164,7 @@ void PageTranslator::startSvgJobs(const QString &editingLang,
                     while (q.next()) {
                         const QString domain   = q.value(0).toString();
                         const QString filename = q.value(1).toString();
-                        if (domain.isEmpty()) {
+                        if (domain.isEmpty() || domain == m_sourceDomain) {
                             sourceSvgNames.insert(filename);
                         } else {
                             translatedPairs.insert(domain + QLatin1Char('\n') + filename);
@@ -406,8 +424,10 @@ void PageTranslator::_processNextJob()
     if (!m_currentJob.svgFilename.isEmpty()) {
         const auto &svgPageRec = m_repo.findById(m_currentJob.pageId);
         const QString svgPermalink = svgPageRec ? svgPageRec->permalink : QStringLiteral("?");
-        _log(QStringLiteral("Processing SVG %1 → %2  (%3)")
-                 .arg(m_currentJob.svgFilename, m_currentJob.targetLang, svgPermalink));
+        _log(QStringLiteral("Processing SVG %1 → %2  (%3)  job %4/%5")
+                 .arg(m_currentJob.svgFilename, m_currentJob.targetLang, svgPermalink)
+                 .arg(m_translated + m_errors + 1)
+                 .arg(m_translated + m_errors + 1 + m_queue.size()));
 
         const QString dbPath = m_workingDir.filePath(QStringLiteral("images.db"));
         bool alreadyTranslated = false;
@@ -430,11 +450,15 @@ void PageTranslator::_processNextJob()
                 }
                 if (!alreadyTranslated) {
                     QSqlQuery qBlob(db);
+                    // Accept both domain='' (Phase-2 social images) and
+                    // domain=sourceDomain (generation-pass SVG tables).
                     qBlob.prepare(QStringLiteral(
                         "SELECT b.blob FROM images b"
                         " JOIN image_names n ON n.image_id = b.id"
-                        " WHERE n.filename = :fn AND n.domain = '' LIMIT 1"));
-                    qBlob.bindValue(QStringLiteral(":fn"), m_currentJob.svgFilename);
+                        " WHERE n.filename = :fn"
+                        "   AND (n.domain = '' OR n.domain = :src) LIMIT 1"));
+                    qBlob.bindValue(QStringLiteral(":fn"),  m_currentJob.svgFilename);
+                    qBlob.bindValue(QStringLiteral(":src"), m_sourceDomain);
                     if (qBlob.exec() && qBlob.next()) {
                         sourceBlob = qBlob.value(0).toByteArray();
                     }
@@ -525,10 +549,11 @@ void PageTranslator::_processNextJob()
     m_currentPermalink = srcRec ? srcRec->permalink : QString{};
     {
         const QString permalink = m_currentPermalink.isEmpty() ? QStringLiteral("?") : m_currentPermalink;
-        _log(QStringLiteral("Processing page %1 → %2  (%3)  job %4")
+        _log(QStringLiteral("Processing page %1 → %2  (%3)  job %4/%5")
                  .arg(m_currentJob.targetLang, permalink)
                  .arg(m_currentJob.pageId)
-                 .arg(m_translated + m_errors + 1));
+                 .arg(m_translated + m_errors + 1)
+                 .arg(m_translated + m_errors + 1 + m_queue.size()));
     }
 
     m_currentPageType = AbstractPageType::createForTypeId(m_currentJob.typeId, m_categoryTable);
@@ -1117,23 +1142,35 @@ void PageTranslator::_launchDirectChunkTranslation(const QString &chunkText)
 
 void PageTranslator::_finalizeTextTranslations(const QHash<QString, QString> &translations)
 {
-    // Validate each field for truncation: if the translated text has more opening
-    // shortcode brackets than closing ones, the output was cut off mid-shortcode.
+    // Validate each field for truncation: if the translated text has MORE unbalanced
+    // opening brackets than the source field, the output was cut off mid-shortcode.
+    // We compare against the source delta (not zero) because some source texts contain
+    // literal '[' characters in prose (e.g. wavelength ranges like [630–1100 nm]),
+    // which produce a legitimate source imbalance that the translation should preserve.
+    const QHash<QString, QString> &sourceData = m_repo.loadData(m_currentJob.pageId);
     for (auto it = translations.cbegin(); it != translations.cend(); ++it) {
         if (it.key() == QStringLiteral("_permalink_slug")) {
             continue; // slug never contains shortcodes
         }
         const int opens  = it.value().count(QLatin1Char('['));
         const int closes = it.value().count(QLatin1Char(']'));
-        if (opens > closes) {
-            _log(QStringLiteral("  Page %1 → %2: field '%3' appears truncated "
-                                 "(unbalanced brackets: %4 open, %5 close) — skipping save")
-                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang)
-                     .arg(it.key()).arg(opens).arg(closes), true);
-            m_chunkState.reset();
-            ++m_errors;
-            _processNextJob();
-            return;
+        const int transDelta = opens - closes;
+        if (transDelta > 0) {
+            // Check the source field's own imbalance as the allowed baseline.
+            const QString &srcValue = sourceData.value(it.key());
+            const int srcDelta = srcValue.count(QLatin1Char('['))
+                               - srcValue.count(QLatin1Char(']'));
+            if (transDelta > srcDelta) {
+                _log(QStringLiteral("  Page %1 → %2: field '%3' appears truncated "
+                                     "(unbalanced brackets: %4 open, %5 close; "
+                                     "source delta: %6) — skipping save")
+                         .arg(m_currentJob.pageId).arg(m_currentJob.targetLang)
+                         .arg(it.key()).arg(opens).arg(closes).arg(srcDelta), true);
+                m_chunkState.reset();
+                ++m_errors;
+                _processNextJob();
+                return;
+            }
         }
     }
 

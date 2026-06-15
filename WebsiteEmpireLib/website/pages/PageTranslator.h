@@ -182,6 +182,7 @@ private:
     QDir             m_workingDir;
     AbstractCli     *m_cli;
     AbstractEngine  *m_engine          = nullptr; ///< stored from start(); used for render validation
+    QString          m_sourceDomain;              ///< editing-lang domain (e.g. "biomarky.com"); SVGs stored under this domain are treated as source
     QString          m_currentPermalink;           ///< permalink of the page currently being translated
 
     QProcess                  *m_process   = nullptr;
