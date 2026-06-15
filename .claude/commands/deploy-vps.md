@@ -251,37 +251,127 @@ Remind the user to submit `https://{domain}/sitemap.xml` to Google Search Consol
 
 ## Adding a new language to an existing VPS
 
-1. **Upload only the new language subdirectory** (never rsync the whole deploy/ — it may disrupt running services):
+Ask the user for:
+- VPS IP, domain name, working directory on this machine
+- New languages to add and their ports (e.g. es:8084, it:8085)
+
+All placeholders must be substituted with real values before showing any command.
+
+### Step A — Upload new language directories
+
+Never rsync the whole deploy/ — only sync the new language subdirectory to avoid disrupting running services:
+
 ```bash
 ! rsync -avz --progress {workingDir}/deploy/{newLang}/ root@{IP}:/opt/websiteempire/deploy/{newLang}/
 ```
 
-2. **Verify content is correct:**
+Repeat for each new language. Then verify each content.db has the right language:
+
 ```bash
 ! ssh root@{IP} "sqlite3 /opt/websiteempire/deploy/{newLang}/content.db 'SELECT lang, COUNT(*) FROM pages GROUP BY lang;'"
 ```
 
-3. **Clean stale WAL/SHM:**
+Clean stale WAL/SHM files:
+
 ```bash
 ! ssh root@{IP} "rm -f /opt/websiteempire/deploy/{newLang}/content.db-wal /opt/websiteempire/deploy/{newLang}/content.db-shm"
 ```
 
-4. **Write and upload the systemd service** (Write tool → scp).
+### Step B — Create and upload systemd service files
 
-5. **Enable and start:**
-```bash
-! ssh root@{IP} "systemctl daemon-reload && systemctl enable --now website-{newLang}.service"
+Use the **Write tool** to create `/tmp/website-{newLang}.service` for each new language:
+
+```ini
+[Unit]
+Description=WebsiteEmpire {NEWLANG_UPPER}
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/websiteempire/deploy/{newLang}
+ExecStart=/opt/websiteempire/StaticWebsiteServe --port {newPort} --lang {newLang} --images-db /opt/websiteempire/deploy/images.db
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-6. **Test the backend directly** (path WITHOUT language prefix):
+Then give the user an scp command to upload them:
+
+```bash
+! scp /tmp/website-{newLang}.service root@{IP}:/etc/systemd/system/website-{newLang}.service
+```
+
+Enable and start:
+
+```bash
+! ssh root@{IP} "systemctl daemon-reload && systemctl enable --now website-{newLang}.service && systemctl status website-{newLang}.service --no-pager"
+```
+
+**Verify content.db has the correct language before testing the backend:**
+```bash
+! ssh root@{IP} "sqlite3 /opt/websiteempire/deploy/{newLang}/content.db 'SELECT lang, COUNT(*) FROM pages GROUP BY lang;'"
+```
+
+If it shows the wrong lang code or returns empty, the wrong file was uploaded — stop and re-rsync that language directory before proceeding.
+
+Test the backend directly (path WITHOUT language prefix):
+
 ```bash
 ! ssh root@{IP} "curl -s --compressed http://localhost:{newPort}/index.html | head -3"
 ```
 
-7. **Update nginx** (Write tool → scp the new HTTP-only config, then certbot --reinstall):
+If the curl returns nothing, check the service logs immediately:
+```bash
+! ssh root@{IP} "journalctl -u website-{newLang}.service -n 50 --no-pager"
+```
+
+### Step C — Update nginx config
+
+The nginx config lives on the VPS and certbot has patched SSL into it. The workflow is:
+1. **Download** the current config from the VPS to `/tmp/{domain}.nginx`
+2. **Edit** it locally (Read tool → Edit tool) to add the new language location blocks
+3. **Upload** the edited file back to the VPS
+4. **Re-run certbot --reinstall** to re-patch SSL (nginx config is HTTP-only after our edit)
+
+**Download current nginx config:**
+```bash
+! scp root@{IP}:/etc/nginx/sites-available/{domain} /tmp/{domain}.nginx
+```
+
+Then use the Read tool to read `/tmp/{domain}.nginx`, and the Edit tool to add one `location` block per new language **above** the `location /` catch-all:
+
+```nginx
+location /{newLang}/ {
+    proxy_pass http://127.0.0.1:{newPort}/;
+    proxy_set_header Host $host;
+}
+```
+
+Also add (or update) the root `location = /` block to include the new language in the Accept-Language redirect:
+
+```nginx
+if ($http_accept_language ~* "^{newLang}") {
+    return 302 /{newLang}/index.html;
+}
+```
+
+**Upload the edited config:**
 ```bash
 ! scp /tmp/{domain}.nginx root@{IP}:/etc/nginx/sites-available/{domain}
+```
+
+**Test, reload, and re-install SSL:**
+```bash
 ! ssh root@{IP} "nginx -t && systemctl reload nginx && certbot --nginx -d {domain} -d www.{domain} --reinstall"
+```
+
+### Step D — Final verification
+
+```bash
+! ssh root@{IP} "curl -s --compressed http://localhost:{newPort}/index.html | head -3"
+! ssh root@{IP} "curl -sI https://{domain}/{newLang}/index.html | grep HTTP"
 ```
 
 ---
