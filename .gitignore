@@ -3,3 +3,5 @@ tests
 *.user
 *.code-workspace
 *build*
+*.db
+Testing/
