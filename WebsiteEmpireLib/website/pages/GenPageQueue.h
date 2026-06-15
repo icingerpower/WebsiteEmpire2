@@ -58,6 +58,8 @@ public:
      * pageTypeId          — stable id used with AbstractPageType::createForTypeId()
      * nonSvgImages        — passed through to the prompt as a generation hint
      * customInstructions  — strategy-level extra instructions appended to step-1 prompt
+     * svgInstructions     — non-empty enables the SVG generation pass; used verbatim
+     *                       in buildSvgPrompt() as the design requirements section
      * limit               — max pages to pop from this queue (−1 = all pending)
      */
     GenPageQueue(const QString   &pageTypeId,
@@ -65,6 +67,7 @@ public:
                  IPageRepository &pageRepo,
                  CategoryTable   &categoryTable,
                  const QString   &customInstructions = {},
+                 const QString   &svgInstructions    = {},
                  int              limit = -1);
 
     /**
@@ -77,7 +80,8 @@ public:
                  bool                    nonSvgImages,
                  const QList<PageRecord> &virtualPages,
                  CategoryTable          &categoryTable,
-                 const QString          &customInstructions = {});
+                 const QString          &customInstructions = {},
+                 const QString          &svgInstructions    = {});
 
     bool             hasNext()   const;
     const PageRecord &peekNext() const;
@@ -176,10 +180,16 @@ public:
     static bool hasSvgImgFix(const QString &articleText);
 
     /**
-     * Returns true if the strategy's custom instructions contain an SVG
-     * generation directive (case-insensitive "svg" keyword).
+     * Returns true when the strategy has dedicated SVG instructions, i.e. the
+     * SVG generation pass should run after the article content pass.
      */
     bool wantsSvgImage() const;
+
+    /**
+     * Returns true when the strategy has image (raster/PNG) instructions.
+     * Currently always returns false — PNG generation is not yet implemented.
+     */
+    bool wantsPngImage() const;
 
     /**
      * Builds a repair prompt that asks Claude to return ONLY the missing
@@ -199,13 +209,36 @@ public:
                                  const QString &imgFixCode);
 
     /**
+     * Result of parseSvgDelimitedResponse().
+     * svgCode is empty when no valid SVG was found in the response.
+     * insertAfter is empty when no insertion hint was provided; callers should
+     * fall back to the insertImgFix() heuristic in that case.
+     */
+    struct SvgGenerationResult {
+        QString svgCode;
+        QString insertAfter;
+    };
+
+    /**
+     * Parses a Claude response that uses the delimiter format:
+     *   ===SVG===
+     *   <svg ...>...</svg>
+     *   ===INSERT_AFTER===        (optional)
+     *   <heading or sentence>
+     *
+     * Falls back to extracting the first <svg>…</svg> block when no ===SVG===
+     * marker is present, for backward compatibility with direct SVG responses.
+     */
+    static SvgGenerationResult parseSvgDelimitedResponse(const QString &response);
+
+    /**
      * Builds a Claude prompt that produces a standalone SVG for the given image
-     * reference.  permalink and lang give the article context.
-     * Extracts any "## SVG" section from m_customInstructions and appends it as
-     * strategy-specific design requirements.
+     * reference.  articleText is included for content context so Claude can
+     * tailor the diagram to the article.  Uses m_svgInstructions as the design
+     * requirements section.  Output is expected in the ===SVG=== delimiter format.
      */
     QString buildSvgPrompt(const ImgFixRef &ref,
-                            const QString   &permalink,
+                            const QString   &articleText,
                             const QString   &lang) const;
 
 private:
@@ -222,6 +255,7 @@ private:
     QString          m_pageTypeId;
     bool             m_nonSvgImages;
     QString          m_customInstructions;
+    QString          m_svgInstructions;
     CategoryTable   &m_categoryTable;
     QList<PageRecord> m_pending;
     int               m_cursor = 0;

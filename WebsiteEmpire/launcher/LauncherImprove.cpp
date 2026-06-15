@@ -66,6 +66,7 @@ struct ImproveJob {
     PageRecord page;
     QString    strategyId;
     QString    customInstructions;
+    QString    svgInstructions;
     bool       nonSvgImages = false;
     QString    extraContext;
 };
@@ -83,7 +84,11 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt, AbstractCli *cli)
         co_return result;
     }
 
-    const QString promptPath = tempDir.path() + QStringLiteral("/prompt.txt");
+    // Write prompt into a subdirectory so the process working directory stays
+    // clean — Claude Code auto-loads files from cwd, which would pollute context.
+    const QString promptSubdir = tempDir.path() + QStringLiteral("/prompt");
+    QDir().mkdir(promptSubdir);
+    const QString promptPath = promptSubdir + QStringLiteral("/prompt.txt");
     {
         QFile f(promptPath);
         if (!f.open(QIODevice::WriteOnly)) {
@@ -92,10 +97,20 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt, AbstractCli *cli)
         f.write(prompt.toUtf8());
     }
 
+    // Redirect output to a file: SVG responses can exceed 50 000 chars and
+    // would silently overflow the OS pipe buffer (~64 KB) if read via stdout.
+    const QString outputPath = tempDir.path() + QStringLiteral("/output.txt");
+
     QProcess process;
+    process.setWorkingDirectory(tempDir.path());
     process.setProgram(cli->getExecutable());
     process.setArguments(cli->promptArgs());
     process.setStandardInputFile(promptPath);
+    process.setStandardOutputFile(outputPath);
+    // Raise the output token cap so large SVG tables are never truncated.
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("CLAUDE_CODE_MAX_OUTPUT_TOKENS"), QStringLiteral("100000"));
+    process.setProcessEnvironment(env);
 
     co_await qCoro(process).start();
     co_await qCoro(process).waitForFinished(-1);
@@ -104,10 +119,22 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt, AbstractCli *cli)
         result = QStringLiteral("__ERROR__: %1 executable not found in PATH")
                      .arg(cli->getExecutable());
     } else if (process.exitCode() != 0) {
-        result = QStringLiteral("__ERROR__: ")
-                 + QString::fromUtf8(process.readAllStandardError()).trimmed();
+        const QString errMsg = QString::fromUtf8(process.readAllStandardError()).trimmed();
+        // Claude Code sometimes writes API errors to stdout — fall back to the
+        // output file so the real error message is visible in logs.
+        QString detail = errMsg;
+        if (detail.isEmpty()) {
+            QFile f(outputPath);
+            if (f.open(QIODevice::ReadOnly)) {
+                detail = QString::fromUtf8(f.readAll()).trimmed().left(300);
+            }
+        }
+        result = QStringLiteral("__ERROR__: ") + detail;
     } else {
-        result = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+        QFile f(outputPath);
+        if (f.open(QIODevice::ReadOnly)) {
+            result = QString::fromUtf8(f.readAll()).trimmed();
+        }
     }
     co_return result;
 }
@@ -136,7 +163,8 @@ static QCoro::Task<bool> processImproveJob(const ImproveJob &job,
     PageDb           pageDb(workDir);
     PageRepositoryDb pageRepo(pageDb);
     GenPageQueue     queue(job.page.typeId, job.nonSvgImages, pageRepo,
-                           *categoryTable, job.customInstructions);
+                           *categoryTable, job.customInstructions,
+                           job.svgInstructions);
 
     // ---- Call 1: write article content as free-form text ------------------
     const QString contentPrompt = queue.buildContentPrompt(
@@ -324,6 +352,7 @@ void LauncherImprove::run(const QString & /*value*/)
         QString strategyId;
         QString pageTypeId;
         QString customInstructions;
+        QString svgInstructions;
         bool    nonSvgImages = false;
         int     priority     = 1;
     };
@@ -338,6 +367,7 @@ void LauncherImprove::run(const QString & /*value*/)
         desc.pageTypeId         = strategyTable->data(
             strategyTable->index(row, GenStrategyTable::COL_PAGE_TYPE)).toString();
         desc.customInstructions = strategyTable->customInstructionsForRow(row);
+        desc.svgInstructions    = strategyTable->svgInstructionsForRow(row);
         desc.nonSvgImages       = strategyTable->data(
             strategyTable->index(row, GenStrategyTable::COL_NON_SVG_IMAGES)).toString()
             == QStringLiteral("Yes");
@@ -440,6 +470,7 @@ void LauncherImprove::run(const QString & /*value*/)
             job.page               = page;
             job.strategyId         = nextDesc.strategyId;
             job.customInstructions = nextDesc.customInstructions;
+            job.svgInstructions    = nextDesc.svgInstructions;
             job.nonSvgImages       = nextDesc.nonSvgImages;
             job.extraContext       = context;
             jobs->append(job);

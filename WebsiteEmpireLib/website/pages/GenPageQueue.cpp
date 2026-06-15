@@ -15,10 +15,12 @@ GenPageQueue::GenPageQueue(const QString   &pageTypeId,
                             IPageRepository &pageRepo,
                             CategoryTable   &categoryTable,
                             const QString   &customInstructions,
+                            const QString   &svgInstructions,
                             int              limit)
     : m_pageTypeId(pageTypeId)
     , m_nonSvgImages(nonSvgImages)
     , m_customInstructions(customInstructions)
+    , m_svgInstructions(svgInstructions)
     , m_categoryTable(categoryTable)
 {
     m_pending = pageRepo.findPendingByTypeId(pageTypeId);
@@ -32,10 +34,12 @@ GenPageQueue::GenPageQueue(const QString          &pageTypeId,
                             bool                    nonSvgImages,
                             const QList<PageRecord> &virtualPages,
                             CategoryTable          &categoryTable,
-                            const QString          &customInstructions)
+                            const QString          &customInstructions,
+                            const QString          &svgInstructions)
     : m_pageTypeId(pageTypeId)
     , m_nonSvgImages(nonSvgImages)
     , m_customInstructions(customInstructions)
+    , m_svgInstructions(svgInstructions)
     , m_categoryTable(categoryTable)
     , m_pending(virtualPages)
 {
@@ -482,7 +486,54 @@ bool GenPageQueue::hasSvgImgFix(const QString &articleText)
 
 bool GenPageQueue::wantsSvgImage() const
 {
-    return m_customInstructions.contains(QStringLiteral("svg"), Qt::CaseInsensitive);
+    return !m_svgInstructions.isEmpty();
+}
+
+bool GenPageQueue::wantsPngImage() const
+{
+    return false; // PNG generation not yet implemented
+}
+
+GenPageQueue::SvgGenerationResult GenPageQueue::parseSvgDelimitedResponse(const QString &response)
+{
+    SvgGenerationResult result;
+
+    static const QString kSvgMarker        = QStringLiteral("===SVG===");
+    static const QString kInsertMarker     = QStringLiteral("===INSERT_AFTER===");
+    static const QRegularExpression reSvgOpen(
+        QStringLiteral("<svg[\\s>]"), QRegularExpression::CaseInsensitiveOption);
+
+    const int svgMarkerPos = response.indexOf(kSvgMarker);
+    if (svgMarkerPos >= 0) {
+        // Delimiter format: extract everything between ===SVG=== and the next marker (or end).
+        const int contentStart = svgMarkerPos + kSvgMarker.length();
+        const int insertMarkerPos = response.indexOf(kInsertMarker, contentStart);
+        const QString svgBlock = (insertMarkerPos >= 0)
+            ? response.mid(contentStart, insertMarkerPos - contentStart).trimmed()
+            : response.mid(contentStart).trimmed();
+
+        const auto openMatch = reSvgOpen.match(svgBlock);
+        const int svgStart   = openMatch.hasMatch() ? openMatch.capturedStart() : 0;
+        const int svgEnd     = svgBlock.lastIndexOf(QStringLiteral("</svg>"));
+        if (svgEnd >= svgStart) {
+            result.svgCode = svgBlock.mid(svgStart, svgEnd + 6 - svgStart);
+        }
+
+        if (insertMarkerPos >= 0) {
+            result.insertAfter = response.mid(
+                insertMarkerPos + kInsertMarker.length()).trimmed();
+        }
+    } else {
+        // Fallback: treat the whole response as a raw SVG (backward compatibility).
+        const auto openMatch = reSvgOpen.match(response);
+        const int svgStart   = openMatch.hasMatch() ? openMatch.capturedStart() : -1;
+        const int svgEnd     = response.lastIndexOf(QStringLiteral("</svg>"));
+        if (svgStart >= 0 && svgEnd >= svgStart) {
+            result.svgCode = response.mid(svgStart, svgEnd + 6 - svgStart);
+        }
+    }
+
+    return result;
 }
 
 QString GenPageQueue::buildSvgRepairPrompt(const PageRecord &page,
@@ -566,56 +617,46 @@ QList<GenPageQueue::ImgFixRef> GenPageQueue::parseImgFixRefs(const QString &arti
 }
 
 QString GenPageQueue::buildSvgPrompt(const ImgFixRef &ref,
-                                      const QString   &permalink,
+                                      const QString   &articleText,
                                       const QString   &lang) const
 {
-    // Extract the "## SVG…" section from the strategy's custom instructions.
-    QString svgSection;
-    if (!m_customInstructions.isEmpty()) {
-        static const QRegularExpression reSvgSection(
-            QStringLiteral("##\\s*SVG[^\\n]*\\n(.*?)(?=\\n##|\\z)"),
-            QRegularExpression::DotMatchesEverythingOption
-            | QRegularExpression::CaseInsensitiveOption);
-        const auto m = reSvgSection.match(m_customInstructions);
-        if (m.hasMatch()) {
-            svgSection = m.captured(1).trimmed();
-        }
-    }
-
-    // Note: permalink is intentionally omitted from the prompt — some medical
-    // disease names (e.g. brucellosis, coccidioidomycosis) trigger safety filters
-    // when included verbatim, even though the SVG content is entirely harmless.
-    // The image description (alt) provides all the context needed for generation.
-    Q_UNUSED(permalink)
+    // Note: the image description (alt) is used instead of any permalink or disease
+    // name to avoid policy-filter rejections on sensitive medical terminology.
     QString prompt = QStringLiteral(
-                         "Create a standalone SVG image for a web article.\n\n"
+                         "Create a standalone SVG image for the following web article.\n\n"
                          "Image id          : %1\n"
                          "Image filename    : %2\n"
                          "Image description : %3\n"
                          "Language          : %4\n\n")
                      .arg(ref.id, ref.fileName, ref.alt, lang);
 
-    if (!svgSection.isEmpty()) {
+    if (!articleText.isEmpty()) {
+        prompt += QStringLiteral("Article content (for context — tailor the diagram to it):\n"
+                                 "---\n")
+                + articleText
+                + QStringLiteral("\n---\n\n");
+    }
+
+    if (!m_svgInstructions.isEmpty()) {
         prompt += QStringLiteral("Strategy design requirements (follow these exactly):\n")
-                + svgSection
+                + m_svgInstructions
                 + QStringLiteral("\n\n");
     }
 
     prompt += QStringLiteral(
-        "Technical requirements:\n"
-        "• Output the SVG code directly as plain text — do NOT use any Write, Edit, or\n"
-        "  file-creation tools. The SVG must appear as your response text, not as a file.\n"
-        "• Return ONLY the raw SVG — no preamble, no code fences, no explanation.\n"
-        "• The output must start with <svg and end with </svg>.\n"
-        "• Include a viewBox attribute; do NOT set a fixed pixel width/height on the root element.\n"
+        "Output format — use EXACTLY these delimiters, nothing else:\n"
+        "===SVG===\n"
+        "<svg ...>...</svg>\n\n"
+        "Technical requirements for the SVG:\n"
+        "• Do NOT use any Write, Edit, or file-creation tools — output only as text.\n"
+        "• Include a viewBox attribute; do NOT set a fixed pixel width/height on the root.\n"
         "• All text labels must be written in %1.\n"
         "• Make the image informative, visually clean, and self-contained.\n"
         "• Use only inline styles — no <style> blocks, no external CSS or fonts.\n"
         "• Use only web-safe fonts (Arial, Helvetica, sans-serif).\n"
         "• No JavaScript, no external references, no raster images embedded inside the SVG.\n"
-        "• IMPORTANT: keep the total SVG under 5000 characters. If a table would have many\n"
-        "  rows, show only the 6–8 most important ones. Brevity is required — a truncated\n"
-        "  SVG is unusable.")
+        "• Keep the total SVG under 5000 characters. Show only the 6–8 most important rows\n"
+        "  if a table would be longer. A truncated SVG is unusable.")
         .arg(lang);
 
     return prompt;

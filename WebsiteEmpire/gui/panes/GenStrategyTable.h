@@ -66,6 +66,20 @@ public:
     // No-op when the value has not changed or the row is out of range.
     void setCustomInstructions(int row, const QString &instructions);
 
+    // Returns the SVG generation instructions for visual row.
+    // Non-empty means SVG generation is enabled for this strategy.
+    QString svgInstructionsForRow(int row) const;
+
+    // Replaces the SVG instructions for visual row and saves strategies.json.
+    void setSvgInstructions(int row, const QString &instructions);
+
+    // Returns the image (raster/PNG) generation instructions for visual row.
+    // Non-empty means image generation is enabled (requires compatible CLI).
+    QString imageInstructionsForRow(int row) const;
+
+    // Replaces the image instructions for visual row and saves strategies.json.
+    void setImageInstructions(int row, const QString &instructions);
+
     // Returns the endPermalink slug suffix for visual row (empty = no suffix).
     // The value is appended with a hyphen to the generated page slug,
     // e.g. endPermalink "genes-biomarkers" + page slug "knee-pain" → "knee-pain-genes-biomarkers".
@@ -108,6 +122,8 @@ private:
         QString pageTypeId;
         QString themeId;             // empty = all themes
         QString customInstructions;  // empty = use generic prompt
+        QString svgInstructions;     // non-empty = SVG generation pass enabled
+        QString imageInstructions;   // non-empty = raster image generation pass enabled (future)
         QString primaryAttrId;       // AbstractPageAttributes::getId() of the aspire primary table; empty = none
         QString primaryDbPath;       // absolute path to the aspire DB file; empty = use results_db/ convention
         QString endPermalink;        // URL slug suffix appended to generated pages; empty = no suffix

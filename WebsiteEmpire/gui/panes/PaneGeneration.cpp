@@ -46,7 +46,7 @@ PaneGeneration::~PaneGeneration()
     if (m_activeProcess) {
         m_activeProcess->disconnect();
     }
-    _saveCurrentPrompt(); // persist any unsaved edits before ui is torn down
+    _saveCurrentPrompts(); // persist any unsaved edits before ui is torn down
     delete ui;
 }
 
@@ -75,7 +75,7 @@ void PaneGeneration::setup(const QDir           &workingDir,
 void PaneGeneration::setVisible(bool visible)
 {
     if (!visible) {
-        _saveCurrentPrompt();
+        _saveCurrentPrompts();
     }
     QWidget::setVisible(visible);
 }
@@ -461,10 +461,12 @@ void PaneGeneration::linkDb()
 void PaneGeneration::_onStrategySelectionChanged(const QModelIndex &current,
                                                   const QModelIndex &previous)
 {
-    // Persist any edits the user made to the prompt before switching rows.
+    // Persist any edits the user made before switching rows.
     if (previous.isValid() && m_isSetup) {
         m_strategies->setCustomInstructions(previous.row(),
                                              ui->textEditPrompt->toPlainText());
+        m_strategies->setSvgInstructions(previous.row(),
+                                          ui->textEditSvgInstructions->toPlainText());
     }
 
     const bool hasSelection = current.isValid();
@@ -475,6 +477,7 @@ void PaneGeneration::_onStrategySelectionChanged(const QModelIndex &current,
         ui->buttonCommandGen->setEnabled(false);
         ui->buttonLinkDb->setEnabled(false);
         ui->textEditPrompt->clear();
+        ui->textEditSvgInstructions->clear();
         ui->tableWidgetStrategyParams->setRowCount(0);
         return;
     }
@@ -491,9 +494,10 @@ void PaneGeneration::_onStrategySelectionChanged(const QModelIndex &current,
     ui->buttonCommandGen->setEnabled(dbReady);
     ui->buttonLinkDb->setEnabled(true); // always allow picking/changing the linked DB
 
-    m_updatingPrompt = true;
+    m_updatingFields = true;
     ui->textEditPrompt->setPlainText(m_strategies->customInstructionsForRow(row));
-    m_updatingPrompt = false;
+    ui->textEditSvgInstructions->setPlainText(m_strategies->svgInstructionsForRow(row));
+    m_updatingFields = false;
 
     // Build parameter rows dynamically so we can add the DB path when needed.
     struct ParamRow { QString label; QString value; bool warn = false; };
@@ -586,11 +590,15 @@ void PaneGeneration::_connectSlots()
             &QTextEdit::textChanged,
             this,
             &PaneGeneration::_onPromptEdited);
+    connect(ui->textEditSvgInstructions,
+            &QTextEdit::textChanged,
+            this,
+            &PaneGeneration::_onSvgEdited);
 }
 
 void PaneGeneration::_onPromptEdited()
 {
-    if (m_updatingPrompt || !m_isSetup) {
+    if (m_updatingFields || !m_isSetup) {
         return;
     }
     const QModelIndex current = ui->tableViewStrategies->currentIndex();
@@ -601,7 +609,20 @@ void PaneGeneration::_onPromptEdited()
                                          ui->textEditPrompt->toPlainText());
 }
 
-void PaneGeneration::_saveCurrentPrompt()
+void PaneGeneration::_onSvgEdited()
+{
+    if (m_updatingFields || !m_isSetup) {
+        return;
+    }
+    const QModelIndex current = ui->tableViewStrategies->currentIndex();
+    if (!current.isValid()) {
+        return;
+    }
+    m_strategies->setSvgInstructions(current.row(),
+                                      ui->textEditSvgInstructions->toPlainText());
+}
+
+void PaneGeneration::_saveCurrentPrompts()
 {
     if (!m_isSetup) {
         return;
@@ -612,6 +633,8 @@ void PaneGeneration::_saveCurrentPrompt()
     }
     m_strategies->setCustomInstructions(current.row(),
                                          ui->textEditPrompt->toPlainText());
+    m_strategies->setSvgInstructions(current.row(),
+                                      ui->textEditSvgInstructions->toPlainText());
 }
 
 QString PaneGeneration::_resolvedDbPath(int row) const

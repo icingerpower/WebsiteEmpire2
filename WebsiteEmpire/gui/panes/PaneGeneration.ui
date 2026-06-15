@@ -129,7 +129,7 @@
        </item>
       </layout>
      </widget>
-     <widget class="QWidget" name="layoutWidget">
+     <widget class="QWidget" name="layoutWidget2">
       <layout class="QVBoxLayout" name="verticalLayout_2">
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_2">
@@ -208,14 +208,74 @@
          <widget class="QWidget" name="widgetPrompt">
           <layout class="QVBoxLayout" name="verticalLayoutPrompt">
            <item>
-            <widget class="QLabel" name="label">
-             <property name="text">
-              <string>Strategy prompt</string>
+            <widget class="QTabWidget" name="tabWidgetPrompt">
+             <property name="currentIndex">
+              <number>0</number>
              </property>
+             <widget class="QWidget" name="tabContent">
+              <attribute name="title">
+               <string>Content</string>
+              </attribute>
+              <layout class="QVBoxLayout" name="verticalLayoutContent">
+               <item>
+                <widget class="QTextEdit" name="textEditPrompt"/>
+               </item>
+              </layout>
+             </widget>
+             <widget class="QWidget" name="tabSvg">
+              <attribute name="title">
+               <string>SVG</string>
+              </attribute>
+              <layout class="QVBoxLayout" name="verticalLayoutSvg">
+               <item>
+                <widget class="QLabel" name="labelSvgHint">
+                 <property name="text">
+                  <string>SVG generation instructions — leave empty to skip SVG generation</string>
+                 </property>
+                 <property name="wordWrap">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QTextEdit" name="textEditSvgInstructions"/>
+               </item>
+              </layout>
+             </widget>
+             <widget class="QWidget" name="tabImage">
+              <attribute name="title">
+               <string>Image</string>
+              </attribute>
+              <layout class="QVBoxLayout" name="verticalLayoutImage">
+               <item>
+                <widget class="QLabel" name="labelImageNotice">
+                 <property name="text">
+                  <string>Image (PNG) generation is not yet implemented. It will require a compatible CLI such as Codex or Gemini.</string>
+                 </property>
+                 <property name="wordWrap">
+                  <bool>true</bool>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignmentFlag::AlignTop|Qt::AlignmentFlag::AlignLeft</set>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="verticalSpacerImage">
+                 <property name="orientation">
+                  <enum>Qt::Orientation::Vertical</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>20</width>
+                   <height>40</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </widget>
             </widget>
-           </item>
-           <item>
-            <widget class="QTextEdit" name="textEditPrompt"/>
            </item>
           </layout>
          </widget>

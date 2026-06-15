@@ -37,6 +37,7 @@ public:
         QString pageTypeId;
         QString themeId;               // empty = all themes / no filter
         QString customInstructions;    // empty = use generic prompt
+        QString svgInstructions;       // non-empty = SVG generation pass enabled
         QString primaryAttrId;         // AbstractPageAttributes::getId(); empty = no source DB
         QString endPermalink;          // URL slug suffix appended to generated pages; empty = none
         bool    nonSvgImages = false;
@@ -49,6 +50,7 @@ public:
         QString pageTypeId;
         QString primaryAttrId;         // forwarded from StrategyInfo; empty = no source DB
         QString customInstructions;    // forwarded from StrategyInfo
+        QString svgInstructions;       // forwarded from StrategyInfo
         QString endPermalink;          // forwarded from StrategyInfo; empty = none
         bool    nonSvgImages = false;
         int     sessionCount = 1;

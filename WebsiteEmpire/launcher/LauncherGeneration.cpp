@@ -144,6 +144,11 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt, AbstractCli *cli)
     process.setArguments(cli->promptArgs());
     process.setStandardInputFile(promptPath);
     process.setStandardOutputFile(outputPath);
+    // SVG generation can produce large XML outputs.  Raise the Claude Code output
+    // token limit so SVG responses are never truncated by the default 32 k cap.
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("CLAUDE_CODE_MAX_OUTPUT_TOKENS"), QStringLiteral("100000"));
+    process.setProcessEnvironment(env);
 
     // Exactly two co_awaits, nothing between them — mirrors ClaudeRunner.
     co_await qCoro(process).start();
@@ -353,7 +358,7 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                     *(state->out) << QStringLiteral("[S%1] SVG regen: %2 (desc: %3)\n")
                                          .arg(sNum).arg(ref.fileName, ref.alt.left(80));
                     state->out->flush();
-                    const QString svgPrompt = queue->buildSvgPrompt(ref, page.permalink, lang);
+                    const QString svgPrompt = queue->buildSvgPrompt(ref, retryText, lang);
                     const QString svgResp   = co_await runWithPolicyRetry(svgPrompt, cli, state->out, sNum);
                     if (svgResp.startsWith(QStringLiteral("__ERROR__"))) {
                         *(state->out) << QStringLiteral("[S%1] WARN (SVG regen): %2\n")
@@ -361,18 +366,16 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                         state->out->flush();
                         continue;
                     }
-                    static const QRegularExpression reSvgOpenR(
-                        QStringLiteral("<svg[\\s>]"), QRegularExpression::CaseInsensitiveOption);
-                    const auto mr    = reSvgOpenR.match(svgResp);
-                    const int  sS    = mr.hasMatch() ? mr.capturedStart() : -1;
-                    const int  sE    = svgResp.lastIndexOf(QStringLiteral("</svg>"));
-                    if (sS < 0 || sE < sS) {
+                    const auto svgResultR = GenPageQueue::parseSvgDelimitedResponse(svgResp);
+                    if (svgResultR.svgCode.isEmpty()
+                        || !svgResultR.svgCode.contains(
+                               QStringLiteral("</svg>"), Qt::CaseInsensitive)) {
                         *(state->out) << QStringLiteral("[S%1] WARN (SVG regen): no valid SVG for %2\n")
                                              .arg(sNum).arg(ref.fileName);
                         state->out->flush();
                         continue;
                     }
-                    const QString svgContent = svgResp.mid(sS, sE + 6 - sS);
+                    const QString &svgContent = svgResultR.svgCode;
                     imageWriter.writeSvg(svgContent.toUtf8(), domain, ref.fileName);
                     retrySvg = svgContent;
                     *(state->out) << QStringLiteral("[S%1] SVG regenerated: %2\n")
@@ -674,7 +677,7 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                                      .arg(sNum).arg(ref.fileName);
                 state->out->flush();
 
-                const QString svgPrompt = queue->buildSvgPrompt(ref, page.permalink, lang);
+                const QString svgPrompt = queue->buildSvgPrompt(ref, articleText, lang);
                 const QString svgResponse = co_await runWithPolicyRetry(svgPrompt, cli, state->out, sNum);
 
                 if (svgResponse.startsWith(QStringLiteral("__ERROR__"))) {
@@ -684,16 +687,8 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                     continue;
                 }
 
-                // Match <svg as a real XML element: must be followed by whitespace or '>'.
-                // A bare indexOf("<svg") would match text like `<svg` inside backtick
-                // explanations that Claude sometimes prepends before the actual SVG.
-                static const QRegularExpression reSvgOpen(
-                    QStringLiteral("<svg[\\s>]"),
-                    QRegularExpression::CaseInsensitiveOption);
-                const auto svgOpenMatch = reSvgOpen.match(svgResponse);
-                const int svgStart = svgOpenMatch.hasMatch() ? svgOpenMatch.capturedStart() : -1;
-                const int svgEnd   = svgResponse.lastIndexOf(QStringLiteral("</svg>"));
-                if (svgStart < 0) {
+                const auto svgResult = GenPageQueue::parseSvgDelimitedResponse(svgResponse);
+                if (svgResult.svgCode.isEmpty()) {
                     *(state->out) << QStringLiteral("[S%1] WARN (SVG): %2 — no <svg> element in response (%3 chars): %4\n")
                                          .arg(sNum).arg(ref.fileName)
                                          .arg(svgResponse.size())
@@ -701,14 +696,14 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                     state->out->flush();
                     continue;
                 }
-                if (svgEnd < svgStart) {
-                    *(state->out) << QStringLiteral("[S%1] WARN (SVG): %2 — SVG truncated (no </svg>, %3 chars) — response likely hit output token limit\n")
+                if (!svgResult.svgCode.contains(QStringLiteral("</svg>"), Qt::CaseInsensitive)) {
+                    *(state->out) << QStringLiteral("[S%1] WARN (SVG): %2 — SVG truncated (no </svg>, %3 chars)\n")
                                          .arg(sNum).arg(ref.fileName).arg(svgResponse.size());
                     state->out->flush();
                     continue;
                 }
 
-                const QString svgContent = svgResponse.mid(svgStart, svgEnd + 6 - svgStart);
+                const QString &svgContent = svgResult.svgCode;
                 imageWriter.writeSvg(svgContent.toUtf8(), domain, ref.fileName);
                 if (sourceSvgForSocialMedia.isEmpty()) {
                     sourceSvgForSocialMedia = svgContent;
@@ -957,6 +952,7 @@ void LauncherGeneration::run(const QString & /*value*/)
             info.pageTypeId         = strategyTable->data(
                 strategyTable->index(row, GenStrategyTable::COL_PAGE_TYPE)).toString();
             info.customInstructions = strategyTable->customInstructionsForRow(row);
+            info.svgInstructions    = strategyTable->svgInstructionsForRow(row);
             info.endPermalink       = strategyTable->endPermalinkForRow(row);
             info.nonSvgImages       = strategyTable->data(
                 strategyTable->index(row, GenStrategyTable::COL_NON_SVG_IMAGES)).toString()
@@ -1023,7 +1019,8 @@ void LauncherGeneration::run(const QString & /*value*/)
         auto *queue = new GenPageQueue(info.pageTypeId, info.nonSvgImages,
                                         virtualPages,
                                         *categoryTable,
-                                        info.customInstructions);
+                                        info.customInstructions,
+                                        info.svgInstructions);
         runGenerationSession(queue, info.strategyId, info.endPermalink,
                               engine, editingLangIndex,
                               *categoryTable, state, 0, cli);
@@ -1052,6 +1049,7 @@ void LauncherGeneration::run(const QString & /*value*/)
             strategyTable->index(row, GenStrategyTable::COL_PAGE_TYPE)).toString();
         info.themeId            = strategyTable->themeIdForRow(row);
         info.customInstructions = strategyTable->customInstructionsForRow(row);
+        info.svgInstructions    = strategyTable->svgInstructionsForRow(row);
         info.primaryAttrId      = strategyTable->primaryAttrIdForRow(row);
         info.endPermalink       = strategyTable->endPermalinkForRow(row);
         info.nonSvgImages       = strategyTable->data(
@@ -1221,12 +1219,19 @@ void LauncherGeneration::run(const QString & /*value*/)
                         schedRepo.findPendingByTypeId(info.pageTypeId);
                     vp.append(pending);
                 }
-                // SocialMedia (MainImageReady) first, then ContentReady SVG retries.
-                for (const PageRecord &p : std::as_const(mirPages)) {
-                    vp.prepend(p);
-                }
-                for (const PageRecord &p : std::as_const(crPages)) {
-                    vp.prepend(p);
+                // When a --limit is set, new pages go first so the limit slot is
+                // consumed by fresh article generation, not retries.  Without a
+                // limit (full run), retries go first: SocialMedia then SVG-retry.
+                if (jobsLimit >= 0) {
+                    vp.append(mirPages);
+                    vp.append(crPages);
+                } else {
+                    for (const PageRecord &p : std::as_const(mirPages)) {
+                        vp.prepend(p);
+                    }
+                    for (const PageRecord &p : std::as_const(crPages)) {
+                        vp.prepend(p);
+                    }
                 }
                 info.pendingCountOverride = vp.size();
                 *out << QStringLiteral(
@@ -1286,7 +1291,8 @@ void LauncherGeneration::run(const QString & /*value*/)
                                      alloc.nonSvgImages,
                                      vPages,
                                      *categoryTable,
-                                     alloc.customInstructions);
+                                     alloc.customInstructions,
+                                     alloc.svgInstructions);
         } else {
             // Classic strategy: read pending pages from pages.db.
             PageDb           *queueDb   = new PageDb(workingDir);
@@ -1296,6 +1302,7 @@ void LauncherGeneration::run(const QString & /*value*/)
                                      *queueRepo,
                                      *categoryTable,
                                      alloc.customInstructions,
+                                     alloc.svgInstructions,
                                      jobsLimit);
             // queueDb / queueRepo intentionally leak — coroutines hold references
             // across suspension points; process exit cleans up.

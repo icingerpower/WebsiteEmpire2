@@ -57,6 +57,7 @@ public slots:
 private slots:
     void _onStrategySelectionChanged(const QModelIndex &current, const QModelIndex &previous);
     void _onPromptEdited();
+    void _onSvgEdited();
 
 private:
     void _connectSlots();
@@ -69,12 +70,11 @@ private:
     void _startProcess(QStringList args);
 
     /**
-     * Reads textEditPrompt and persists it to the currently selected strategy row.
-     * No-op when no strategy is selected or the pane has not been set up.
-     * Called from the destructor, setVisible(false), and before switching rows so
-     * that edits are never lost regardless of how the user leaves the prompt.
+     * Persists textEditPrompt and textEditSvgInstructions to the currently selected
+     * strategy row.  No-op when no strategy is selected or the pane has not been set
+     * up.  Called from the destructor, setVisible(false), and before switching rows.
      */
-    void _saveCurrentPrompt();
+    void _saveCurrentPrompts();
 
     /**
      * Returns the resolved path to the aspire DB for the given strategy row.
@@ -98,9 +98,9 @@ private:
     // destroying the UI (otherwise QProcess::~QProcess fires 'finished' after
     // ui->textEditOutput is already deleted, causing a segfault).
     QProcess           *m_activeProcess    = nullptr;
-    // Guard: true while _onStrategySelectionChanged is setting the prompt text
-    // programmatically, so _onPromptEdited() does not write back a false save.
-    bool                m_updatingPrompt   = false;
+    // Guard: true while _onStrategySelectionChanged is loading fields programmatically
+    // so _onPromptEdited() / _onSvgEdited() do not write back a false save.
+    bool                m_updatingFields   = false;
 };
 
 #endif // PANEGENERATION_H

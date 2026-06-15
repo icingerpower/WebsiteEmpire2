@@ -17,6 +17,8 @@ static const QString JSON_KEY_NAME                 = QStringLiteral("name");
 static const QString JSON_KEY_PAGE_TYPE_ID         = QStringLiteral("pageTypeId");
 static const QString JSON_KEY_THEME_ID             = QStringLiteral("themeId");
 static const QString JSON_KEY_CUSTOM_INSTRUCTIONS  = QStringLiteral("customInstructions");
+static const QString JSON_KEY_SVG_INSTRUCTIONS     = QStringLiteral("svgInstructions");
+static const QString JSON_KEY_IMAGE_INSTRUCTIONS   = QStringLiteral("imageInstructions");
 static const QString JSON_KEY_PRIMARY_ATTR_ID      = QStringLiteral("primaryAttrId");
 static const QString JSON_KEY_PRIMARY_DB_PATH      = QStringLiteral("primaryDbPath");
 static const QString JSON_KEY_END_PERMALINK        = QStringLiteral("endPermalink");
@@ -94,6 +96,46 @@ void GenStrategyTable::setCustomInstructions(int row, const QString &instruction
         return;
     }
     m_rows[row].customInstructions = instructions;
+    _save();
+}
+
+QString GenStrategyTable::svgInstructionsForRow(int row) const
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return {};
+    }
+    return m_rows.at(row).svgInstructions;
+}
+
+void GenStrategyTable::setSvgInstructions(int row, const QString &instructions)
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return;
+    }
+    if (m_rows.at(row).svgInstructions == instructions) {
+        return;
+    }
+    m_rows[row].svgInstructions = instructions;
+    _save();
+}
+
+QString GenStrategyTable::imageInstructionsForRow(int row) const
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return {};
+    }
+    return m_rows.at(row).imageInstructions;
+}
+
+void GenStrategyTable::setImageInstructions(int row, const QString &instructions)
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return;
+    }
+    if (m_rows.at(row).imageInstructions == instructions) {
+        return;
+    }
+    m_rows[row].imageInstructions = instructions;
     _save();
 }
 
@@ -353,6 +395,8 @@ void GenStrategyTable::_load()
         row.pageTypeId         = obj.value(JSON_KEY_PAGE_TYPE_ID).toString();
         row.themeId            = obj.value(JSON_KEY_THEME_ID).toString();
         row.customInstructions = obj.value(JSON_KEY_CUSTOM_INSTRUCTIONS).toString();
+        row.svgInstructions    = obj.value(JSON_KEY_SVG_INSTRUCTIONS).toString();
+        row.imageInstructions  = obj.value(JSON_KEY_IMAGE_INSTRUCTIONS).toString();
         row.primaryAttrId      = obj.value(JSON_KEY_PRIMARY_ATTR_ID).toString();
         row.primaryDbPath      = obj.value(JSON_KEY_PRIMARY_DB_PATH).toString();
         row.endPermalink       = obj.value(JSON_KEY_END_PERMALINK).toString();
@@ -360,6 +404,23 @@ void GenStrategyTable::_load()
         row.priority           = obj.value(JSON_KEY_PRIORITY).toInt(1);
         row.nDone              = obj.value(JSON_KEY_N_DONE).toInt(0);
         row.nTotal             = obj.value(JSON_KEY_N_TOTAL).toInt(0);
+
+        // Migration: if svgInstructions was not yet saved but customInstructions
+        // contains a "## SVG" section, extract it into svgInstructions and remove
+        // it from customInstructions so the two fields have separate concerns.
+        if (row.svgInstructions.isEmpty() && !row.customInstructions.isEmpty()) {
+            static const QRegularExpression reSvgSection(
+                QStringLiteral("\\n?##\\s*SVG[^\\n]*\\n(.*?)(?=\\n##|\\z)"),
+                QRegularExpression::DotMatchesEverythingOption
+                    | QRegularExpression::CaseInsensitiveOption);
+            const auto m = reSvgSection.match(row.customInstructions);
+            if (m.hasMatch()) {
+                row.svgInstructions    = m.captured(1).trimmed();
+                row.customInstructions = row.customInstructions;
+                row.customInstructions.remove(m.capturedStart(), m.capturedLength());
+                row.customInstructions = row.customInstructions.trimmed();
+            }
+        }
 
         if (row.id.isEmpty()) {
             row.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -380,6 +441,8 @@ void GenStrategyTable::_save() const
         obj.insert(JSON_KEY_PAGE_TYPE_ID,        row.pageTypeId);
         obj.insert(JSON_KEY_THEME_ID,            row.themeId);
         obj.insert(JSON_KEY_CUSTOM_INSTRUCTIONS, row.customInstructions);
+        obj.insert(JSON_KEY_SVG_INSTRUCTIONS,    row.svgInstructions);
+        obj.insert(JSON_KEY_IMAGE_INSTRUCTIONS,  row.imageInstructions);
         obj.insert(JSON_KEY_PRIMARY_ATTR_ID,     row.primaryAttrId);
         obj.insert(JSON_KEY_PRIMARY_DB_PATH,     row.primaryDbPath);
         obj.insert(JSON_KEY_END_PERMALINK,       row.endPermalink);
