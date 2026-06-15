@@ -340,30 +340,33 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                 }
             }
 
-            // Hub pages: add translated permalink for the current deployment language.
-            // Applies whether langCodesToTranslate is empty (legacy hubs) or set.
+            // Hub pages: add translated permalink for EVERY language that translates
+            // this hub (not just currentLang), so hreflang alternate links are correct
+            // regardless of which language is being generated in this run.
+            // Legacy hubs with an empty langCodesToTranslate fall back to currentLang only.
             if (r.typeId == QStringLiteral("category_hub")) {
-                const bool relevantToCurrentLang = r.langCodesToTranslate.isEmpty()
-                    || r.langCodesToTranslate.contains(currentLang);
-                if (relevantToCurrentLang) {
-                    const QHash<QString, QString> &hubData = m_pageRepo.loadData(r.id);
-                    const QString &catStr = hubData.value(QStringLiteral("0_categories"));
-                    for (const QString &part : catStr.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
-                        bool ok = false;
-                        const int catId = part.trimmed().toInt(&ok);
-                        if (!ok || catId <= 0) { continue; }
-                        const CategoryTable::CategoryRow *catRow = m_categoryTable.categoryById(catId);
-                        if (!catRow) { continue; }
-                        const QString translatedName = m_categoryTable.translationFor(catId, currentLang);
+                const QStringList &hubLangs = r.langCodesToTranslate.isEmpty()
+                    ? QStringList{currentLang}
+                    : r.langCodesToTranslate;
+                const QHash<QString, QString> &hubData = m_pageRepo.loadData(r.id);
+                const QString &catStr = hubData.value(QStringLiteral("0_categories"));
+                for (const QString &part : catStr.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+                    bool ok = false;
+                    const int catId = part.trimmed().toInt(&ok);
+                    if (!ok || catId <= 0) { continue; }
+                    const CategoryTable::CategoryRow *catRow = m_categoryTable.categoryById(catId);
+                    if (!catRow) { continue; }
+                    for (const QString &lang : std::as_const(hubLangs)) {
+                        const QString translatedName = m_categoryTable.translationFor(catId, lang);
                         if (translatedName != catRow->name) {
                             const QString trPermalink = categoryHubSlug(translatedName);
                             if (!trPermalink.isEmpty() && trPermalink != r.permalink) {
-                                translatedPermalinks[currentLang][r.permalink] = trPermalink;
-                                availablePages[currentLang].insert(trPermalink);
+                                translatedPermalinks[lang][r.permalink] = trPermalink;
+                                availablePages[lang].insert(trPermalink);
                             }
                         }
-                        break; // use first category only
                     }
+                    break; // use first category only
                 }
             }
 
