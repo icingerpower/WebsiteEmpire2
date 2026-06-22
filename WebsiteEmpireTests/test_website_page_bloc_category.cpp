@@ -1,9 +1,14 @@
 #include <QtTest>
 
 #include <QDir>
+#include <QFile>
+#include <QHash>
+#include <QSet>
 #include <QTemporaryDir>
+#include <QTextStream>
 
 #include "website/EngineArticles.h"
+#include "website/HostTable.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/blocs/PageBlocCategory.h"
 #include "website/pages/blocs/widgets/AbstractPageBlockWidget.h"
@@ -86,6 +91,9 @@ private slots:
 
     // --- addCode: no JS ---
     void test_pagebloccategory_no_js_emitted();
+
+    // --- Bug fix: translated name must not drive the permalink ---
+    void test_pagebloccategory_translated_name_uses_english_permalink();
 };
 
 // =============================================================================
@@ -323,6 +331,67 @@ void Test_Website_PageBlocCategory::test_pagebloccategory_no_js_emitted()
     QSet<QString> cssDoneIds, jsDoneIds;
     f.bloc.addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
     QVERIFY(js.isEmpty());
+}
+
+// =============================================================================
+// Bug fix: translated name must not drive the permalink
+// =============================================================================
+
+void Test_Website_PageBlocCategory::test_pagebloccategory_translated_name_uses_english_permalink()
+{
+    // Regression test for commit 297774c6:
+    // PageBlocCategory was building the breadcrumb href from the *translated*
+    // category name, e.g. "Santé" → /sant-.html.  That permalink did not exist
+    // in the available-pages map, so isPageAvailable returned false and the
+    // link was rendered as plain text.  The fix always derives the permalink
+    // from the English canonical name (row->name), so /health.html is
+    // generated regardless of the active language.
+
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    // Write engine_domains.csv with French at websiteIndex 0.
+    {
+        const QString csvPath =
+            QDir(dir.path()).absoluteFilePath(QStringLiteral("engine_domains.csv"));
+        QFile csv(csvPath);
+        QVERIFY(csv.open(QIODevice::WriteOnly | QIODevice::Text));
+        QTextStream out(&csv);
+        out << QStringLiteral("Enabled;LangCode;Language;Theme;Domain;HostId;HostFolder\n");
+        out << QStringLiteral("1;fr;French;default;fr.example.com;;\n");
+    }
+
+    HostTable hostTable(QDir(dir.path()));
+    EngineArticles engine;
+    engine.init(QDir(dir.path()), hostTable);
+
+    // Register /health.html as an available page for the "fr" language.
+    QHash<QString, QSet<QString>> availablePages;
+    availablePages[QStringLiteral("fr")].insert(QStringLiteral("/health.html"));
+    engine.setAvailablePages(availablePages);
+
+    // Set up a category "Health" with the French translation "Santé".
+    CategoryTable categoryTable(QDir(dir.path()));
+    const int id = categoryTable.addCategory(QStringLiteral("Health"));
+    categoryTable.setTranslation(id, QStringLiteral("fr"), QStringLiteral("Santé"));
+
+    // Wire the bloc to the category table and select the "Health" category.
+    PageBlocCategory bloc(categoryTable);
+    bloc.load({{QLatin1String(PageBlocCategory::KEY_CATEGORIES), QString::number(id)}});
+
+    // Generate HTML for websiteIndex 0 (French).
+    QString html, css, js;
+    QSet<QString> cssDoneIds, jsDoneIds;
+    bloc.addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+
+    // The breadcrumb must contain the English-derived permalink "health.html".
+    QVERIFY2(html.contains(QStringLiteral("health.html")),
+             qPrintable(QStringLiteral("Expected 'health.html' in html, got: ") + html));
+
+    // The French-derived slug "sant" must NOT appear as part of an href.
+    // (The visible link text "Santé" is fine, but the href must be English-based.)
+    QVERIFY2(!html.contains(QStringLiteral("sant-")),
+             qPrintable(QStringLiteral("French slug 'sant-' must not appear in href, got: ") + html));
 }
 
 QTEST_MAIN(Test_Website_PageBlocCategory)

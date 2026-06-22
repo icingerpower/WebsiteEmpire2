@@ -5,12 +5,14 @@
 
 #include <atomic>
 
+#include "CountryLangManager.h"
 #include "website/pages/PageDb.h"
 #include "website/pages/PageGenerator.h"
 #include "website/pages/PageRepositoryDb.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/blocs/PageBlocText.h"
 #include "website/EngineArticles.h"
+#include "website/HostTable.h"
 
 // ---------------------------------------------------------------------------
 // Fixture
@@ -104,6 +106,12 @@ private slots:
     void test_pagegen_subset_returns_count_of_written_pages();
     void test_pagegen_subset_unknown_id_is_skipped();
     void test_pagegen_subset_only_renders_listed_ids();
+
+    // --- isPageAvailable: untranslated language excluded ---
+    void test_pagegen_article_untranslated_lang_excluded_from_available_pages();
+
+    // --- categoryHubSlug: diacritic normalization ---
+    void test_pagegen_hub_diacritic_slug_strips_accents();
 };
 
 // ---------------------------------------------------------------------------
@@ -441,6 +449,59 @@ void Test_PageGenerator::test_pagegen_subset_only_renders_listed_ids()
     q.next();
     QCOMPARE(q.value(0).toInt(), 1);
     f.closeContentDb(conn);
+}
+
+// ---------------------------------------------------------------------------
+// isPageAvailable: untranslated language excluded from available pages
+// ---------------------------------------------------------------------------
+
+void Test_PageGenerator::test_pagegen_article_untranslated_lang_excluded_from_available_pages()
+{
+    // Arrange: init the engine so it has real lang-code rows (en at index 0).
+    Fixture f;
+    HostTable hostTable(QDir(f.dir.path()));
+    f.engine.init(QDir(f.dir.path()), hostTable);
+
+    // Create an article whose source lang is "en" and that targets "fr" for
+    // translation, but provide NO _tr:fr: keys — the page has not been
+    // translated yet.
+    const int id = f.repo.create(QStringLiteral("article"), QStringLiteral("/p.html"),
+                                 QStringLiteral("en"));
+    f.repo.saveData(id, {
+        {QStringLiteral("1_") + QLatin1String(PageBlocText::KEY_TEXT), QStringLiteral("text")},
+        {QStringLiteral("0_categories"), QString()},
+    });
+    f.repo.setLangCodesToTranslate(id, {QStringLiteral("fr")});
+
+    // Find the engine row index for "fr".
+    int frIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        if (f.engine.getLangCode(i) == QStringLiteral("fr")) {
+            frIndex = i;
+            break;
+        }
+    }
+    QVERIFY(frIndex >= 0); // sanity: engine must have a "fr" row after init()
+
+    // Act: run a full generation pass for the English domain (index 0).
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+
+    // Assert: because no _tr:fr: key exists the generator must NOT have added
+    // "/p.html" to availablePages["fr"].
+    QVERIFY(!f.engine.isPageAvailable(QStringLiteral("/p.html"), frIndex));
+}
+
+// ---------------------------------------------------------------------------
+// categoryHubSlug: diacritic normalization
+// ---------------------------------------------------------------------------
+
+void Test_PageGenerator::test_pagegen_hub_diacritic_slug_strips_accents()
+{
+    // "Santé mentale": the accented é must be decomposed via NFD into 'e' + a
+    // combining accent, then the combining character is stripped.  Without NFD
+    // the é is removed entirely and the result would be "/sant-mentale.html".
+    QCOMPARE(PageGenerator::categoryHubSlug(QStringLiteral("Santé mentale")),
+             QStringLiteral("/sante-mentale.html"));
 }
 
 QTEST_MAIN(Test_PageGenerator)

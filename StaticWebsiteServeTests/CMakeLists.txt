@@ -62,3 +62,33 @@ target_include_directories(Test_StaticServe_VariantSelector
 )
 
 add_test(NAME Test_StaticServe_VariantSelector COMMAND Test_StaticServe_VariantSelector)
+
+add_executable(Test_StaticServe_PageController
+    test_page_controller.cpp
+    ../StaticWebsiteServe/controllers/PageController.cpp
+)
+
+target_link_libraries(Test_StaticServe_PageController
+    PRIVATE Drogon::Drogon StaticWebsiteServeLib
+)
+
+target_include_directories(Test_StaticServe_PageController
+    PRIVATE ../StaticWebsiteServeLib
+)
+
+add_test(NAME Test_StaticServe_PageController COMMAND Test_StaticServe_PageController)
+
+add_executable(Test_StaticServe_ImageController
+    test_image_controller.cpp
+    ../StaticWebsiteServe/controllers/ImageController.cpp
+)
+
+target_link_libraries(Test_StaticServe_ImageController
+    PRIVATE Drogon::Drogon StaticWebsiteServeLib
+)
+
+target_include_directories(Test_StaticServe_ImageController
+    PRIVATE ../StaticWebsiteServeLib
+)
+
+add_test(NAME Test_StaticServe_ImageController COMMAND Test_StaticServe_ImageController)

@@ -482,6 +482,49 @@ DROGON_TEST(test_imagerepository_findbydomainandfilename_returns_nullopt_for_wro
     std::filesystem::remove(path);
 }
 
+DROGON_TEST(test_imagerepository_findbydomainandfilename_falls_back_to_empty_domain)
+{
+    // Regression test for the bug where findByDomainAndFilename used a strict
+    // WHERE n.domain = ? AND n.filename = ? clause that prevented images stored
+    // with domain='' (uploaded before a domain was configured) from being served
+    // when queried with a real domain name.
+    const std::string path = std::filesystem::temp_directory_path() / "test_img_fallback_domain.db";
+    std::filesystem::remove(path);
+
+    const std::vector<uint8_t> fakeBlob = {0xab, 0xcd};
+
+    ImageDb db(path);
+    {
+        SQLite::Statement s(db.database(),
+            "INSERT INTO images (blob, mime_type) VALUES (?, ?)");
+        s.bind(1, static_cast<const void *>(fakeBlob.data()), static_cast<int>(fakeBlob.size()));
+        s.bind(2, "image/webp");
+        s.exec();
+    }
+    const int64_t imageId = db.database().getLastInsertRowid();
+    {
+        // Store the image with domain='' (empty string), simulating an image
+        // uploaded before a domain was configured in the engine.
+        SQLite::Statement s(db.database(),
+            "INSERT INTO image_names (domain, filename, image_id) VALUES (?, ?, ?)");
+        s.bind(1, "");
+        s.bind(2, "banner.webp");
+        s.bind(3, imageId);
+        s.exec();
+    }
+
+    ImageRepositorySQLite repo(db);
+    // Query with a real domain: the fixed query falls back to domain='' and must
+    // find the record. With the bug this returned nullopt.
+    const auto result = repo.findByDomainAndFilename("example.com", "banner.webp");
+
+    REQUIRE(result.has_value());
+    CHECK(result->mimeType == "image/webp");
+    CHECK(result->blob     == fakeBlob);
+
+    std::filesystem::remove(path);
+}
+
 // ---------------------------------------------------------------------------
 
 int main(int argc, char *argv[])

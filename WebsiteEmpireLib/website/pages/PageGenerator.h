@@ -99,6 +99,16 @@ public:
     static QByteArray gzipCompress(const QByteArray &input);
     static QString    computeEtag(const QByteArray &data);
 
+    /**
+     * Derives a hub page permalink from a category name.
+     * Applies NFD decomposition so accented letters (é, ü, …) map to their
+     * ASCII base before non-alphanumeric characters are replaced with hyphens.
+     * Example: "Santé mentale" → "/sante-mentale.html".
+     * Returns an empty string when the name yields an empty slug.
+     * Exposed as a static method so unit tests can exercise it directly.
+     */
+    static QString categoryHubSlug(const QString &name);
+
 private:
     IPageRepository &m_pageRepo;
     CategoryTable   &m_categoryTable;

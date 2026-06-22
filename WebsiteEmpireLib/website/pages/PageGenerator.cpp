@@ -20,13 +20,15 @@
 #include <atomic>
 #include <zlib.h>
 
-namespace {
+// =============================================================================
+// Static helpers
+// =============================================================================
 
 // Derives a hub page permalink from a category name — same logic as
 // _categoryPermalink() in the link-builder blocs so both sides agree.
 // NFD decomposition maps accented letters to their ASCII base (é→e, ü→u, etc.)
 // so translated names like "Santé mentale" slug correctly to "sante-mentale".
-QString categoryHubSlug(const QString &name)
+QString PageGenerator::categoryHubSlug(const QString &name)
 {
     static const QRegularExpression s_nonAlnum(QStringLiteral("[^a-z0-9]+"));
     static const QRegularExpression s_combining(QStringLiteral("[\\x{0300}-\\x{036F}]"));
@@ -38,8 +40,6 @@ QString categoryHubSlug(const QString &name)
     if (slug.isEmpty()) { return {}; }
     return QStringLiteral("/") + slug + QStringLiteral(".html");
 }
-
-} // namespace
 
 // =============================================================================
 // Constructor
