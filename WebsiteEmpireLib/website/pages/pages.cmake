@@ -21,6 +21,10 @@ set(PAGES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeHome.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeLegal.h
     ${CMAKE_CURRENT_LIST_DIR}/PageTypeLegal.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageTypeSymptomHub.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageTypeSymptomHub.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageTypeSymptomIndex.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageTypeSymptomIndex.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageFlag.h
     ${CMAKE_CURRENT_LIST_DIR}/PageGenerationState.h
     ${CMAKE_CURRENT_LIST_DIR}/PageStateFormatter.h
@@ -46,6 +50,12 @@ set(PAGES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/CategoryHubDirtySet.cpp
     ${CMAKE_CURRENT_LIST_DIR}/CategoryHubSyncer.h
     ${CMAKE_CURRENT_LIST_DIR}/CategoryHubSyncer.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/SymptomHubSyncer.h
+    ${CMAKE_CURRENT_LIST_DIR}/SymptomHubSyncer.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/TaxonomyIndexSyncer.h
+    ${CMAKE_CURRENT_LIST_DIR}/TaxonomyIndexSyncer.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageTypeTaxonomyIndex.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageTypeTaxonomyIndex.cpp
     ${ATTRIBUTES_FILES}
     ${BLOCS_FILES}
     ${PAGES_WIDGETS_FILES}

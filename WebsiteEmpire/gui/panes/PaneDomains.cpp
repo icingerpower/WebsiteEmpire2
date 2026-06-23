@@ -8,6 +8,7 @@
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/CategoryHubDirtySet.h"
 #include "website/pages/CategoryHubSyncer.h"
+#include "website/pages/SymptomHubSyncer.h"
 #include "website/pages/PageDb.h"
 #include "website/pages/PageGenerator.h"
 #include "website/pages/PageRepositoryDb.h"
@@ -618,6 +619,8 @@ void PaneDomains::deployLocally()
         CategoryHubSyncer   hubSyncer(pageRepo, categoryTable, hubDirtySet, generator);
         hubSyncer.syncStubs(m_engine->getLangCode(0));
         hubSyncer.markStaleByStats(m_workingDir);
+        SymptomHubSyncer    symptomSyncer(pageRepo);
+        symptomSyncer.syncStubs(m_workingDir, m_engine->getLangCode(0));
 
         // ── Locate StaticWebsiteServe binary ─────────────────────────────────
         const QString appDir = QCoreApplication::applicationDirPath();

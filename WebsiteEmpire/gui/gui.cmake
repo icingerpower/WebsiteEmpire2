@@ -24,6 +24,8 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneGeneratedPages.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneGeneratedPages.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PaneGeneratedPages.ui
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneTaxonomies.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PaneTaxonomies.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageStats.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageStats.h
     ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageStats.ui

@@ -23,11 +23,13 @@ PageEditorDialog::PageEditorDialog(IPageRepository &repo,
                                    CategoryTable   &categoryTable,
                                    int              pageId,
                                    const QString   &editingLangCode,
-                                   QWidget         *parent)
+                                   QWidget         *parent,
+                                   const QDir      &workingDir)
     : QDialog(parent)
     , ui(new Ui::PageEditorDialog)
     , m_repo(repo)
     , m_categoryTable(categoryTable)
+    , m_workingDir(workingDir)
     , m_pageId(pageId)
     , m_editingLangCode(editingLangCode)
 {
@@ -185,6 +187,9 @@ void PageEditorDialog::_loadBlocs(const QString &typeId)
     m_pageType = AbstractPageType::createForTypeId(typeId, m_categoryTable);
     if (!m_pageType) {
         return;
+    }
+    if (m_workingDir.exists()) {
+        m_pageType->bindGenerationContext(m_repo, m_workingDir);
     }
 
     const auto &blocs = m_pageType->getPageBlocs();

@@ -27,4 +27,8 @@ set(BLOCS_WIDGETS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocAutoLinkWidget.ui
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocHubGridWidget.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocHubGridWidget.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocReadOnlyWidget.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocReadOnlyWidget.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocSymptomLinksWidget.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocSymptomLinksWidget.cpp
 )

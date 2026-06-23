@@ -2,6 +2,7 @@
 #define PAGEEDITORDIALOG_H
 
 #include <QDialog>
+#include <QDir>
 #include <QList>
 #include <QStringList>
 #include <memory>
@@ -54,7 +55,8 @@ public:
                               CategoryTable   &categoryTable,
                               int              pageId,
                               const QString   &editingLangCode,
-                              QWidget         *parent = nullptr);
+                              QWidget         *parent      = nullptr,
+                              const QDir      &workingDir  = QDir{});
     ~PageEditorDialog() override;
 
     /**
@@ -80,6 +82,7 @@ private:
     Ui::PageEditorDialog *ui;
     IPageRepository      &m_repo;
     CategoryTable        &m_categoryTable;
+    QDir                  m_workingDir;
     int                   m_pageId;          // -1 = create mode
     QString               m_editingLangCode; // used in create mode only
     bool                  m_locked = false;  // translation not yet done

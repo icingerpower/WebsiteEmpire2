@@ -2,7 +2,7 @@
 
 #include "website/AbstractEngine.h"
 #include "website/pages/PageRecord.h"
-#include "website/pages/blocs/widgets/PageBlocSocialWidget.h"
+#include "website/pages/blocs/widgets/PageBlocReadOnlyWidget.h"
 #include "website/social/AbstractSocialMedia.h"
 
 #include "ExceptionWithTitleText.h"
@@ -102,7 +102,11 @@ void PageBlocSocialMedia::addCode(QStringView      /*origContent*/,
 
 AbstractPageBlockWidget *PageBlocSocialMedia::createEditWidget()
 {
-    return new PageBlocSocialWidget;
+    return new PageBlocReadOnlyWidget(
+        QCoreApplication::translate("PageBlocSocialMedia",
+            "Social media image variants (og, wide, square, portrait) are generated "
+            "automatically by the Generation pipeline — Second Pass. "
+            "Titles and descriptions come from the Social Media bloc above."));
 }
 
 // =============================================================================

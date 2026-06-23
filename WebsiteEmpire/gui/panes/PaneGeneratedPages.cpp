@@ -5,11 +5,16 @@
 #include "website/WebsiteSettingsTable.h"
 #include "website/pages/CategoryHubDirtySet.h"
 #include "website/pages/CategoryHubSyncer.h"
+#include "website/pages/SymptomHubSyncer.h"
+#include "website/pages/TaxonomyIndexSyncer.h"
+#include "website/pages/PageTypeTaxonomyIndex.h"
 #include "website/pages/PageDb.h"
 #include "website/pages/PageGenerator.h"
 #include "website/pages/PageRecord.h"
 #include "website/pages/PageRepositoryDb.h"
 #include "website/pages/PageTypeCategory.h"
+#include "website/pages/PageTypeSymptomHub.h"
+#include "website/pages/PageTypeSymptomIndex.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "../dialogs/DialogPreviewPage.h"
 #include "ExceptionWithTitleText.h"
@@ -146,6 +151,8 @@ PaneGeneratedPages::PaneGeneratedPages(QWidget *parent)
 PaneGeneratedPages::~PaneGeneratedPages()
 {
     // Tear down in reverse dependency order.
+    m_taxonomyIndexSyncer.reset();
+    m_symptomSyncer.reset();
     m_syncer.reset();
     m_dirtySet.reset();
     m_pageGenerator.reset();
@@ -191,8 +198,11 @@ void PaneGeneratedPages::syncStubs()
     if (!m_syncer) {
         return;
     }
-    if (m_settingsTable) {
-        m_syncer->syncStubs(m_settingsTable->editingLangCode());
+    const QString lang = m_settingsTable ? m_settingsTable->editingLangCode() : QString{};
+    if (!lang.isEmpty()) {
+        m_syncer->syncStubs(lang);
+        m_symptomSyncer->syncStubs(m_workingDir, lang);
+        m_taxonomyIndexSyncer->syncStubs(lang);
     }
     _refreshModel();
 }
@@ -268,6 +278,8 @@ void PaneGeneratedPages::_connectSlots()
 void PaneGeneratedPages::_initDb()
 {
     // Tear down in reverse dependency order.
+    m_taxonomyIndexSyncer.reset();
+    m_symptomSyncer.reset();
     m_syncer.reset();
     m_dirtySet.reset();
     m_pageGenerator.reset();
@@ -275,17 +287,19 @@ void PaneGeneratedPages::_initDb()
     m_pageDb.reset();
     m_categoryTable.reset();
 
-    m_categoryTable = std::make_unique<CategoryTable>(m_workingDir);
-    m_pageDb        = std::make_unique<PageDb>(m_workingDir);
-    m_pageRepo      = std::make_unique<PageRepositoryDb>(*m_pageDb);
-    m_pageGenerator = std::make_unique<PageGenerator>(*m_pageRepo, *m_categoryTable);
+    m_categoryTable  = std::make_unique<CategoryTable>(m_workingDir);
+    m_pageDb         = std::make_unique<PageDb>(m_workingDir);
+    m_pageRepo       = std::make_unique<PageRepositoryDb>(*m_pageDb);
+    m_pageGenerator  = std::make_unique<PageGenerator>(*m_pageRepo, *m_categoryTable);
     if (m_settingsTable) {
         m_pageGenerator->setWebsiteContext(m_settingsTable->websiteName(),
                                            m_settingsTable->author());
     }
-    m_dirtySet      = std::make_unique<CategoryHubDirtySet>(m_workingDir);
-    m_syncer        = std::make_unique<CategoryHubSyncer>(
-                          *m_pageRepo, *m_categoryTable, *m_dirtySet, *m_pageGenerator);
+    m_dirtySet       = std::make_unique<CategoryHubDirtySet>(m_workingDir);
+    m_syncer         = std::make_unique<CategoryHubSyncer>(
+                           *m_pageRepo, *m_categoryTable, *m_dirtySet, *m_pageGenerator);
+    m_symptomSyncer          = std::make_unique<SymptomHubSyncer>(*m_pageRepo);
+    m_taxonomyIndexSyncer    = std::make_unique<TaxonomyIndexSyncer>(*m_pageRepo);
 }
 
 void PaneGeneratedPages::_refreshModel()
@@ -296,38 +310,48 @@ void PaneGeneratedPages::_refreshModel()
     QList<GeneratedPageRow> rows;
     const QList<PageRecord> all = m_pageRepo->findAll();
     for (const PageRecord &record : std::as_const(all)) {
-        if (record.typeId != QLatin1String(PageTypeCategory::TYPE_ID)) {
-            continue;
-        }
         if (record.sourcePageId != 0) {
             continue; // skip translation pages — show source pages only
         }
 
-        const QHash<QString, QString> data = m_pageRepo->loadData(record.id);
-        const QSet<int> catIds = CategoryHubSyncer::extractCategoryIds(data);
-
-        QStringList catNames;
-        for (const int catId : std::as_const(catIds)) {
-            const CategoryTable::CategoryRow *cat = m_categoryTable->categoryById(catId);
-            if (cat) {
-                catNames.append(cat->name);
-            }
-        }
-        catNames.sort();
-
         GeneratedPageRow row;
         row.id          = record.id;
-        row.typeDisplay = tr("Category hub");
-        row.name        = catNames.join(QStringLiteral(", "));
         row.permalink   = record.permalink;
         row.generatedAt = record.generatedAt;
 
-        if (record.generatedAt.isEmpty()) {
-            row.status = tr("Stub");
-        } else if (m_dirtySet->contains(record.id)) {
-            row.status = tr("Stale");
+        if (record.typeId == QLatin1String(PageTypeCategory::TYPE_ID)) {
+            const QHash<QString, QString> data = m_pageRepo->loadData(record.id);
+            const QSet<int> catIds = CategoryHubSyncer::extractCategoryIds(data);
+            QStringList catNames;
+            for (const int catId : std::as_const(catIds)) {
+                const CategoryTable::CategoryRow *cat = m_categoryTable->categoryById(catId);
+                if (cat) {
+                    catNames.append(cat->name);
+                }
+            }
+            catNames.sort();
+            row.typeDisplay = tr("Category hub");
+            row.name        = catNames.join(QStringLiteral(", "));
+            row.status      = record.generatedAt.isEmpty() ? tr("Stub")
+                              : m_dirtySet->contains(record.id) ? tr("Stale")
+                              : tr("Ready");
+        } else if (record.typeId == QLatin1String(PageTypeSymptomHub::TYPE_ID)) {
+            row.typeDisplay = tr("Symptom hub");
+            row.name        = record.permalink.mid(QStringLiteral("/symptoms/").length());
+            row.status      = record.generatedAt.isEmpty() ? tr("Stub") : tr("Ready");
+        } else if (record.typeId == QLatin1String(PageTypeSymptomIndex::TYPE_ID)) {
+            row.typeDisplay = tr("Symptom index");
+            row.name        = tr("All symptoms");
+            row.status      = record.generatedAt.isEmpty() ? tr("Stub") : tr("Ready");
+        } else if (record.typeId == QLatin1String(PageTypeTaxonomyIndex::TYPE_ID)) {
+            row.typeDisplay = tr("Taxonomy index");
+            const QString seg = record.permalink.section(QLatin1Char('/'), -1, -1);
+            row.name = (seg.length() == 1 && seg.at(0).isLetter())
+                ? tr("Letter %1").arg(seg.toUpper())
+                : tr("All categories");
+            row.status = record.generatedAt.isEmpty() ? tr("Stub") : tr("Ready");
         } else {
-            row.status = tr("Ready");
+            continue; // not an auto-generated page type
         }
 
         rows.append(row);

@@ -15,6 +15,8 @@ class GeneratedPagesModel;
 class PageDb;
 class PageGenerator;
 class PageRepositoryDb;
+class SymptomHubSyncer;
+class TaxonomyIndexSyncer;
 class WebsiteSettingsTable;
 
 /**
@@ -101,7 +103,9 @@ private:
     std::unique_ptr<PageRepositoryDb>    m_pageRepo;
     std::unique_ptr<PageGenerator>       m_pageGenerator;
     std::unique_ptr<CategoryHubDirtySet> m_dirtySet;
-    std::unique_ptr<CategoryHubSyncer>   m_syncer;
+    std::unique_ptr<CategoryHubSyncer>    m_syncer;
+    std::unique_ptr<SymptomHubSyncer>     m_symptomSyncer;
+    std::unique_ptr<TaxonomyIndexSyncer>  m_taxonomyIndexSyncer;
 };
 
 #endif // PANEGENERATEDPAGES_H

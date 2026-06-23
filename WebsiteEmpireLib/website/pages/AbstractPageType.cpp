@@ -130,6 +130,16 @@ void AbstractPageType::bindGenerationContext(IPageRepository & /*repo*/,
     // addCode() (e.g. PageTypeCategory).
 }
 
+void AbstractPageType::bindWorkingDir(const QDir & /*workingDir*/)
+{
+    // Default: no-op.
+}
+
+QList<const AbstractPageBloc *> AbstractPageType::getRenderBlocs() const
+{
+    return getPageBlocs();
+}
+
 // =============================================================================
 // setWebsiteContext
 // =============================================================================
@@ -328,7 +338,7 @@ void AbstractPageType::addCode(QStringView     origContent,
     // the centred, max-width container styles without affecting the header/footer.
     bodyHtml += QStringLiteral("<main class=\"page-content\">");
     addInnerTopCode(engine, websiteIndex, bodyHtml, innerCss, innerJs, cssDoneIds, jsDoneIds);
-    for (const AbstractPageBloc *bloc : getPageBlocs()) {
+    for (const AbstractPageBloc *bloc : getRenderBlocs()) {
         bloc->addCode(origContent, engine, websiteIndex, bodyHtml, innerCss, innerJs, cssDoneIds, jsDoneIds);
     }
     bodyHtml += QStringLiteral("</main>");

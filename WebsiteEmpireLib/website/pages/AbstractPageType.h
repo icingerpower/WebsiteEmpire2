@@ -64,6 +64,17 @@ public:
     virtual const QList<const AbstractPageBloc *> &getPageBlocs() const = 0;
 
     /**
+     * Returns the blocs in the order they are rendered into HTML.
+     * Defaults to getPageBlocs() (same as storage order).
+     * Override in a page type to decouple visual order from data-key order —
+     * e.g. PageTypeArticle renders symptom links before the text bloc even
+     * though the symptom bloc is stored last to preserve stable data keys.
+     * Data methods (load/save/collectAiKeyClues/aiUpdateTargets) always use
+     * getPageBlocs() so key numbering is never affected by render order.
+     */
+    virtual QList<const AbstractPageBloc *> getRenderBlocs() const;
+
+    /**
      * Records the language the page was authored in.
      * Must be called before isTranslationComplete() or addCode().
      * isTranslationComplete() returns true immediately for lang == authorLang
@@ -128,6 +139,16 @@ public:
      * Default: no-op.
      */
     virtual void bindGenerationContext(IPageRepository &repo, const QDir &workingDir);
+
+    /**
+     * Called by GenPageQueue._schema() before collectAiKeyClues() to supply
+     * the working directory to blocs that need it for vocabulary hints (e.g.
+     * PageBlocSymptomLinks reading from taxonomy.db).
+     * Separate from bindGenerationContext() because the prompt-building phase
+     * has no IPageRepository available.
+     * Default: no-op.
+     */
+    virtual void bindWorkingDir(const QDir &workingDir);
 
     /**
      * Called by PageGenerator before addCode() to supply website-level metadata

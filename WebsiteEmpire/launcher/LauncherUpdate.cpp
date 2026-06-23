@@ -329,6 +329,9 @@ static void runUpdateSession(const QString                          &pageTypeId,
         CategoryTable catTable(workDir);
         auto pageType = AbstractPageType::createForTypeId(pageTypeId, catTable);
         if (pageType) {
+            if (workDir.exists()) {
+                pageType->bindWorkingDir(workDir);
+            }
             const auto targets = pageType->aiUpdateTargets();
             for (const auto &t : std::as_const(targets)) {
                 if (t.prefixedKey == saveKey) {
@@ -507,8 +510,8 @@ static void runUpdateSession(const QString                          &pageTypeId,
                         "commands, do NOT explain anything. Your entire response must be the SVG "
                         "markup and nothing else.");
 
-                *(state->out) << QStringLiteral("  SVG prompt ready (%1 chars) for %2 — calling Claude...\n")
-                                     .arg(svgPrompt.size()).arg(svgFilename);
+                *(state->out) << QStringLiteral("  SVG prompt ready (%1 chars) for %2 — calling %3...\n")
+                                     .arg(svgPrompt.size()).arg(svgFilename, cli->getName());
                 state->out->flush();
 
                 QString svgResult;
@@ -753,8 +756,8 @@ static void runUpdateSession(const QString                          &pageTypeId,
             }
             call1Prompt += instructions;
 
-            *(state->out) << QStringLiteral("  Call 1 (analysis, %1 chars) — calling Claude...\n")
-                                 .arg(call1Prompt.size());
+            *(state->out) << QStringLiteral("  Call 1 (analysis, %1 chars) — calling %2...\n")
+                                 .arg(call1Prompt.size()).arg(cli->getName());
             state->out->flush();
 
             const QString analysis = runUpdateClaudePrompt(call1Prompt, cli, state->out);
@@ -786,8 +789,8 @@ static void runUpdateSession(const QString                          &pageTypeId,
                           .arg(result.left(200))
                       + call2Base;
 
-                *(state->out) << QStringLiteral("  Call 2 attempt %1/%2 — calling Claude...\n")
-                                     .arg(attempt).arg(kMaxAttempts);
+                *(state->out) << QStringLiteral("  Call 2 attempt %1/%2 — calling %3...\n")
+                                     .arg(attempt).arg(kMaxAttempts).arg(cli->getName());
                 state->out->flush();
 
                 const QString raw = runUpdateClaudePrompt(attemptPrompt, cli, state->out);
@@ -835,8 +838,8 @@ static void runUpdateSession(const QString                          &pageTypeId,
                     "Do not include any explanation, preamble, or commentary — "
                     "only the article itself.");
 
-            *(state->out) << QStringLiteral("  Prompt ready (%1 chars) — calling Claude...\n")
-                                 .arg(singlePrompt.size());
+            *(state->out) << QStringLiteral("  Prompt ready (%1 chars) — calling %2...\n")
+                                 .arg(singlePrompt.size()).arg(cli->getName());
             state->out->flush();
 
             for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {

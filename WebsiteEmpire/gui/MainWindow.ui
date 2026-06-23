@@ -45,6 +45,11 @@
         <string>Generated pages</string>
        </attribute>
       </widget>
+      <widget class="PaneTaxonomies" name="tabTaxonomies">
+       <attribute name="title">
+        <string>Taxonomies</string>
+       </attribute>
+      </widget>
       <widget class="PaneGeneration" name="tabGeneration">
        <attribute name="title">
         <string>Generation</string>
@@ -115,6 +120,12 @@
    <class>PaneGeneratedPages</class>
    <extends>QWidget</extends>
    <header>gui/panes/PaneGeneratedPages.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>PaneTaxonomies</class>
+   <extends>QWidget</extends>
+   <header>gui/panes/PaneTaxonomies.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>

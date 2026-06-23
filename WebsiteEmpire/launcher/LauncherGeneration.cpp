@@ -1020,7 +1020,8 @@ void LauncherGeneration::run(const QString & /*value*/)
                                         virtualPages,
                                         *categoryTable,
                                         info.customInstructions,
-                                        info.svgInstructions);
+                                        info.svgInstructions,
+                                        workingDir);
         runGenerationSession(queue, info.strategyId, info.endPermalink,
                               engine, editingLangIndex,
                               *categoryTable, state, 0, cli);
@@ -1130,6 +1131,9 @@ void LauncherGeneration::run(const QString & /*value*/)
                 }
                 QSqlDatabase::removeDatabase(connName);
 
+                // Symptom hub pages use /symptoms/<slug> prefix.
+                const bool isSymptomHub = (info.pageTypeId == QStringLiteral("symptom_hub"));
+
                 for (const QString &name : std::as_const(names)) {
                     QString slug = name.toLower();
                     slug.replace(reNonAlnum, QStringLiteral("-"));
@@ -1141,13 +1145,26 @@ void LauncherGeneration::run(const QString & /*value*/)
                         slug += QLatin1Char('-') + info.endPermalink;
                     }
 
-                    const QString permalink = QLatin1Char('/') + slug;
+                    const QString permalink = isSymptomHub
+                        ? QStringLiteral("/symptoms/") + slug
+                        : QLatin1Char('/') + slug;
                     if (allExistingPermalinks.contains(permalink)) { continue; }
 
                     PageRecord vp;
                     vp.id        = 0;
                     vp.typeId    = info.pageTypeId;
                     vp.permalink = permalink;
+                    vp.lang      = editingLang;
+                    virtualPages.append(vp);
+                }
+
+                // Symptom index: one fixed page at /symptoms when not yet present.
+                if (info.pageTypeId == QStringLiteral("symptom_index")
+                    && !allExistingPermalinks.contains(QStringLiteral("/symptoms"))) {
+                    PageRecord vp;
+                    vp.id        = 0;
+                    vp.typeId    = info.pageTypeId;
+                    vp.permalink = QStringLiteral("/symptoms");
                     vp.lang      = editingLang;
                     virtualPages.append(vp);
                 }
@@ -1292,7 +1309,8 @@ void LauncherGeneration::run(const QString & /*value*/)
                                      vPages,
                                      *categoryTable,
                                      alloc.customInstructions,
-                                     alloc.svgInstructions);
+                                     alloc.svgInstructions,
+                                     workingDir);
         } else {
             // Classic strategy: read pending pages from pages.db.
             PageDb           *queueDb   = new PageDb(workingDir);
@@ -1303,7 +1321,8 @@ void LauncherGeneration::run(const QString & /*value*/)
                                      *categoryTable,
                                      alloc.customInstructions,
                                      alloc.svgInstructions,
-                                     jobsLimit);
+                                     jobsLimit,
+                                     workingDir);
             // queueDb / queueRepo intentionally leak — coroutines hold references
             // across suspension points; process exit cleans up.
             Q_UNUSED(queueDb)

@@ -2,10 +2,13 @@
 #define ABSTRACTPAGEBLOC_H
 
 #include "website/WebCodeAdder.h"
+#include "website/taxonomy/TaxonomyDescriptor.h"
 
+#include <QDir>
 #include <QHash>
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 #include <optional>
 
@@ -114,6 +117,29 @@ public:
      * only to blocs for which this returns true.
      */
     virtual bool isSecondTimeGeneration() const;
+
+    /**
+     * Returns a descriptor if this bloc contributes items to a shared taxonomy
+     * (e.g. symptom names). Returns empty optional by default.
+     * PaneTaxonomies uses this to discover all taxonomies across all page types.
+     */
+    virtual std::optional<TaxonomyDescriptor> taxonomy() const { return {}; }
+
+    /**
+     * Reads vocabulary items from sourceDbPath (an aspire database) and writes
+     * them into the local taxonomy store via TaxonomyDb in workingDir.
+     * Called by PaneTaxonomies when the user clicks Sync.
+     * Default is a no-op.
+     */
+    virtual void syncTaxonomy(const QString & /*sourceDbPath*/,
+                              const QDir    & /*workingDir*/) const {}
+
+    /**
+     * Returns items from the local taxonomy store for use in the edit widget.
+     * Called by createEditWidget() — never reads from aspire databases.
+     * Default returns an empty list.
+     */
+    virtual QStringList loadTaxonomy(const QDir & /*workingDir*/) const { return {}; }
 };
 
 #endif // ABSTRACTPAGEBLOC_H

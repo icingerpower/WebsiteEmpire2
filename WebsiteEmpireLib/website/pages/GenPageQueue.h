@@ -3,6 +3,7 @@
 
 #include "website/pages/PageRecord.h"
 
+#include <QDir>
 #include <QHash>
 #include <QList>
 #include <QString>
@@ -68,7 +69,8 @@ public:
                  CategoryTable   &categoryTable,
                  const QString   &customInstructions = {},
                  const QString   &svgInstructions    = {},
-                 int              limit = -1);
+                 int              limit = -1,
+                 const QDir      &workingDir = QDir{});
 
     /**
      * Source-DB-backed constructor: caller supplies pre-built PageRecord items
@@ -81,7 +83,8 @@ public:
                  const QList<PageRecord> &virtualPages,
                  CategoryTable          &categoryTable,
                  const QString          &customInstructions = {},
-                 const QString          &svgInstructions    = {});
+                 const QString          &svgInstructions    = {},
+                 const QDir             &workingDir = QDir{});
 
     bool             hasNext()   const;
     const PageRecord &peekNext() const;
@@ -257,6 +260,7 @@ private:
     QString          m_customInstructions;
     QString          m_svgInstructions;
     CategoryTable   &m_categoryTable;
+    QDir             m_workingDir;
     QList<PageRecord> m_pending;
     int               m_cursor = 0;
 

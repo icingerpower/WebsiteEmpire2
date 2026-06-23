@@ -16,12 +16,14 @@ GenPageQueue::GenPageQueue(const QString   &pageTypeId,
                             CategoryTable   &categoryTable,
                             const QString   &customInstructions,
                             const QString   &svgInstructions,
-                            int              limit)
+                            int              limit,
+                            const QDir      &workingDir)
     : m_pageTypeId(pageTypeId)
     , m_nonSvgImages(nonSvgImages)
     , m_customInstructions(customInstructions)
     , m_svgInstructions(svgInstructions)
     , m_categoryTable(categoryTable)
+    , m_workingDir(workingDir)
 {
     m_pending = pageRepo.findPendingByTypeId(pageTypeId);
 
@@ -35,12 +37,14 @@ GenPageQueue::GenPageQueue(const QString          &pageTypeId,
                             const QList<PageRecord> &virtualPages,
                             CategoryTable          &categoryTable,
                             const QString          &customInstructions,
-                            const QString          &svgInstructions)
+                            const QString          &svgInstructions,
+                            const QDir             &workingDir)
     : m_pageTypeId(pageTypeId)
     , m_nonSvgImages(nonSvgImages)
     , m_customInstructions(customInstructions)
     , m_svgInstructions(svgInstructions)
     , m_categoryTable(categoryTable)
+    , m_workingDir(workingDir)
     , m_pending(virtualPages)
 {
 }
@@ -696,8 +700,13 @@ const QHash<QString, QString> &GenPageQueue::_schema() const
 
     // Create a fresh page type instance and call save() to discover all keys.
     // Populate AI hints from the same instance to avoid creating it twice.
+    // bindWorkingDir() gives taxonomy-aware blocs access to their vocabulary
+    // before collectAiKeyClues() is called.
     auto type = AbstractPageType::createForTypeId(m_pageTypeId, m_categoryTable);
     if (type) {
+        if (m_workingDir.exists()) {
+            type->bindWorkingDir(m_workingDir);
+        }
         type->save(m_schema);
         m_aiKeyClues       = type->collectAiKeyClues();
         m_aiKeyCluesCached = true;

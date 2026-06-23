@@ -127,7 +127,7 @@ void PanePages::addPage()
         }
     }
     ImageWriter imageWriter(m_workingDir);
-    PageEditorDialog dlg(*m_pageRepo, *m_categoryTable, -1, langCode, this);
+    PageEditorDialog dlg(*m_pageRepo, *m_categoryTable, -1, langCode, this, m_workingDir);
     dlg.setImageContext(&imageWriter, domains);
     if (dlg.exec() == QDialog::Accepted) {
         _refreshModel();
@@ -152,7 +152,7 @@ void PanePages::editPage()
         }
     }
     ImageWriter imageWriter(m_workingDir);
-    PageEditorDialog dlg(*m_pageRepo, *m_categoryTable, id, {}, this);
+    PageEditorDialog dlg(*m_pageRepo, *m_categoryTable, id, {}, this, m_workingDir);
     dlg.setImageContext(&imageWriter, domains);
     if (dlg.exec() == QDialog::Accepted) {
         _refreshModel();

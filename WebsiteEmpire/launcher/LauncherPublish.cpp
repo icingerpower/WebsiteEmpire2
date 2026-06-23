@@ -6,6 +6,8 @@
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/CategoryHubDirtySet.h"
 #include "website/pages/CategoryHubSyncer.h"
+#include "website/pages/SymptomHubSyncer.h"
+#include "website/pages/TaxonomyIndexSyncer.h"
 #include "website/pages/PageDb.h"
 #include "website/pages/PageGenerator.h"
 #include "website/pages/PageRepositoryDb.h"
@@ -164,6 +166,16 @@ void LauncherPublish::run(const QString & /*value*/)
     out.flush();
     hubSyncer.syncStubs(engine->getLangCode(0));
     hubSyncer.markStaleByStats(workingDir);
+
+    out << QStringLiteral("Syncing symptom hub stubs...\n");
+    out.flush();
+    SymptomHubSyncer symptomSyncer(pageRepo);
+    symptomSyncer.syncStubs(workingDir, engine->getLangCode(0));
+
+    out << QStringLiteral("Syncing taxonomy index stubs...\n");
+    out.flush();
+    TaxonomyIndexSyncer taxonomySyncer(pageRepo);
+    taxonomySyncer.syncStubs(engine->getLangCode(0));
 
     // ── Locate StaticWebsiteServe binary ─────────────────────────────────────
     const QString appDir = QCoreApplication::applicationDirPath();

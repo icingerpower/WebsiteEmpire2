@@ -36,16 +36,6 @@ public:
     static constexpr const char *KEY_IMG_SQUARE   = "img_square";
     static constexpr const char *KEY_IMG_PORTRAIT = "img_portrait";
 
-    // Text metadata keys — same names as PageBlocSocial; stored for context but NOT translated.
-    static constexpr const char *KEY_FB_TITLE = "facebook_title";
-    static constexpr const char *KEY_FB_DESC  = "facebook_desc";
-    static constexpr const char *KEY_TW_TITLE = "twitter_title";
-    static constexpr const char *KEY_TW_DESC  = "twitter_desc";
-    static constexpr const char *KEY_PT_TITLE = "pinterest_title";
-    static constexpr const char *KEY_PT_DESC  = "pinterest_desc";
-    static constexpr const char *KEY_LI_TITLE = "linkedin_title";
-    static constexpr const char *KEY_LI_DESC  = "linkedin_desc";
-
     PageBlocSocialMedia() = default;
     ~PageBlocSocialMedia() override = default;
 
