@@ -4,7 +4,6 @@
 #include "website/pages/IPageRepository.h"
 #include "website/pages/PageRecord.h"
 #include "website/pages/PageTypeCategory.h"
-#include "website/pages/PageTypeSymptomHub.h"
 #include "website/social/AbstractSocialMedia.h"
 
 #include <QCoreApplication>
@@ -22,7 +21,6 @@ QStringList PageTypeTaxonomyIndex::aggregatedTypeIds()
 {
     return {
         QLatin1String(PageTypeCategory::TYPE_ID),
-        QLatin1String(PageTypeSymptomHub::TYPE_ID),
     };
 }
 
@@ -129,7 +127,8 @@ void PageTypeTaxonomyIndex::addInnerTopCode(AbstractEngine &engine,
 
     QList<Entry> entries;
     for (const QString &typeId : aggregatedTypeIds()) {
-        const QList<PageRecord> pages = m_repo->findGeneratedByTypeId(typeId);
+        QList<PageRecord> pages = m_repo->findGeneratedByTypeId(typeId);
+        pages += m_repo->findPendingByTypeId(typeId);
         entries.reserve(entries.size() + pages.size());
         for (const PageRecord &p : std::as_const(pages)) {
             const QString slug = p.permalink.section(QLatin1Char('/'), -1, -1);
@@ -271,19 +270,15 @@ void PageTypeTaxonomyIndex::addInnerTopCode(AbstractEngine &engine,
 
     html += QStringLiteral("<ul class=\"taxidx-grid\">");
     for (const Entry *e : std::as_const(filtered)) {
-        const bool available = engine.isPageAvailable(e->permalink, websiteIndex);
-        html += QStringLiteral("<li>");
-        if (available) {
-            const QString resolved = engine.resolvePermalink(e->permalink, websiteIndex);
-            html += QStringLiteral("<a href=\"");
-            html += resolved.startsWith(QLatin1Char('/')) ? resolved.mid(1) : resolved;
-            html += QStringLiteral("\">");
+        if (!engine.isPageAvailable(e->permalink, websiteIndex)) {
+            continue;
         }
+        const QString resolved = engine.resolvePermalink(e->permalink, websiteIndex);
+        html += QStringLiteral("<li><a href=\"");
+        html += resolved.startsWith(QLatin1Char('/')) ? resolved.mid(1) : resolved;
+        html += QStringLiteral("\">");
         html += e->displayName;
-        if (available) {
-            html += QStringLiteral("</a>");
-        }
-        html += QStringLiteral("</li>");
+        html += QStringLiteral("</a></li>");
     }
     html += QStringLiteral("</ul>");
 }

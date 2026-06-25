@@ -53,7 +53,7 @@ public:
 
     METHOD_LIST_BEGIN
     ADD_METHOD_VIA_REGEX(PageController::serveFile, "^/(robots\\.txt|sitemap[\\w-]*\\.xml)$", drogon::Get);
-    ADD_METHOD_VIA_REGEX(PageController::servePage, "^/(.+\\.html|[^/.]+)$", drogon::Get);
+    ADD_METHOD_VIA_REGEX(PageController::servePage, "^/(.+\\.html|[^.]+)$", drogon::Get);
     METHOD_LIST_END
 
     void serveFile(const drogon::HttpRequestPtr                          &req,

@@ -4,6 +4,7 @@
 #include "website/pages/blocs/AbstractPageBloc.h"
 
 #include <QDir>
+#include <QHash>
 #include <QString>
 
 /**
@@ -87,6 +88,23 @@ private:
      * Returns the found permalink, or empty if none.
      */
     QString _findArticlePermalink(const QString &conditionSlug) const;
+
+    /**
+     * Queries pages.db for all article pages that have a symptom whose slug
+     * matches the given slug.  Slugification uses SymptomNav::slugify so
+     * matching is consistent with the rest of the symptom navigation system.
+     *
+     * Works even when the symptom is absent from PageAttributesHealthSymptom.db
+     * (the aspire database), which is the common case for newly-assigned symptoms.
+     */
+    QStringList _loadArticlesForSymptomSlug(const QString &slug) const;
+
+    /**
+     * Batch-loads the body text (key "1_text") for the given article permalinks
+     * from pages.db.  Returns a map from permalink → text; absent entries mean
+     * the article has no text stored yet.
+     */
+    QHash<QString, QString> _loadArticleTexts(const QStringList &permalinks) const;
 
     mutable QString m_permalink;
     mutable QDir    m_workingDir;

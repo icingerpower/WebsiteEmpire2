@@ -1379,15 +1379,16 @@ class Test_PageGenerator_TranslationGuard : public QObject
     Q_OBJECT
 
 private slots:
-    // State machine: unassessed (backward compat)
-    void test_generator_unassessed_page_generates_for_any_lang();
-    void test_generator_unassessed_page_count_equals_page_count();
+    // State machine: unassessed pages only generate for their source language
+    void test_generator_unassessed_page_generates_for_source_lang();
+    void test_generator_unassessed_page_skips_for_non_source_lang();
+    void test_generator_unassessed_page_count_zero_for_non_source_lang();
 
     // State machine: source language
     void test_generator_source_lang_generates_without_guard();
 
     // State machine: target language
-    void test_generator_target_lang_incomplete_translation_raises();
+    void test_generator_target_lang_incomplete_translation_skips();
     void test_generator_target_lang_complete_translation_generates();
     void test_generator_target_lang_empty_text_generates_without_translation();
 
@@ -1398,33 +1399,51 @@ private slots:
     // Available pages map
     void test_generator_available_pages_set_for_source_lang();
     void test_generator_available_pages_set_for_target_lang();
-    void test_generator_unassessed_page_in_available_pages_for_current_lang();
+    void test_generator_unassessed_page_not_in_available_pages_for_non_source_lang();
+
+    // Category hub translation gating (regression: hub published for langs with no translated articles)
+    void test_generator_hub_skips_lang_without_translated_articles();
+    void test_generator_hub_not_available_for_lang_without_translated_articles();
 };
 
-void Test_PageGenerator_TranslationGuard::test_generator_unassessed_page_generates_for_any_lang()
+void Test_PageGenerator_TranslationGuard::test_generator_unassessed_page_generates_for_source_lang()
 {
-    // Unassessed page (langCodesToTranslate = []) must generate regardless of engine lang.
-    // Here engine index 1 → "de", but the page has lang="fr" and no targets.
+    // Unassessed page (langCodesToTranslate = []) with lang="fr" generates for
+    // the "fr" engine (index 0 → source lang).
     TranslationGenFixture f;
     f.addUnassessedArticle(QStringLiteral("/unassessed.html"), QStringLiteral("text"));
 
-    // index 1 → "de"
+    // index 0 → "fr" (matches the page's own lang)
     const int count = f.gen.generateAll(QDir(f.dir.path()),
-                                        QStringLiteral("de.example.com"), f.engine, 1);
+                                        QStringLiteral("fr.example.com"), f.engine, 0);
     QCOMPARE(count, 1);
 }
 
-void Test_PageGenerator_TranslationGuard::test_generator_unassessed_page_count_equals_page_count()
+void Test_PageGenerator_TranslationGuard::test_generator_unassessed_page_skips_for_non_source_lang()
 {
+    // Unassessed page with lang="fr" must NOT generate for a different engine lang.
+    // It has not been assessed for translation, so publishing it in "de" is wrong.
+    TranslationGenFixture f;
+    f.addUnassessedArticle(QStringLiteral("/unassessed.html"), QStringLiteral("text"));
+
+    // index 1 → "de" (different from the page's lang "fr")
+    const int count = f.gen.generateAll(QDir(f.dir.path()),
+                                        QStringLiteral("de.example.com"), f.engine, 1);
+    QCOMPARE(count, 0);
+}
+
+void Test_PageGenerator_TranslationGuard::test_generator_unassessed_page_count_zero_for_non_source_lang()
+{
+    // Multiple unassessed pages: none generate for a non-source language engine.
     TranslationGenFixture f;
     f.addUnassessedArticle(QStringLiteral("/p1.html"), QStringLiteral("text1"));
     f.addUnassessedArticle(QStringLiteral("/p2.html"), QStringLiteral("text2"));
     f.addUnassessedArticle(QStringLiteral("/p3.html"), QStringLiteral("text3"));
 
-    // All three pages unassessed → generate all three
+    // index 1 → "de": none of the fr pages should appear
     const int count = f.gen.generateAll(QDir(f.dir.path()),
                                         QStringLiteral("de.example.com"), f.engine, 1);
-    QCOMPARE(count, 3);
+    QCOMPARE(count, 0);
 }
 
 void Test_PageGenerator_TranslationGuard::test_generator_source_lang_generates_without_guard()
@@ -1440,16 +1459,19 @@ void Test_PageGenerator_TranslationGuard::test_generator_source_lang_generates_w
     QCOMPARE(count, 1);
 }
 
-void Test_PageGenerator_TranslationGuard::test_generator_target_lang_incomplete_translation_raises()
+void Test_PageGenerator_TranslationGuard::test_generator_target_lang_incomplete_translation_skips()
 {
     // Page lang="fr", target="de". Engine index 1 → "de". No translation stored.
+    // The page must be silently skipped (count=0), not thrown — partial publishes are valid.
     TranslationGenFixture f;
     f.addAssessedArticle(QStringLiteral("/article.html"), QStringLiteral("French content"));
 
-    QVERIFY(throwsException([&] {
-        f.gen.generateAll(QDir(f.dir.path()),
-                          QStringLiteral("de.example.com"), f.engine, 1);
+    int count = 0;
+    QVERIFY(!throwsException([&] {
+        count = f.gen.generateAll(QDir(f.dir.path()),
+                                  QStringLiteral("de.example.com"), f.engine, 1);
     }));
+    QCOMPARE(count, 0);
 }
 
 void Test_PageGenerator_TranslationGuard::test_generator_target_lang_complete_translation_generates()
@@ -1527,19 +1549,82 @@ void Test_PageGenerator_TranslationGuard::test_generator_available_pages_set_for
     QVERIFY(f.engine.isPageAvailable(QStringLiteral("/target-page.html"), 1)); // 1 → "de"
 }
 
-void Test_PageGenerator_TranslationGuard::test_generator_unassessed_page_in_available_pages_for_current_lang()
+void Test_PageGenerator_TranslationGuard::test_generator_unassessed_page_not_in_available_pages_for_non_source_lang()
 {
-    // An unassessed page (no targets) is indexed under currentLang in the
-    // available-pages map (backward-compat: it's considered available in the
-    // language currently being generated).
+    // Unassessed page (lang="fr") must not appear in the available-pages map
+    // for a non-source-lang engine — blocs in "de" pages must not link to it.
     TranslationGenFixture f;
     f.addUnassessedArticle(QStringLiteral("/unassessed.html"), QStringLiteral("text"));
 
     // Generate for "de" (index 1)
     f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("de.example.com"), f.engine, 1);
 
-    // The page should be registered as available for "de" (current lang), not "fr" (page lang)
-    QVERIFY(f.engine.isPageAvailable(QStringLiteral("/unassessed.html"), 1)); // 1 → "de"
+    QVERIFY(!f.engine.isPageAvailable(QStringLiteral("/unassessed.html"), 1)); // 1 → "de"
+}
+
+void Test_PageGenerator_TranslationGuard::test_generator_hub_skips_lang_without_translated_articles()
+{
+    // Regression: a category hub with lang X in langs_to_translate must NOT
+    // generate for lang X when no article in its category has been translated
+    // to lang X.  Previously the pre-pass added it unconditionally, causing
+    // hubs to publish for completely untranslated languages.
+    TranslationGenFixture f;
+
+    // Hub: lang="fr" source, targets=["it"]. Category 99.
+    const int hubId = f.repo.create(QStringLiteral("category_hub"),
+                                     QStringLiteral("/conditions.html"),
+                                     QStringLiteral("fr"));
+    f.repo.setLangCodesToTranslate(hubId, {QStringLiteral("it")});
+    f.repo.saveData(hubId, {{QStringLiteral("0_categories"), QStringLiteral("99")}});
+
+    // Article in category 99, but translated only to "de" (NOT "it").
+    const int artId = f.addAssessedArticle(QStringLiteral("/article.html"),
+                                            QStringLiteral("Article content"));
+    {
+        QHash<QString, QString> data = f.repo.loadData(artId);
+        data[QStringLiteral("0_categories")] = QStringLiteral("99");
+        f.repo.saveData(artId, data);
+    }
+    f.addGermanTranslation(artId, QStringLiteral("Inhalt auf Deutsch"));
+
+    // Generate for "it" (index 2): hub targets "it" but no "it" articles → must be 0.
+    const int count = f.gen.generateAll(QDir(f.dir.path()),
+                                         QStringLiteral("it.example.com"), f.engine, 2);
+    QCOMPARE(count, 0);
+}
+
+void Test_PageGenerator_TranslationGuard::test_generator_hub_not_available_for_lang_without_translated_articles()
+{
+    // The pre-pass must not add the hub permalink to availablePages["it"] when
+    // no "it" articles exist in its category — blocs in "it" pages must not
+    // link to an unpublished hub.  It SHOULD be available for "de" which has
+    // translated articles.
+    TranslationGenFixture f;
+
+    // Hub: lang="fr" source, targets=["de","it"]. Category 99.
+    const int hubId = f.repo.create(QStringLiteral("category_hub"),
+                                     QStringLiteral("/conditions.html"),
+                                     QStringLiteral("fr"));
+    f.repo.setLangCodesToTranslate(hubId, {QStringLiteral("de"), QStringLiteral("it")});
+    f.repo.saveData(hubId, {{QStringLiteral("0_categories"), QStringLiteral("99")}});
+
+    // Article in category 99, translated to "de" only.
+    const int artId = f.addAssessedArticle(QStringLiteral("/article.html"),
+                                            QStringLiteral("Content"));
+    {
+        QHash<QString, QString> data = f.repo.loadData(artId);
+        data[QStringLiteral("0_categories")] = QStringLiteral("99");
+        f.repo.saveData(artId, data);
+    }
+    f.addGermanTranslation(artId, QStringLiteral("Inhalt"));
+
+    // generateAll for "fr" (index 0) populates the availablePages map.
+    // The hub's source lang is also "fr" — generateAll sets the full map for all langs.
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("fr.example.com"), f.engine, 0);
+
+    // Hub available for "de" (translated articles exist), not for "it" (none).
+    QVERIFY( f.engine.isPageAvailable(QStringLiteral("/conditions.html"), 1)); // 1 = de
+    QVERIFY(!f.engine.isPageAvailable(QStringLiteral("/conditions.html"), 2)); // 2 = it
 }
 
 // =============================================================================

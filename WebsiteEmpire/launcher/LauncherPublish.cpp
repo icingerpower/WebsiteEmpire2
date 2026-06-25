@@ -8,6 +8,10 @@
 #include "website/pages/CategoryHubSyncer.h"
 #include "website/pages/SymptomHubSyncer.h"
 #include "website/pages/TaxonomyIndexSyncer.h"
+#include "website/pages/PageGenerationState.h"
+#include "website/pages/PageTypeTaxonomyIndex.h"
+#include "website/pages/PageTypeSymptomIndex.h"
+#include "website/pages/PageRecord.h"
 #include "website/pages/PageDb.h"
 #include "website/pages/PageGenerator.h"
 #include "website/pages/PageRepositoryDb.h"
@@ -15,8 +19,10 @@
 #include "workingdirectory/WorkingDirectoryManager.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QMetaObject>
 #include <QProcess>
 #include <QSet>
@@ -176,6 +182,66 @@ void LauncherPublish::run(const QString & /*value*/)
     out.flush();
     TaxonomyIndexSyncer taxonomySyncer(pageRepo);
     taxonomySyncer.syncStubs(engine->getLangCode(0));
+
+    out << QStringLiteral("Syncing symptom index stub...\n");
+    out.flush();
+    {
+        const QList<PageRecord> all = pageRepo.findAll();
+        const bool found = std::any_of(all.begin(), all.end(), [](const PageRecord &r) {
+            return r.permalink == QStringLiteral("/symptoms");
+        });
+        if (!found) {
+            pageRepo.create(QLatin1String(PageTypeSymptomIndex::TYPE_ID),
+                            QStringLiteral("/symptoms"), engine->getLangCode(0));
+        }
+    }
+
+    // ── Auto-reset index pages when their source data is newer ────────────────
+    out << QStringLiteral("Checking index pages for staleness...\n");
+    out.flush();
+
+    // taxonomy_index: reset any generated index page older than its newest source page.
+    {
+        QString maxSourceAt;
+        for (const QString &sourceTypeId : PageTypeTaxonomyIndex::aggregatedTypeIds()) {
+            for (const PageRecord &p : pageRepo.findGeneratedByTypeId(sourceTypeId)) {
+                if (p.generatedAt > maxSourceAt) {
+                    maxSourceAt = p.generatedAt;
+                }
+            }
+        }
+        if (!maxSourceAt.isEmpty()) {
+            for (const PageRecord &idx : pageRepo.findGeneratedByTypeId(
+                     QLatin1String(PageTypeTaxonomyIndex::TYPE_ID))) {
+                if (idx.generatedAt < maxSourceAt) {
+                    pageRepo.setGenerationState(idx.id, PageGenerationState::Pending);
+                    out << QStringLiteral("  taxonomy index %1 reset (source pages updated)\n")
+                           .arg(idx.permalink);
+                    out.flush();
+                }
+            }
+        }
+    }
+
+    // symptom_index: reset if the symptom DB file was modified after the page was generated.
+    {
+        const QString symDbPath = workingDir.filePath(
+            QStringLiteral("results_db/PageAttributesHealthSymptom.db"));
+        if (QFile::exists(symDbPath)) {
+            const QDateTime dbModified = QFileInfo(symDbPath).lastModified().toUTC();
+            for (const PageRecord &idx : pageRepo.findGeneratedByTypeId(
+                     QLatin1String(PageTypeSymptomIndex::TYPE_ID))) {
+                const QDateTime idxGenerated =
+                    QDateTime::fromString(idx.generatedAt, Qt::ISODate).toUTC();
+                if (!idxGenerated.isValid() || dbModified > idxGenerated) {
+                    pageRepo.setGenerationState(idx.id, PageGenerationState::Pending);
+                    out << QStringLiteral("  symptom index %1 reset (symptom DB updated)\n")
+                           .arg(idx.permalink);
+                    out.flush();
+                }
+            }
+        }
+    }
 
     // ── Locate StaticWebsiteServe binary ─────────────────────────────────────
     const QString appDir = QCoreApplication::applicationDirPath();

@@ -25,6 +25,8 @@ set(BLOCS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocSocialMedia.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocAutoLink.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocAutoLink.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocArticleUtils.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocArticleUtils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocHubGrid.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocHubGrid.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocSymptomLinks.h

@@ -37,6 +37,16 @@ PageDb::PageDb(const QDir &workingDir)
     const bool opened = db.open();
     Q_ASSERT_X(opened, "PageDb", qPrintable(db.lastError().text()));
 
+    // WAL mode allows readers and writers to run concurrently — no reader ever
+    // blocks a writer and no writer ever blocks a reader.  Without this, a
+    // concurrent update run holding a write lock causes findAll() to silently
+    // return an empty list, making generation treat all existing pages as new.
+    // busy_timeout is kept as a safety net for the brief exclusive-lock window
+    // during WAL checkpoints.
+    QSqlQuery pragmaQ(QSqlDatabase::database(m_connectionName));
+    pragmaQ.exec(QStringLiteral("PRAGMA journal_mode = WAL"));
+    pragmaQ.exec(QStringLiteral("PRAGMA busy_timeout = 10000"));
+
     createSchema();
 }
 

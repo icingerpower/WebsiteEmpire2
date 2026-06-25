@@ -431,22 +431,25 @@ void Test_Website_PageBlocImageLinks::test_imagelinks_mixed_valid_and_empty_item
 
 void Test_Website_PageBlocImageLinks::test_imagelinks_category_link_type_resolves_to_root_path()
 {
+    // addCode strips the leading '/' from root-relative permalinks so links
+    // render as relative paths (same convention as taxonomy/symptom index blocs).
     PageBlocImageLinks bloc;
     const auto &html = htmlFrom(bloc, oneItemHash(QStringLiteral("https://example.com/img.jpg"),
                                                    QLatin1String(PageBlocImageLinks::LINK_TYPE_CATEGORY),
                                                    QStringLiteral("food.html"),
                                                    QStringLiteral("Food")));
-    QVERIFY(html.contains(QStringLiteral("href=\"/food.html\"")));
+    QVERIFY(html.contains(QStringLiteral("href=\"food.html\"")));
 }
 
 void Test_Website_PageBlocImageLinks::test_imagelinks_page_link_type_resolves_to_root_path()
 {
+    // addCode strips the leading '/' — same convention as other page-link blocs.
     PageBlocImageLinks bloc;
     const auto &html = htmlFrom(bloc, oneItemHash(QStringLiteral("https://example.com/img.jpg"),
                                                    QLatin1String(PageBlocImageLinks::LINK_TYPE_PAGE),
                                                    QStringLiteral("about-us"),
                                                    QStringLiteral("About")));
-    QVERIFY(html.contains(QStringLiteral("href=\"/about-us\"")));   // 32
+    QVERIFY(html.contains(QStringLiteral("href=\"about-us\"")));   // 32
 }
 
 void Test_Website_PageBlocImageLinks::test_imagelinks_url_link_type_uses_target_as_is()

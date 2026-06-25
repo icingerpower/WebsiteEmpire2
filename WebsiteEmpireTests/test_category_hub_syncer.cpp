@@ -13,6 +13,7 @@
 #include "website/pages/PageTypeCategory.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/EngineArticles.h"
+#include "website/HostTable.h"
 
 // ---------------------------------------------------------------------------
 // Fixture
@@ -22,6 +23,7 @@ namespace {
 
 struct Fixture {
     QTemporaryDir    dir;
+    HostTable        hostTable;
     CategoryTable    categoryTable;
     PageDb           db;
     PageRepositoryDb repo;
@@ -31,13 +33,16 @@ struct Fixture {
     EngineArticles   engine;
 
     Fixture()
-        : categoryTable(QDir(dir.path()))
+        : hostTable(QDir(dir.path()))
+        , categoryTable(QDir(dir.path()))
         , db(QDir(dir.path()))
         , repo(db)
         , gen(repo, categoryTable)
         , dirtySet(QDir(dir.path()))
         , syncer(repo, categoryTable, dirtySet, gen)
-    {}
+    {
+        engine.init(QDir(dir.path()), hostTable);
+    }
 
     // Creates an article page tagged with the given category IDs.
     int addArticle(const QString &permalink,

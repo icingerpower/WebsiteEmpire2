@@ -81,14 +81,16 @@ public:
      */
     struct AiUpdateSpec {
         enum class Validator {
-            ArticleFormat,       ///< must start with [TITLE level="1"], >= 2000 chars
-            CommaSeparatedInts,  ///< one or more comma-separated positive integers
-            NonEmpty             ///< any non-empty trimmed string
+            ArticleFormat,            ///< must start with [TITLE level="1"], >= 2000 chars
+            CommaSeparatedInts,       ///< one or more comma-separated positive integers
+            NonEmpty,                 ///< any non-empty trimmed string
+            CommaSeparatedVocabulary  ///< each comma-token must be in allowedValues (or empty string)
         };
-        QString   dataKey;      ///< un-prefixed save/load key (e.g. "text", "categories")
-        QString   displayName;  ///< human-readable label for the UI dropdown
-        QString   formatPrompt; ///< Call-2 instructions combined with aiKeyClue by the launcher
-        Validator validator = Validator::NonEmpty;
+        QString     dataKey;        ///< un-prefixed save/load key (e.g. "text", "categories")
+        QString     displayName;    ///< human-readable label for the UI dropdown
+        QString     formatPrompt;   ///< Call-2 instructions combined with aiKeyClue by the launcher
+        Validator   validator = Validator::NonEmpty;
+        QStringList allowedValues;  ///< used by CommaSeparatedVocabulary: accepted tokens
     };
     virtual std::optional<AiUpdateSpec> getAiUpdateSpec() const;
 

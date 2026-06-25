@@ -683,9 +683,11 @@ void PaneDomains::deployLocally()
 
             _restartLocalDrogon(destDir, binaryPath, t.port, sharedImages);
 
-            urls.append(QStringLiteral("http://localhost:%1/index.html  [%2]")
-                           .arg(t.port).arg(t.lang));
-            langSummaries.append(QStringLiteral("[%1] %2 page(s)").arg(t.lang).arg(langPages));
+            if (langPages > 0) {
+                urls.append(QStringLiteral("http://localhost:%1/index.html  [%2]")
+                               .arg(t.port).arg(t.lang));
+                langSummaries.append(QStringLiteral("[%1] %2 page(s)").arg(t.lang).arg(langPages));
+            }
         }
 
         hubDirtySet.clear();

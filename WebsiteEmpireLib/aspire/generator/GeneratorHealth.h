@@ -6,15 +6,16 @@
 #include <QScopedPointer>
 #include <QSettings>
 
-// Generator that builds a comprehensive health reference database in nine
+// Generator that builds a comprehensive health reference database in ten
 // ordered pipeline steps:
 //
 //   1  bp/general/PAGE          — general body parts (isBrainPart=false)
 //   2  bp/brain/PAGE            — brain structures   (isBrainPart=true)
 //   3  organ/PAGE               — human organs
 //   4  symptom/bp/<slug>        — symptoms per body part   (discovered in 1+2)
+//   4b symptom/general/PAGE     — systemic symptoms not tied to a body part (static initial)
 //   5  organ/bp/<slug>          — organs per body part     (discovered in 1+2)
-//   6  condition/symptom/<slug> — physical conditions per symptom (discovered in 4)
+//   6  condition/symptom/<slug> — physical conditions per symptom (discovered in 4 and 4b)
 //   7  mental/bp/<slug>         — mental conditions per brain part (discovered in 2)
 //   8  mental/completion/PAGE   — mental condition sweep (static initial job)
 //   9  recent/PAGE              — recently documented conditions (static initial job)
@@ -52,6 +53,7 @@ public:
     static const QString TASK_MENTAL_FOR_BRAIN_PART;
     static const QString TASK_MENTAL_COMPLETION;
     static const QString TASK_RECENT_CONDITIONS;
+    static const QString TASK_SYMPTOMS_GENERAL;
     static const QString TASK_CONDITION_DIFFICULTY;
     static const QString TASK_MENTAL_CONDITION_DIFFICULTY;
     static const QString TASK_GOALS;
@@ -63,6 +65,7 @@ public:
         Organs,                // organ/*  (not organ/bp/*)
         Injuries,              // injury/*
         SymptomsPerBodyPart,   // symptom/bp/*
+        GeneralSymptoms,       // symptom/general/*
         OrgansPerBodyPart,     // organ/bp/*
         ConditionsPerSymptom,  // condition/symptom/*
         MentalPerBrainPart,    // mental/bp/*
@@ -102,6 +105,7 @@ public:
     static bool isOrgansJobId               (const QString &jobId); // organ/N, not organ/bp/*
     static bool isInjuriesJobId             (const QString &jobId); // injury/N
     static bool isSymptomsForBpJobId        (const QString &jobId);
+    static bool isSymptomGeneralJobId       (const QString &jobId);
     static bool isOrgansForBpJobId          (const QString &jobId);
     static bool isConditionsForSymptomJobId (const QString &jobId);
     static bool isMentalForBrainPartJobId   (const QString &jobId);
@@ -138,8 +142,9 @@ private:
     QJsonObject buildBpPayload            (bool brain, int page)       const;
     QJsonObject buildOrgansPayload        (int page)                   const;
     QJsonObject buildInjuriesPayload      (int page)                   const;
-    QJsonObject buildSymptomsForBpPayload (const QString &bpSlug)      const;
-    QJsonObject buildOrgansForBpPayload   (const QString &bpSlug)      const;
+    QJsonObject buildSymptomsForBpPayload  (const QString &bpSlug)      const;
+    QJsonObject buildSymptomsGeneralPayload(int page)                   const;
+    QJsonObject buildOrgansForBpPayload    (const QString &bpSlug)      const;
     QJsonObject buildCondForSymptomPayload(const QString &symptomSlug) const;
     QJsonObject buildMentalForBpPayload   (const QString &brainSlug)   const;
     QJsonObject buildMentalCompPayload      (int page)                   const;

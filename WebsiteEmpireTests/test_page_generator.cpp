@@ -4,6 +4,7 @@
 #include <QTemporaryDir>
 
 #include <atomic>
+#include <zlib.h>
 
 #include "CountryLangManager.h"
 #include "website/pages/PageDb.h"
@@ -19,8 +20,31 @@
 // ---------------------------------------------------------------------------
 
 namespace {
+
+QByteArray gzipDecompress(const QByteArray &compressed)
+{
+    z_stream strm = {};
+    if (inflateInit2(&strm, 15 + 32) != Z_OK) {
+        return {};
+    }
+    strm.avail_in = static_cast<uInt>(compressed.size());
+    strm.next_in  = reinterpret_cast<Bytef *>(const_cast<char *>(compressed.constData()));
+    QByteArray result;
+    char buf[4096];
+    int ret;
+    do {
+        strm.avail_out = sizeof(buf);
+        strm.next_out  = reinterpret_cast<Bytef *>(buf);
+        ret = inflate(&strm, Z_NO_FLUSH);
+        result.append(buf, static_cast<int>(sizeof(buf) - strm.avail_out));
+    } while (ret == Z_OK);
+    inflateEnd(&strm);
+    return result;
+}
+
 struct Fixture {
     QTemporaryDir    dir;
+    HostTable        hostTable;
     CategoryTable    categoryTable;
     PageDb           db;
     PageRepositoryDb repo;
@@ -28,11 +52,16 @@ struct Fixture {
     EngineArticles   engine;
 
     Fixture()
-        : categoryTable(QDir(dir.path()))
+        : hostTable(QDir(dir.path()))
+        , categoryTable(QDir(dir.path()))
         , db(QDir(dir.path()))
         , repo(db)
         , gen(repo, categoryTable)
-    {}
+    {
+        // Initialize so getLangCode(0) returns "en" — without this,
+        // generateAll's setAvailablePages/isPageAvailable check skips every page.
+        engine.init(QDir(dir.path()), hostTable);
+    }
 
     // Creates an article page with the given text and returns its id.
     int addArticle(const QString &permalink, const QString &text)
@@ -112,6 +141,10 @@ private slots:
 
     // --- categoryHubSlug: diacritic normalization ---
     void test_pagegen_hub_diacritic_slug_strips_accents();
+
+    // --- taxonomy_index excludes pending (unavailable) hub pages ---
+    void test_pagegen_taxonomy_index_excludes_pending_category_hub();
+    void test_pagegen_taxonomy_index_includes_pending_symptom_hub();
 };
 
 // ---------------------------------------------------------------------------
@@ -457,10 +490,9 @@ void Test_PageGenerator::test_pagegen_subset_only_renders_listed_ids()
 
 void Test_PageGenerator::test_pagegen_article_untranslated_lang_excluded_from_available_pages()
 {
-    // Arrange: init the engine so it has real lang-code rows (en at index 0).
+    // Arrange: the Fixture constructor already initialises the engine with the
+    // default lang-code rows (en at index 0, fr at some index > 0).
     Fixture f;
-    HostTable hostTable(QDir(f.dir.path()));
-    f.engine.init(QDir(f.dir.path()), hostTable);
 
     // Create an article whose source lang is "en" and that targets "fr" for
     // translation, but provide NO _tr:fr: keys — the page has not been
@@ -502,6 +534,72 @@ void Test_PageGenerator::test_pagegen_hub_diacritic_slug_strips_accents()
     // the é is removed entirely and the result would be "/sant-mentale.html".
     QCOMPARE(PageGenerator::categoryHubSlug(QStringLiteral("Santé mentale")),
              QStringLiteral("/sante-mentale.html"));
+}
+
+// ---------------------------------------------------------------------------
+// taxonomy_index includes pending hub pages (regression for findGeneratedByTypeId-only bug)
+// ---------------------------------------------------------------------------
+
+void Test_PageGenerator::test_pagegen_taxonomy_index_excludes_pending_category_hub()
+{
+    // Pending (isPageAvailable == false) category_hub pages must NOT appear in
+    // the taxonomy index grid.  The user explicitly requested this behaviour:
+    // unavailable pages should be silently skipped rather than shown as plain text.
+    Fixture f;
+
+    // Pending category_hub stub — no generated_at, so isPageAvailable returns false.
+    f.repo.create(QStringLiteral("category_hub"),
+                  QStringLiteral("/alpha-biomarkers"),
+                  QStringLiteral("en"));
+    f.repo.create(QStringLiteral("taxonomy_index"),
+                  QStringLiteral("/categories"),
+                  QStringLiteral("en"));
+
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT pv.html_gz FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id"
+        " WHERE p.path = '/categories'"));
+    QVERIFY2(q.next(), "taxonomy_index page not written to content.db");
+    const QByteArray html = gzipDecompress(q.value(0).toByteArray());
+    f.closeContentDb(conn);
+
+    QVERIFY2(!html.contains("Alpha Biomarkers"),
+             "taxonomy index grid must NOT list pending (unavailable) category hub pages");
+}
+
+void Test_PageGenerator::test_pagegen_taxonomy_index_includes_pending_symptom_hub()
+{
+    // Regression guard: symptom_hub pages must NOT appear in the /categories taxonomy
+    // index. PageTypeTaxonomyIndex::aggregatedTypeIds() returns only "category_hub";
+    // adding a symptom_hub must not pollute the categories grid.
+    Fixture f;
+
+    f.repo.create(QStringLiteral("symptom_hub"),
+                  QStringLiteral("/symptoms/fatigue"),
+                  QStringLiteral("en"));
+    f.repo.create(QStringLiteral("taxonomy_index"),
+                  QStringLiteral("/categories"),
+                  QStringLiteral("en"));
+
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT pv.html_gz FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id"
+        " WHERE p.path = '/categories'"));
+    QVERIFY2(q.next(), "taxonomy_index page not written to content.db");
+    const QByteArray html = gzipDecompress(q.value(0).toByteArray());
+    f.closeContentDb(conn);
+
+    // Symptom hub "Fatigue" must NOT appear in the categories grid.
+    QVERIFY2(!html.contains("Fatigue"),
+             "taxonomy index must not list symptom hub pages (only category_hub)");
 }
 
 QTEST_MAIN(Test_PageGenerator)

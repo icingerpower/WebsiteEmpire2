@@ -5,10 +5,8 @@
 #include "website/pages/PageTypeSymptomHub.h"
 #include "website/pages/PageTypeSymptomIndex.h"
 #include "website/pages/blocs/PageBlocSymptomLinks.h"  // SymptomNav::slugify
+#include "website/taxonomy/TaxonomyDb.h"
 
-#include <QFile>
-#include <QSqlDatabase>
-#include <QSqlQuery>
 #include <QSet>
 
 // =============================================================================
@@ -26,9 +24,9 @@ SymptomHubSyncer::SymptomHubSyncer(IPageRepository &repo)
 
 int SymptomHubSyncer::syncStubs(const QDir &workingDir, const QString &lang)
 {
-    const QString dbPath = workingDir.filePath(
-        QStringLiteral("results_db/PageAttributesHealthSymptom.db"));
-    if (!QFile::exists(dbPath)) {
+    // Use the taxonomy vocabulary (same source as PageBlocSymptomLinks).
+    const QStringList symNames = TaxonomyDb(workingDir).load(QStringLiteral("symptoms"));
+    if (symNames.isEmpty()) {
         return 0;
     }
 
@@ -50,35 +48,19 @@ int SymptomHubSyncer::syncStubs(const QDir &workingDir, const QString &lang)
         ++created;
     }
 
-    // Open symptom DB and create one hub stub per symptom.
-    {
-        static int s_seed = 0;
-        const QString connName = QStringLiteral("symptom_syncer_") + QString::number(++s_seed);
-        {
-            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
-            db.setDatabaseName(dbPath);
-            db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
-            if (db.open()) {
-                QSqlQuery q(db);
-                q.exec(QStringLiteral(
-                    "SELECT health_symptom_name FROM records ORDER BY health_symptom_name COLLATE NOCASE"));
-                while (q.next()) {
-                    const QString name = q.value(0).toString().trimmed();
-                    if (name.isEmpty()) {
-                        continue;
-                    }
-                    const QString slug      = SymptomNav::slugify(name);
-                    const QString permalink = QStringLiteral("/symptoms/") + slug;
-                    if (existingPermalinks.contains(permalink)) {
-                        continue;
-                    }
-                    m_repo.create(QLatin1String(PageTypeSymptomHub::TYPE_ID), permalink, lang);
-                    existingPermalinks.insert(permalink);
-                    ++created;
-                }
-            }
+    // Create one hub stub per symptom in the taxonomy vocabulary.
+    for (const QString &name : std::as_const(symNames)) {
+        if (name.isEmpty()) {
+            continue;
         }
-        QSqlDatabase::removeDatabase(connName);
+        const QString slug      = SymptomNav::slugify(name);
+        const QString permalink = QStringLiteral("/symptoms/") + slug;
+        if (existingPermalinks.contains(permalink)) {
+            continue;
+        }
+        m_repo.create(QLatin1String(PageTypeSymptomHub::TYPE_ID), permalink, lang);
+        existingPermalinks.insert(permalink);
+        ++created;
     }
 
     return created;

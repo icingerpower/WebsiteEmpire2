@@ -1,6 +1,8 @@
 #include "PageBlocConditionList.h"
+#include "PageBlocArticleUtils.h"
 
 #include "website/AbstractEngine.h"
+#include "website/theme/AbstractTheme.h"
 #include "website/pages/blocs/PageBlocSymptomLinks.h"   // for SymptomNav::slugify
 #include "website/pages/blocs/widgets/PageBlocReadOnlyWidget.h"
 
@@ -148,6 +150,106 @@ QString PageBlocConditionList::_findArticlePermalink(const QString &conditionSlu
 }
 
 // =============================================================================
+// _loadArticlesForSymptom
+// =============================================================================
+
+QStringList PageBlocConditionList::_loadArticlesForSymptomSlug(const QString &slug) const
+{
+    const QString dbPath = m_workingDir.filePath(QStringLiteral("pages.db"));
+    if (!QFile::exists(dbPath) || slug.isEmpty()) {
+        return {};
+    }
+    // Load every article's symptoms value and match each symptom name by slug in
+    // C++.  This works even when the symptom has no entry in the aspire DB
+    // (PageAttributesHealthSymptom.db), which is the common case for newly-assigned
+    // symptoms.
+    QStringList permalinks;
+    {
+        static int s_seed = 0;
+        const QString connName = QStringLiteral("condlist_art_") + QString::number(++s_seed);
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+            db.setDatabaseName(dbPath);
+            db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
+            if (db.open()) {
+                QSqlQuery q(db);
+                q.exec(QStringLiteral(
+                    "SELECT p.permalink, pd.value"
+                    " FROM pages p"
+                    " JOIN page_data pd ON pd.page_id = p.id"
+                    " WHERE p.type_id = 'article'"
+                    "   AND pd.key LIKE '%_symptoms'"
+                    "   AND pd.value != ''"));
+                while (q.next()) {
+                    const QString plink    = q.value(0).toString();
+                    const QString symptoms = q.value(1).toString();
+                    for (const QString &part : symptoms.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+                        if (SymptomNav::slugify(part.trimmed()) == slug) {
+                            permalinks.append(plink);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        QSqlDatabase::removeDatabase(connName);
+    }
+    return permalinks;
+}
+
+// =============================================================================
+// _loadArticleTexts
+// =============================================================================
+
+QHash<QString, QString> PageBlocConditionList::_loadArticleTexts(const QStringList &permalinks) const
+{
+    QHash<QString, QString> result;
+    if (permalinks.isEmpty()) {
+        return result;
+    }
+    const QString dbPath = m_workingDir.filePath(QStringLiteral("pages.db"));
+    if (!QFile::exists(dbPath)) {
+        return result;
+    }
+
+    QStringList placeholders;
+    placeholders.reserve(permalinks.size());
+    for (int i = 0; i < permalinks.size(); ++i) {
+        placeholders.append(QStringLiteral("?"));
+    }
+    const QString inClause = placeholders.join(QLatin1Char(','));
+
+    {
+        static int s_seed = 0;
+        const QString connName = QStringLiteral("condlist_txt_") + QString::number(++s_seed);
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+            db.setDatabaseName(dbPath);
+            db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
+            if (db.open()) {
+                QSqlQuery q(db);
+                q.prepare(QStringLiteral(
+                    "SELECT p.permalink, pd.value"
+                    " FROM pages p"
+                    " JOIN page_data pd ON pd.page_id = p.id"
+                    " WHERE p.permalink IN (") + inClause + QStringLiteral(")"
+                    "   AND pd.key = '1_text'"));
+                for (const QString &pl : std::as_const(permalinks)) {
+                    q.addBindValue(pl);
+                }
+                if (q.exec()) {
+                    while (q.next()) {
+                        result.insert(q.value(0).toString(), q.value(1).toString());
+                    }
+                }
+            }
+        }
+        QSqlDatabase::removeDatabase(connName);
+    }
+    return result;
+}
+
+// =============================================================================
 // countConditions
 // =============================================================================
 
@@ -156,11 +258,23 @@ int PageBlocConditionList::countConditions() const
     if (!m_contextBound) {
         return 0;
     }
-    const QString symptomName = _resolveSymptomName();
-    if (symptomName.isEmpty()) {
+    const QString prefix = QStringLiteral("/symptoms/");
+    if (!m_permalink.startsWith(prefix)) {
         return 0;
     }
-    return _loadConditionNames(symptomName).size();
+    const QString slug = m_permalink.mid(prefix.length());
+
+    const QString symptomName = _resolveSymptomName();
+    const int fromDb    = symptomName.isEmpty() ? 0 : _loadConditionNames(symptomName).size();
+    const int fromPages = _loadArticlesForSymptomSlug(slug).size();
+
+    if (fromDb == 0) {
+        return fromPages;
+    }
+    if (fromPages == 0) {
+        return fromDb;
+    }
+    return fromDb + fromPages;
 }
 
 // =============================================================================
@@ -199,63 +313,118 @@ void PageBlocConditionList::addCode(QStringView,
         return;
     }
 
+    const QString prefix = QStringLiteral("/symptoms/");
+    if (!m_permalink.startsWith(prefix)) {
+        return;
+    }
+    const QString slug = m_permalink.mid(prefix.length());
+
+    // Build a merged list of {permalink, title, excerpt} from both sources.
+    struct Entry { QString permalink; QString title; QString excerpt; };
+    QList<Entry> entries;
+    QSet<QString> seenPermalinks;
+
+    // Phase 1: conditions DB path (condition name → find article by slug).
     const QString symptomName = _resolveSymptomName();
-    if (symptomName.isEmpty()) {
+    if (!symptomName.isEmpty()) {
+        const QStringList conditionNames = _loadConditionNames(symptomName);
+        for (const QString &condName : std::as_const(conditionNames)) {
+            const QString condSlug = SymptomNav::slugify(condName);
+            const QString artPlink = _findArticlePermalink(condSlug);
+            if (!artPlink.isEmpty()) {
+                seenPermalinks.insert(artPlink);
+            }
+            // title will be enriched after batch text load; use condName as placeholder
+            entries.append({artPlink, condName, {}});
+        }
+    }
+
+    // Phase 2: direct page_data scan.
+    const QStringList directLinks = _loadArticlesForSymptomSlug(slug);
+    for (const QString &plink : std::as_const(directLinks)) {
+        if (seenPermalinks.contains(plink)) {
+            continue;
+        }
+        seenPermalinks.insert(plink);
+        entries.append({plink, ArticleCardUtils::permalinkToTitle(plink), {}});
+    }
+
+    if (entries.isEmpty()) {
         return;
     }
 
-    const QStringList conditionNames = _loadConditionNames(symptomName);
-    if (conditionNames.isEmpty()) {
-        return;
+    // Batch-load article body texts to extract real titles and excerpts.
+    QStringList allPermalinks;
+    allPermalinks.reserve(entries.size());
+    for (const Entry &e : std::as_const(entries)) {
+        if (!e.permalink.isEmpty()) {
+            allPermalinks.append(e.permalink);
+        }
+    }
+    const QHash<QString, QString> texts = _loadArticleTexts(allPermalinks);
+    for (Entry &e : entries) {
+        const QString &body = texts.value(e.permalink);
+        if (!body.isEmpty()) {
+            const QString h1 = ArticleCardUtils::extractH1Title(body);
+            if (!h1.isEmpty()) {
+                e.title = h1;
+            }
+            e.excerpt = ArticleCardUtils::extractExcerpt(body, 4, 200);
+        }
+        if (e.title.isEmpty()) {
+            e.title = ArticleCardUtils::permalinkToTitle(e.permalink);
+        }
     }
 
-    static const QString CSS_ID = QStringLiteral("condition-list-bloc");
-    if (!cssDoneIds.contains(CSS_ID)) {
-        cssDoneIds.insert(CSS_ID);
+    // Symptom display name for the <h1>: prefer canonical name from aspire DB,
+    // fall back to title-casing the URL slug.
+    const QString symptomDisplayName = symptomName.isEmpty()
+                                       ? ArticleCardUtils::permalinkToTitle(m_permalink)
+                                       : symptomName;
+
+    // CSS — shared with PageBlocHubGrid (same CSS_ID, emitted once per page).
+    {
+        const AbstractTheme *theme = engine.getActiveTheme();
+        const QString primary = theme ? theme->primaryColor() : QStringLiteral("#1a73e8");
+        ArticleCardUtils::addHubCardCss(css, cssDoneIds, primary);
+    }
+
+    // Back-link CSS (only needed here, not in HubGrid).
+    static const QString BACKLINK_CSS_ID = QStringLiteral("symptom-back-link");
+    if (!cssDoneIds.contains(BACKLINK_CSS_ID)) {
+        cssDoneIds.insert(BACKLINK_CSS_ID);
         css += QStringLiteral(
-            ".condition-list{margin:1.5em 0;padding:0;list-style:none}"
-            ".condition-list li{border-bottom:1px solid #e5e7eb;padding:.6em 0}"
-            ".condition-list li:last-child{border-bottom:none}"
-            ".condition-list a{text-decoration:none;font-weight:500}"
-            ".condition-list a:hover{text-decoration:underline}"
             ".symptom-back-link{display:inline-block;margin-top:1.5em;"
-            "font-size:.9em;color:#1a73e8;text-decoration:none}"
+              "font-size:.9em;text-decoration:none}"
             ".symptom-back-link:hover{text-decoration:underline}");
+    }
+
+    if (!symptomDisplayName.isEmpty()) {
+        html += QStringLiteral("<h1>");
+        html += symptomDisplayName.toHtmlEscaped();
+        html += QStringLiteral("</h1>");
     }
 
     html += QStringLiteral("<h2>");
     html += QCoreApplication::translate("PageBlocConditionList", "Possible conditions");
     html += QStringLiteral("</h2>");
-    html += QStringLiteral("<ol class=\"condition-list\">");
 
-    for (const QString &condName : std::as_const(conditionNames)) {
-        const QString condSlug  = SymptomNav::slugify(condName);
-        const QString artPlink  = _findArticlePermalink(condSlug);
-        const QString resolved  = artPlink.isEmpty()
-                                  ? QString{}
-                                  : engine.resolvePermalink(artPlink, websiteIndex);
-
-        html += QStringLiteral("<li>");
-        if (!resolved.isEmpty() && engine.isPageAvailable(artPlink, websiteIndex)) {
-            html += QStringLiteral("<a href=\"");
-            html += resolved.startsWith(QLatin1Char('/')) ? resolved.mid(1) : resolved;
-            html += QStringLiteral("\">");
-            html += condName;
-            html += QStringLiteral("</a>");
-        } else {
-            html += condName;
+    html += QStringLiteral("<div class=\"hub-grid\">");
+    for (const Entry &e : std::as_const(entries)) {
+        if (e.permalink.isEmpty() || !engine.isPageAvailable(e.permalink, websiteIndex)) {
+            continue;
         }
-        html += QStringLiteral("</li>");
+        const QString resolved = engine.resolvePermalink(e.permalink, websiteIndex);
+        ArticleCardUtils::renderHubCard(html, resolved, e.title, e.excerpt);
     }
-
-    html += QStringLiteral("</ol>");
+    html += QStringLiteral("</div>");
 
     // Back-link to the symptom index.
     const QString indexPermalink = QStringLiteral("/symptoms");
     const QString indexResolved  = engine.resolvePermalink(indexPermalink, websiteIndex);
     if (!indexResolved.isEmpty() && engine.isPageAvailable(indexPermalink, websiteIndex)) {
         html += QStringLiteral("<a href=\"");
-        html += indexResolved.startsWith(QLatin1Char('/')) ? indexResolved.mid(1) : indexResolved;
+        html += indexResolved;
         html += QStringLiteral("\" class=\"symptom-back-link\">← ");
         html += QCoreApplication::translate("PageBlocConditionList", "All symptoms");
         html += QStringLiteral("</a>");

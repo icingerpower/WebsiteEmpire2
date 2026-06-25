@@ -126,10 +126,10 @@ private slots:
 
 void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_returns_four_blocs()
 {
-    // PageTypeArticle has seven blocs: Category, Text, Social, SocialMedia,
-    // AutoLink, CategoryLinks, Meta.
+    // PageTypeArticle has eight blocs: Category, Text, SocialText, AutoLink,
+    // CategoryLinks, Social, Meta, SymptomLinks.
     ArticleFixture f;
-    QCOMPARE(f.article.getPageBlocs().size(), 7);   // 1
+    QCOMPARE(f.article.getPageBlocs().size(), 8);   // 1
 }
 
 void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_all_non_null()

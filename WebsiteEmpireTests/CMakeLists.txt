@@ -8,6 +8,7 @@ include(../common.cmake)
 
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Test Widgets Sql Network Svg)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test Widgets Sql Network Svg)
+find_package(ZLIB REQUIRED)
 
 setup_qcoro(COMPONENTS Core)
 
@@ -38,6 +39,7 @@ add_empire_test(Test_Website_PageTypeRegistry test_page_type_registry.cpp)
 add_empire_test(Test_Website_PageDb           test_page_db.cpp)
 add_empire_test(Test_Website_PageRepository   test_page_repository.cpp)
 add_empire_test(Test_Website_PageGenerator    test_page_generator.cpp)
+target_link_libraries(Test_Website_PageGenerator PRIVATE ZLIB::ZLIB)
 add_empire_test(Test_Engine_PageBlocJs        test_engine_page_bloc_js.cpp)
 add_empire_test(Test_Website_CommonBlocTranslations  test_common_bloc_translations.cpp)
 add_empire_test(Test_Website_Translations            test_website_translations.cpp)

@@ -273,12 +273,19 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         // exclude hub pages whose category has no articles from availablePages.
         // That prevents PageBlocCategoryLinks from linking to empty hub pages.
         // Scan all *_categories keys (breadcrumb + cross-reference blocs).
+        //
+        // Also build translatedCatIds[lang]: category IDs that have at least one
+        // article translated to lang. Used to gate category hub availability per lang.
         QSet<int> articleCatIds;
+        QHash<QString, QSet<int>> translatedCatIds;
+
         for (const PageRecord &r : std::as_const(pages)) {
             if (r.typeId != QStringLiteral("article")) {
                 continue;
             }
             const QHash<QString, QString> &data = m_pageRepo.loadData(r.id);
+
+            QSet<int> artCatIds;
             for (auto it = data.constBegin(); it != data.constEnd(); ++it) {
                 if (!it.key().endsWith(QStringLiteral("_categories"))) {
                     continue;
@@ -287,7 +294,28 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                     bool ok = false;
                     const int id = part.trimmed().toInt(&ok);
                     if (ok && id > 0) {
+                        artCatIds.insert(id);
                         articleCatIds.insert(id);
+                    }
+                }
+            }
+
+            // For each target language that has translation data for this article,
+            // record its categories as "translated for that language".
+            if (!r.langCodesToTranslate.isEmpty() && !artCatIds.isEmpty()) {
+                for (const QString &lang : std::as_const(r.langCodesToTranslate)) {
+                    const QString marker = QStringLiteral("_tr:") + lang + QLatin1Char(':');
+                    bool hasData = false;
+                    for (auto it = data.constBegin(); it != data.constEnd(); ++it) {
+                        if (it.key().contains(marker)) {
+                            hasData = true;
+                            break;
+                        }
+                    }
+                    if (hasData) {
+                        for (const int catId : std::as_const(artCatIds)) {
+                            translatedCatIds[lang].insert(catId);
+                        }
                     }
                 }
             }
@@ -319,9 +347,24 @@ int PageGenerator::generateAll(const QDir     &workingDir,
             availablePages[r.lang].insert(r.permalink);
             if (!r.langCodesToTranslate.isEmpty()) {
                 if (r.typeId == QStringLiteral("category_hub")) {
-                    // Hub pages render in any language via addCode — no inline data needed.
+                    // Hub pages render in any language via addCode — but only publish
+                    // for a language when at least one article in this hub's category
+                    // has been translated to that language.
+                    const QHash<QString, QString> &hData = m_pageRepo.loadData(r.id);
+                    const auto &hCatStr = hData.value(QStringLiteral("0_categories"));
                     for (const QString &lang : std::as_const(r.langCodesToTranslate)) {
-                        availablePages[lang].insert(r.permalink);
+                        const QSet<int> &tCats = translatedCatIds.value(lang);
+                        if (tCats.isEmpty()) {
+                            continue;
+                        }
+                        for (const QString &part : hCatStr.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+                            bool ok = false;
+                            const int id = part.trimmed().toInt(&ok);
+                            if (ok && id > 0 && tCats.contains(id)) {
+                                availablePages[lang].insert(r.permalink);
+                                break;
+                            }
+                        }
                     }
                 } else {
                     // Non-hub pages: only mark a target language available when inline
@@ -398,7 +441,17 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         }
 
         // Skip pages excluded from availablePages (e.g. empty hub pages).
-        if (!engine.isPageAvailable(record.permalink, websiteIndex)) {
+        // Assessed target-lang pages bypass this so the translation-completeness
+        // check below can throw explicitly rather than silently skip.
+        if (!isTargetLang && !engine.isPageAvailable(record.permalink, websiteIndex)) {
+            continue;
+        }
+        // Category hubs bypass the target-lang check above (they have no inline
+        // translation data), but must still be gated by isPageAvailable: the
+        // pre-pass only marks a hub available for a language when at least one
+        // article in its category has been translated to that language.
+        if (record.typeId == QStringLiteral("category_hub")
+                && !engine.isPageAvailable(record.permalink, websiteIndex)) {
             continue;
         }
 
@@ -412,8 +465,8 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         type->setAuthorLang(record.lang);
         type->bindGenerationContext(m_pageRepo, workingDir);
 
-        // Skip pages whose translation is incomplete for the current language.
-        // Partial deploys are valid — only fully-translated pages are published.
+        // Skip pages whose translation is incomplete — only publish fully-translated
+        // pages; they are excluded from hreflang and links by the availablePages map.
         if (hasExplicitTargets && isTargetLang
                 && !type->isTranslationComplete(QStringView{}, currentLang)) {
             continue;
@@ -455,6 +508,13 @@ int PageGenerator::generateAll(const QDir     &workingDir,
 
         if (_writePage(*type, effectiveRecord, connName, domain, engine, websiteIndex)) {
             ++count;
+            // Stamp generated_at so findGeneratedByTypeId() can see this page
+            // as "content-filled" (used by category/symptom index blocs).
+            // Only stamp source pages (translations have sourcePageId > 0).
+            if (record.id > 0 && record.sourcePageId == 0) {
+                m_pageRepo.setGeneratedAt(record.id,
+                    QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+            }
         }
     }
 

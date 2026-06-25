@@ -472,7 +472,7 @@ void Test_Website_PageBlocCategoryArticles::test_catart_single_entry_article_hre
     PageBlocCategoryArticles bloc(*m_catTable, *m_repo);
     const auto &html = htmlFrom(bloc, oneEntryHash(3, QStringLiteral("Tech"), 5,
                                                     QLatin1String(PageBlocCategoryArticles::SORT_RECENT)));
-    QVERIFY(html.contains(QStringLiteral("href=\"/my-article.html\"")));   // 19
+    QVERIFY(html.contains(QStringLiteral("href=\"my-article.html\"")));   // 19
 }
 
 void Test_Website_PageBlocCategoryArticles::test_catart_single_entry_title_derived_from_permalink()
@@ -569,8 +569,8 @@ void Test_Website_PageBlocCategoryArticles::test_catart_sort_recent_newest_updat
     PageBlocCategoryArticles bloc(*m_catTable, *m_repo);
     const auto &html = htmlFrom(bloc, oneEntryHash(5, QStringLiteral("Cat"), 5,
                                                     QLatin1String(PageBlocCategoryArticles::SORT_RECENT)));
-    // Newest updatedAt ("/new.html") must appear before oldest ("/old.html")
-    QVERIFY(html.indexOf(QStringLiteral("/new.html")) < html.indexOf(QStringLiteral("/old.html")));   // 27
+    // Newest updatedAt ("new.html") must appear before oldest ("old.html")
+    QVERIFY(html.indexOf(QStringLiteral("new.html")) < html.indexOf(QStringLiteral("old.html")));   // 27
 }
 
 // =============================================================================
@@ -588,8 +588,8 @@ void Test_Website_PageBlocCategoryArticles::test_catart_sort_performance_oldest_
     PageBlocCategoryArticles bloc(*m_catTable, *m_repo);
     const auto &html = htmlFrom(bloc, oneEntryHash(5, QStringLiteral("Cat"), 5,
                                                     QLatin1String(PageBlocCategoryArticles::SORT_PERFORMANCE)));
-    // Oldest createdAt ("/older.html") must appear before ("/younger.html")
-    QVERIFY(html.indexOf(QStringLiteral("/older.html")) < html.indexOf(QStringLiteral("/younger.html")));   // 28
+    // Oldest createdAt ("older.html") must appear before ("younger.html")
+    QVERIFY(html.indexOf(QStringLiteral("older.html")) < html.indexOf(QStringLiteral("younger.html")));   // 28
 }
 
 // =============================================================================
@@ -611,9 +611,9 @@ void Test_Website_PageBlocCategoryArticles::test_catart_sort_combined_interleave
     const auto &html = htmlFrom(bloc, oneEntryHash(5, QStringLiteral("Cat"), 3,
                                                     QLatin1String(PageBlocCategoryArticles::SORT_COMBINED)));
     // All 3 articles must appear
-    QVERIFY(html.contains(QStringLiteral("/a.html")));   // 29
-    QVERIFY(html.contains(QStringLiteral("/b.html")));   // 30
-    QVERIFY(html.contains(QStringLiteral("/c.html")));   // 31
+    QVERIFY(html.contains(QStringLiteral("a.html")));   // 29
+    QVERIFY(html.contains(QStringLiteral("b.html")));   // 30
+    QVERIFY(html.contains(QStringLiteral("c.html")));   // 31
 }
 
 void Test_Website_PageBlocCategoryArticles::test_catart_sort_combined_no_duplicates()
@@ -628,8 +628,8 @@ void Test_Website_PageBlocCategoryArticles::test_catart_sort_combined_no_duplica
     const auto &html = htmlFrom(bloc, oneEntryHash(5, QStringLiteral("Cat"), 5,
                                                     QLatin1String(PageBlocCategoryArticles::SORT_COMBINED)));
     // Only 2 articles exist; must appear exactly once each.
-    QCOMPARE(html.count(QStringLiteral("/a.html")), 1);   // 32
-    QCOMPARE(html.count(QStringLiteral("/b.html")), 1);   // 33
+    QCOMPARE(html.count(QStringLiteral("a.html")), 1);   // 32
+    QCOMPARE(html.count(QStringLiteral("b.html")), 1);   // 33
 }
 
 // =============================================================================
@@ -650,10 +650,10 @@ void Test_Website_PageBlocCategoryArticles::test_catart_unknown_sort_order_falls
     const auto &html = htmlFrom(bloc, oneEntryHash(7, QStringLiteral("Cat"), 5,
                                                     QStringLiteral("unknown_sort")));
     // Both articles must appear exactly once.
-    QCOMPARE(html.count(QStringLiteral("/older.html")), 1);
-    QCOMPARE(html.count(QStringLiteral("/newer.html")), 1);
+    QCOMPARE(html.count(QStringLiteral("older.html")), 1);
+    QCOMPARE(html.count(QStringLiteral("newer.html")), 1);
     // Fallback is "recent": newer updatedAt should come first.
-    QVERIFY(html.indexOf(QStringLiteral("/newer.html")) < html.indexOf(QStringLiteral("/older.html")));
+    QVERIFY(html.indexOf(QStringLiteral("newer.html")) < html.indexOf(QStringLiteral("older.html")));
 }
 
 // =============================================================================
@@ -955,8 +955,8 @@ void Test_Website_PageBlocCategoryArticles::test_catart_translation_pages_exclud
     bloc.addCode(QStringView{}, localEngine, 0, html, css, js, cssDoneIds, jsDoneIds);
 
     QCOMPARE(html.count(QStringLiteral("<li")), 1);               // 58 — only /source.html
-    QVERIFY(html.contains(QStringLiteral("/source.html")));       // 59
-    QVERIFY(!html.contains(QStringLiteral("/fr-source.html")));   // 60
+    QVERIFY(html.contains(QStringLiteral("source.html")));        // 59
+    QVERIFY(!html.contains(QStringLiteral("fr-source.html")));    // 60
 }
 
 // =============================================================================

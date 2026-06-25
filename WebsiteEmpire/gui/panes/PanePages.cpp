@@ -10,6 +10,9 @@
 #include "website/pages/AbstractLegalPageDef.h"
 #include "website/pages/PageTypeCategory.h"
 #include "website/pages/PageTypeHome.h"
+#include "website/pages/PageTypeSymptomHub.h"
+#include "website/pages/PageTypeSymptomIndex.h"
+#include "website/pages/PageTypeTaxonomyIndex.h"
 #include "website/pages/PageTypeLegal.h"
 #include "website/pages/PageFlag.h"
 #include "website/pages/PageGenerationState.h"
@@ -539,9 +542,16 @@ void PanePages::_initDb()
     // Populate type filter combo (first entry = show all).
     ui->comboBoxPageType->clear();
     ui->comboBoxPageType->addItem(tr("All page types"), QString());
+    // Types managed exclusively in the Generated Pages pane.
+    const QSet<QString> generatedTypes = {
+        QLatin1String(PageTypeCategory::TYPE_ID),
+        QLatin1String(PageTypeSymptomHub::TYPE_ID),
+        QLatin1String(PageTypeSymptomIndex::TYPE_ID),
+        QLatin1String(PageTypeTaxonomyIndex::TYPE_ID),
+    };
     for (const QString &typeId : AbstractPageType::allTypeIds()) {
-        if (typeId == QLatin1String(PageTypeCategory::TYPE_ID)) {
-            continue; // managed exclusively in the Generated Pages pane
+        if (generatedTypes.contains(typeId)) {
+            continue;
         }
         const auto pageType = AbstractPageType::createForTypeId(typeId, *m_categoryTable);
         if (pageType) {
@@ -562,7 +572,8 @@ void PanePages::_refreshModel()
     m_model->setQuery(
         QStringLiteral(
             "SELECT id, type_id, permalink, lang, updated_at, generation_state, flags FROM pages"
-            " WHERE type_id != 'category_hub' ORDER BY id"),
+            " WHERE type_id NOT IN ('category_hub','symptom_hub','symptom_index','taxonomy_index')"
+            " ORDER BY id"),
         m_pageDb->database());
     m_model->setHeaderData(0, Qt::Horizontal, tr("ID"));
     m_model->setHeaderData(1, Qt::Horizontal, tr("Type"));

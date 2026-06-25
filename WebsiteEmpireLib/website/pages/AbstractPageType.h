@@ -245,11 +245,12 @@ public:
      * to drive the two-call AI flow.
      */
     struct AiUpdateTarget {
-        QString displayName;  ///< e.g. "Categories"
-        QString prefixedKey;  ///< e.g. "0_categories"
-        QString formatPrompt; ///< second-call instructions
-        QString aiKeyClue;    ///< vocabulary hint (from getAiKeyClues())
+        QString     displayName;   ///< e.g. "Categories"
+        QString     prefixedKey;   ///< e.g. "0_categories"
+        QString     formatPrompt;  ///< second-call instructions
+        QString     aiKeyClue;     ///< vocabulary hint (from getAiKeyClues())
         AbstractPageBloc::AiUpdateSpec::Validator validator;
+        QStringList allowedValues; ///< used by CommaSeparatedVocabulary validator
     };
     QList<AiUpdateTarget> aiUpdateTargets() const;
 

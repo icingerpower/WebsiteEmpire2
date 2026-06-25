@@ -201,13 +201,14 @@ QHash<QString, QString> PageBlocSymptomLinks::getAiKeyClues() const
 std::optional<AbstractPageBloc::AiUpdateSpec> PageBlocSymptomLinks::getAiUpdateSpec() const
 {
     AiUpdateSpec spec;
-    spec.dataKey     = QLatin1String(KEY_SYMPTOMS);
-    spec.displayName = QCoreApplication::translate("PageBlocSymptomLinks", "Symptom Links");
+    spec.dataKey      = QLatin1String(KEY_SYMPTOMS);
+    spec.displayName  = QCoreApplication::translate("PageBlocSymptomLinks", "Symptom Links");
     spec.formatPrompt = QCoreApplication::translate("PageBlocSymptomLinks",
         "Based on the article content above, output ONLY a comma-separated list of "
         "symptom names (e.g. \"Knee Pain,Back Pain\"). Choose symptoms the article "
         "directly discusses. Use exact names from the vocabulary — no variations. "
         "Output an empty string if no symptoms apply. No explanation, no other text.");
-    spec.validator   = AiUpdateSpec::Validator::NonEmpty;
+    spec.validator    = AiUpdateSpec::Validator::CommaSeparatedVocabulary;
+    spec.allowedValues = loadTaxonomy(m_workingDir);
     return spec;
 }

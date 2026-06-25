@@ -322,8 +322,9 @@ static void runUpdateSession(const QString                          &pageTypeId,
 
     AbstractPageBloc::AiUpdateSpec::Validator validator =
         AbstractPageBloc::AiUpdateSpec::Validator::ArticleFormat;
-    QString formatPrompt;
-    QString aiKeyClue;
+    QString     formatPrompt;
+    QString     aiKeyClue;
+    QStringList allowedValues;
 
     if (!saveKey.isEmpty()) {
         CategoryTable catTable(workDir);
@@ -335,9 +336,10 @@ static void runUpdateSession(const QString                          &pageTypeId,
             const auto targets = pageType->aiUpdateTargets();
             for (const auto &t : std::as_const(targets)) {
                 if (t.prefixedKey == saveKey) {
-                    validator    = t.validator;
-                    formatPrompt = t.formatPrompt;
-                    aiKeyClue    = t.aiKeyClue;
+                    validator     = t.validator;
+                    formatPrompt  = t.formatPrompt;
+                    aiKeyClue     = t.aiKeyClue;
+                    allowedValues = t.allowedValues;
                     break;
                 }
             }
@@ -366,6 +368,9 @@ static void runUpdateSession(const QString                          &pageTypeId,
         *(state->out) << QStringLiteral("No pages to update for prompt %1.\n").arg(promptId);
         state->out->flush();
     }
+
+    const int batchSize  = pages.size();
+    const int batchStart = state->jobsCompleted;
 
     for (const PageRecord &page : std::as_const(pages)) {
         if (g_updateStopRequested) {
@@ -736,7 +741,12 @@ static void runUpdateSession(const QString                          &pageTypeId,
             // Record the attempt without touching 1_text.
             pageRepo.recordUpdateAttempt(page.id, promptId);
             ++state->jobsCompleted;
-            *(state->out) << QStringLiteral("OK: %1\n").arg(page.permalink);
+            {
+                const int done      = state->jobsCompleted - batchStart;
+                const int remaining = batchSize - done;
+                *(state->out) << QStringLiteral("OK: %1 — %2/%3 done (%4 remaining)\n")
+                                     .arg(page.permalink).arg(done).arg(batchSize).arg(remaining);
+            }
             state->out->flush();
             continue;
         } else if (isTwoCall) {
@@ -807,6 +817,20 @@ static void runUpdateSession(const QString                          &pageTypeId,
                 bool formatOk = false;
                 if (validator == AbstractPageBloc::AiUpdateSpec::Validator::CommaSeparatedInts) {
                     formatOk = isCommaSeparatedIntsValid(result);
+                } else if (validator == AbstractPageBloc::AiUpdateSpec::Validator::CommaSeparatedVocabulary) {
+                    const QString trimmed = result.trimmed();
+                    if (trimmed.isEmpty()) {
+                        formatOk = true; // empty = no items, which is valid
+                    } else {
+                        const QStringList tokens = trimmed.split(QLatin1Char(','), Qt::SkipEmptyParts);
+                        formatOk = true;
+                        for (const QString &tok : tokens) {
+                            if (!allowedValues.contains(tok.trimmed())) {
+                                formatOk = false;
+                                break;
+                            }
+                        }
+                    }
                 } else {
                     formatOk = !result.trimmed().isEmpty();
                 }
@@ -891,7 +915,12 @@ static void runUpdateSession(const QString                          &pageTypeId,
         pageRepo.recordUpdateAttempt(page.id, promptId);
         ++state->jobsCompleted;
 
-        *(state->out) << QStringLiteral("OK: %1\n").arg(page.permalink);
+        {
+            const int done      = state->jobsCompleted - batchStart;
+            const int remaining = batchSize - done;
+            *(state->out) << QStringLiteral("OK: %1 — %2/%3 done (%4 remaining)\n")
+                                 .arg(page.permalink).arg(done).arg(batchSize).arg(remaining);
+        }
         state->out->flush();
     }
 

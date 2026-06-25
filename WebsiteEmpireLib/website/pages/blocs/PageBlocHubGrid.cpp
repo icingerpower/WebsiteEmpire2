@@ -1,4 +1,5 @@
 #include "PageBlocHubGrid.h"
+#include "PageBlocArticleUtils.h"
 
 #include "website/AbstractEngine.h"
 #include "website/pages/IPageRepository.h"
@@ -8,139 +9,17 @@
 #include "website/pages/blocs/widgets/PageBlocHubGridWidget.h"
 
 #include <QCoreApplication>
-#include <QRegularExpression>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 
 #include <algorithm>
 
-// =============================================================================
-// File-local helpers
-// =============================================================================
-
 namespace {
-
-QString permalinkToTitle(const QString &permalink)
-{
-    QString title = permalink;
-    if (title.startsWith(QLatin1Char('/'))) {
-        title = title.mid(1);
-    }
-    if (title.endsWith(QStringLiteral(".html"))) {
-        title.chop(5);
-    }
-    title.replace(QLatin1Char('-'), QLatin1Char(' '));
-    bool capitalizeNext = true;
-    for (int i = 0; i < title.size(); ++i) {
-        if (title.at(i) == QLatin1Char(' ')) {
-            capitalizeNext = true;
-        } else if (capitalizeNext) {
-            title[i] = title.at(i).toUpper();
-            capitalizeNext = false;
-        }
-    }
-    return title;
-}
-
-// Extract the H1 title from article body text that uses [TITLE level="1"]...[/TITLE].
-// Returns an empty string if not found; caller falls back to permalinkToTitle().
-QString extractH1Title(const QString &text)
-{
-    static const QRegularExpression re(
-        QStringLiteral("\\[TITLE\\b[^\\]]*level=[\"']1[\"'][^\\]]*\\]([^\\[]+)\\[/TITLE\\]"),
-        QRegularExpression::CaseInsensitiveOption);
-    const auto m = re.match(text);
-    if (m.hasMatch()) {
-        return m.captured(1).trimmed();
-    }
-    return {};
-}
-
-// Collects sentences until either maxSentences is reached OR totalChars >= targetChars,
-// whichever comes first.  targetChars=0 disables the character threshold.
-// This prevents very short excerpts in languages with brief introductory sentences.
-QString extractExcerpt(const QString &rawText, qsizetype maxSentences, qsizetype targetChars = 0)
-{
-    if (rawText.isEmpty()) {
-        return {};
-    }
-    QString plain;
-    const auto &paras = rawText.split(QStringLiteral("\n\n"), Qt::SkipEmptyParts);
-    for (const QString &para : paras) {
-        const QString &trimmed = para.trimmed();
-        if (trimmed.startsWith(QLatin1Char('['))) {
-            continue;
-        }
-        QString clean;
-        clean.reserve(trimmed.size());
-        int depth = 0;
-        for (const QChar &ch : trimmed) {
-            if (ch == QLatin1Char('[')) {
-                ++depth;
-            } else if (ch == QLatin1Char(']')) {
-                if (depth > 0) {
-                    --depth;
-                }
-            } else if (depth == 0) {
-                clean += ch;
-            }
-        }
-        const QString &cleanTrimmed = clean.trimmed();
-        if (!cleanTrimmed.isEmpty()) {
-            if (!plain.isEmpty()) {
-                plain += QLatin1Char(' ');
-            }
-            plain += cleanTrimmed;
-        }
-    }
-    if (plain.isEmpty()) {
-        return {};
-    }
-    QStringList sentences;
-    qsizetype totalChars = 0;
-    qsizetype start = 0;
-    const qsizetype len = plain.size();
-    for (qsizetype i = 0; i < len; ++i) {
-        const QChar c = plain.at(i);
-        const bool isAscii = c == QLatin1Char('.') || c == QLatin1Char('!') || c == QLatin1Char('?');
-        // 。(U+3002)  ！(U+FF01)  ？(U+FF1F) — CJK/full-width terminators need no trailing space
-        const bool isCjk   = c == QChar(0x3002) || c == QChar(0xFF01) || c == QChar(0xFF1F);
-        if (!isAscii && !isCjk) {
-            continue;
-        }
-        if (isAscii && i + 1 < len && plain.at(i + 1) != QLatin1Char(' ')) {
-            continue;
-        }
-        const QString sentence = plain.mid(start, i - start + 1).trimmed();
-        sentences.append(sentence);
-        totalChars += sentence.size();
-        start = i + (isAscii ? 2 : 1);
-        if (sentences.size() >= maxSentences || (targetChars > 0 && totalChars >= targetChars)) {
-            break;
-        }
-    }
-    const bool underLimit = sentences.size() < maxSentences
-                            && (targetChars == 0 || totalChars < targetChars);
-    if (underLimit && start < len) {
-        QString tail = plain.mid(start).trimmed();
-        if (!tail.isEmpty()) {
-            // Cap the fallback so we never dump the whole article when no sentence
-            // boundary was matched (e.g. single very long sentence, or a script with
-            // no recognised terminators).
-            if (targetChars > 0 && totalChars + tail.size() > targetChars * 2) {
-                tail = tail.left(targetChars - totalChars).trimmed()
-                       + QStringLiteral("…"); // …
-            }
-            sentences.append(tail);
-        }
-    }
-    return sentences.join(QStringLiteral(" "));
-}
 
 struct ArticleEntry {
     PageRecord record;
-    QString    effectivePermalink; ///< language-specific permalink (may differ from record.permalink)
+    QString    effectivePermalink;
     QString    title;
     QString    excerpt;
 };
@@ -329,11 +208,11 @@ void PageBlocHubGrid::addCode(QStringView     /*origContent*/,
             entry.effectivePermalink = ep;
             const QString &sourceText = data.value(QStringLiteral("1_text"));
             const QString &bodyForTitle = translatedText.isEmpty() ? sourceText : translatedText;
-            entry.title = extractH1Title(bodyForTitle);
+            entry.title = ArticleCardUtils::extractH1Title(bodyForTitle);
             if (entry.title.isEmpty()) {
-                entry.title = permalinkToTitle(ep);
+                entry.title = ArticleCardUtils::permalinkToTitle(ep);
             }
-            entry.excerpt = extractExcerpt(bodyForTitle, 4, 200);
+            entry.excerpt = ArticleCardUtils::extractExcerpt(bodyForTitle, 4, 200);
             entries.append(entry);
         }
     }
@@ -363,60 +242,10 @@ void PageBlocHubGrid::addCode(QStringView     /*origContent*/,
     }
 
     // ── CSS (once per page) ────────────────────────────────────────────
-    if (!cssDoneIds.contains(QStringLiteral("page-bloc-hub-grid"))) {
-        cssDoneIds.insert(QStringLiteral("page-bloc-hub-grid"));
-
+    {
         const AbstractTheme *theme = engine.getActiveTheme();
         const QString primary = theme ? theme->primaryColor() : QStringLiteral("#1a73e8");
-
-        css += QStringLiteral(
-            ".hub-grid{"
-                "display:grid;"
-                "grid-template-columns:repeat(auto-fill,minmax(280px,1fr));"
-                "gap:1.5rem;"
-                "padding:1rem 0"
-            "}"
-            ".hub-card{"
-                "background:#fff;"
-                "border-radius:.75rem;"
-                "box-shadow:0 2px 12px rgba(0,0,0,.07);"
-                "border-left:4px solid ");
-        css += primary;
-        css += QStringLiteral(
-            ";"
-                "padding:1.25rem;"
-                "display:flex;"
-                "flex-direction:column;"
-                "gap:.5rem;"
-                "transition:transform .2s,box-shadow .2s"
-            "}"
-            ".hub-card:hover{"
-                "transform:translateY(-3px);"
-                "box-shadow:0 6px 20px rgba(0,0,0,.12)"
-            "}"
-            ".hub-card__link{"
-                "display:block;"
-                "text-decoration:none;"
-                "color:#1a1a1a"
-            "}"
-            ".hub-card__title{"
-                "font-size:1.05rem;"
-                "font-weight:600;"
-                "margin:0;"
-                "line-height:1.4;"
-                "color:#1a1a1a;"
-                "transition:color .15s"
-            "}"
-            ".hub-card__link:hover .hub-card__title{color:");
-        css += primary;
-        css += QStringLiteral(
-            "}"
-            ".hub-card__excerpt{"
-                "font-size:.875rem;"
-                "color:#1a1a1a;"
-                "margin:0;"
-                "line-height:1.6"
-            "}");
+        ArticleCardUtils::addHubCardCss(css, cssDoneIds, primary);
     }
 
     // ── JS (once per page) ─────────────────────────────────────────────

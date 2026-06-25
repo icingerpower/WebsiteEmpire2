@@ -3,6 +3,7 @@
 #include "website/AbstractEngine.h"
 #include "website/pages/blocs/PageBlocSymptomLinks.h"   // for SymptomNav::slugify
 #include "website/social/AbstractSocialMedia.h"
+#include "website/taxonomy/TaxonomyDb.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -61,17 +62,11 @@ void PageTypeSymptomIndex::addInnerTopCode(AbstractEngine &engine,
     Q_UNUSED(js)
     Q_UNUSED(jsDoneIds)
 
-    const QString symDbPath  = m_workingDir.filePath(
-        QStringLiteral("results_db/PageAttributesHealthSymptom.db"));
     const QString condDbPath = m_workingDir.filePath(
         QStringLiteral("results_db/PageAttributesHealthCondition.db"));
 
-    if (!QFile::exists(symDbPath)) {
-        return;
-    }
-
     // -------------------------------------------------------------------
-    // Build condition-count map: symptomName → conditionCount
+    // Build condition-count map: symptomName → conditionCount (optional).
     // -------------------------------------------------------------------
     QHash<QString, int> condCountBySymptom;
     if (QFile::exists(condDbPath)) {
@@ -100,29 +95,52 @@ void PageTypeSymptomIndex::addInnerTopCode(AbstractEngine &engine,
     }
 
     // -------------------------------------------------------------------
-    // Load all symptom names (alphabetical order from DB).
+    // Build set of symptom slugs that have at least one article assigned
+    // directly via page_data (covers AI-assigned symptoms not in the
+    // conditions aspire DB).
     // -------------------------------------------------------------------
-    QList<QPair<QString, QString>> symptoms; // (name, slug) sorted alphabetically
-    {
+    QSet<QString> slugsWithDirectArticles;
+    const QString pagesDbPath = m_workingDir.filePath(QStringLiteral("pages.db"));
+    if (QFile::exists(pagesDbPath)) {
         static int s_seed2 = 0;
-        const QString connName = QStringLiteral("symidx_sym_") + QString::number(++s_seed2);
+        const QString connName2 = QStringLiteral("symidx_art_") + QString::number(++s_seed2);
         {
-            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
-            db.setDatabaseName(symDbPath);
-            db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
-            if (db.open()) {
-                QSqlQuery q(db);
-                q.exec(QStringLiteral(
-                    "SELECT health_symptom_name FROM records ORDER BY health_symptom_name COLLATE NOCASE"));
-                while (q.next()) {
-                    const QString name = q.value(0).toString().trimmed();
-                    if (!name.isEmpty()) {
-                        symptoms.append({name, SymptomNav::slugify(name)});
+            QSqlDatabase db2 = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName2);
+            db2.setDatabaseName(pagesDbPath);
+            db2.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
+            if (db2.open()) {
+                QSqlQuery q2(db2);
+                q2.exec(QStringLiteral(
+                    "SELECT pd.value FROM pages p"
+                    " JOIN page_data pd ON pd.page_id = p.id"
+                    " WHERE p.type_id = 'article'"
+                    "   AND pd.key LIKE '%_symptoms'"
+                    "   AND pd.value != ''"));
+                while (q2.next()) {
+                    const QStringList parts = q2.value(0).toString()
+                                              .split(QLatin1Char(','), Qt::SkipEmptyParts);
+                    for (const QString &part : std::as_const(parts)) {
+                        const QString &trimmed = part.trimmed();
+                        if (!trimmed.isEmpty()) {
+                            slugsWithDirectArticles.insert(SymptomNav::slugify(trimmed));
+                        }
                     }
                 }
             }
         }
-        QSqlDatabase::removeDatabase(connName);
+        QSqlDatabase::removeDatabase(connName2);
+    }
+
+    // -------------------------------------------------------------------
+    // Load symptom names from the taxonomy (same vocabulary as PageBlocSymptomLinks).
+    // -------------------------------------------------------------------
+    const QStringList symNames = TaxonomyDb(m_workingDir).load(QStringLiteral("symptoms"));
+    QList<QPair<QString, QString>> symptoms; // (name, slug)
+    symptoms.reserve(symNames.size());
+    for (const QString &name : std::as_const(symNames)) {
+        if (!name.isEmpty()) {
+            symptoms.append({name, SymptomNav::slugify(name)});
+        }
     }
 
     if (symptoms.isEmpty()) {
@@ -149,6 +167,11 @@ void PageTypeSymptomIndex::addInnerTopCode(AbstractEngine &engine,
         const QString permalink = QStringLiteral("/symptoms/") + slug;
         const QString resolved  = engine.resolvePermalink(permalink, websiteIndex);
         const int     count     = condCountBySymptom.value(name, 0);
+
+        // Skip symptoms with no articles from either source.
+        if (count == 0 && !slugsWithDirectArticles.contains(slug)) {
+            continue;
+        }
 
         html += QStringLiteral("<li>");
         if (!resolved.isEmpty() && engine.isPageAvailable(permalink, websiteIndex)) {
@@ -185,27 +208,8 @@ QString PageTypeSymptomIndex::buildHeadMetaTags(const QString &baseUrl,
     if (!storedTitle.isEmpty()) {
         title = storedTitle;
     } else {
-        // Count symptoms from the DB for the computed title.
-        int symCount = 0;
-        const QString symDbPath = m_workingDir.filePath(
-            QStringLiteral("results_db/PageAttributesHealthSymptom.db"));
-        if (QFile::exists(symDbPath)) {
-            static int s_seed = 0;
-            const QString connName = QStringLiteral("symidx_title_") + QString::number(++s_seed);
-            {
-                QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
-                db.setDatabaseName(symDbPath);
-                db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
-                if (db.open()) {
-                    QSqlQuery q(db);
-                    q.exec(QStringLiteral("SELECT COUNT(*) FROM records"));
-                    if (q.next()) {
-                        symCount = q.value(0).toInt();
-                    }
-                }
-            }
-            QSqlDatabase::removeDatabase(connName);
-        }
+        // Count symptoms from the taxonomy vocabulary.
+        const int symCount = TaxonomyDb(m_workingDir).load(QStringLiteral("symptoms")).size();
         if (symCount > 0) {
             title = QCoreApplication::translate("PageTypeSymptomIndex",
                         "Browse conditions by symptom — %1 symptoms").arg(symCount);

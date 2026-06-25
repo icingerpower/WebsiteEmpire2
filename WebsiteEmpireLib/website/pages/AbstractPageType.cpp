@@ -109,11 +109,12 @@ QList<AbstractPageType::AiUpdateTarget> AbstractPageType::aiUpdateTargets() cons
         const QString prefix = QString::number(i) + QStringLiteral("_");
         const auto clues = blocs.at(i)->getAiKeyClues();
         AiUpdateTarget t;
-        t.displayName  = spec->displayName;
-        t.prefixedKey  = prefix + spec->dataKey;
-        t.formatPrompt = spec->formatPrompt;
-        t.aiKeyClue    = clues.value(spec->dataKey);
-        t.validator    = spec->validator;
+        t.displayName   = spec->displayName;
+        t.prefixedKey   = prefix + spec->dataKey;
+        t.formatPrompt  = spec->formatPrompt;
+        t.aiKeyClue     = clues.value(spec->dataKey);
+        t.validator     = spec->validator;
+        t.allowedValues = spec->allowedValues;
         result.append(t);
     }
     return result;

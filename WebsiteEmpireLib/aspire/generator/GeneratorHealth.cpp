@@ -29,6 +29,7 @@ const QString GeneratorHealth::TASK_CONDITIONS_FOR_SYMPTOM = QStringLiteral("con
 const QString GeneratorHealth::TASK_MENTAL_FOR_BRAIN_PART  = QStringLiteral("mental_conditions_for_brain_part");
 const QString GeneratorHealth::TASK_MENTAL_COMPLETION          = QStringLiteral("mental_conditions_completion");
 const QString GeneratorHealth::TASK_RECENT_CONDITIONS          = QStringLiteral("recent_conditions");
+const QString GeneratorHealth::TASK_SYMPTOMS_GENERAL            = QStringLiteral("symptoms_general");
 const QString GeneratorHealth::TASK_CONDITION_DIFFICULTY       = QStringLiteral("condition_healing_difficulty");
 const QString GeneratorHealth::TASK_MENTAL_CONDITION_DIFFICULTY = QStringLiteral("mental_condition_healing_difficulty");
 const QString GeneratorHealth::TASK_GOALS                      = QStringLiteral("health_goals");
@@ -229,6 +230,10 @@ bool GeneratorHealth::isSymptomsForBpJobId(const QString &j)
 {
     return j.startsWith(QLatin1String("symptom/bp/"));
 }
+bool GeneratorHealth::isSymptomGeneralJobId(const QString &j)
+{
+    return j.startsWith(QLatin1String("symptom/general/"));
+}
 bool GeneratorHealth::isOrgansForBpJobId(const QString &j)
 {
     return j.startsWith(QLatin1String("organ/bp/"));
@@ -276,6 +281,7 @@ QStringList GeneratorHealth::buildInitialJobIds() const
         QStringLiteral("bp/brain/0"),
         QStringLiteral("organ/0"),
         QStringLiteral("injury/0"),
+        QStringLiteral("symptom/general/0"),
         // Backfill jobs: score existing DB rows that predate the healingDifficulty column.
         // On a fresh run these terminate immediately (no unscored rows); new conditions are
         // inserted with the score directly via the updated conditionEntrySchema().
@@ -365,6 +371,8 @@ bool GeneratorHealth::isStepComplete(Step step) const
         return isStepComplete(Step::BodyPartsGeneral)
             && isStepComplete(Step::BodyPartsBrain)
             && hasNoPendingJobsWithPrefix(QStringLiteral("symptom/bp/"));
+    case Step::GeneralSymptoms:
+        return stepSettings().value(QStringLiteral("Steps/symptoms_general/complete")).toBool();
     case Step::OrgansPerBodyPart:
         return isStepComplete(Step::BodyPartsGeneral)
             && isStepComplete(Step::BodyPartsBrain)
@@ -682,6 +690,39 @@ QJsonObject GeneratorHealth::buildSymptomsForBpPayload(const QString &bpSlug) co
         "Return fewer entries if fewer symptoms apply.")
         .arg(MAX_RESULTS_PER_JOB)
         .arg(name);
+
+    QJsonObject replyFormat;
+    replyFormat[QStringLiteral("jobId")]   = QString{};
+    replyFormat[QStringLiteral("values")]  = QJsonArray{};
+    payload[QStringLiteral("replyFormat")] = replyFormat;
+    return payload;
+}
+
+QJsonObject GeneratorHealth::buildSymptomsGeneralPayload(int page) const
+{
+    const QStringList existing = loadSymptoms();
+
+    QJsonObject payload;
+    payload[QStringLiteral("task")]           = TASK_SYMPTOMS_GENERAL;
+    payload[QStringLiteral("page")]           = page;
+    payload[QStringLiteral("maxResults")]     = MAX_RESULTS_PER_JOB;
+    payload[QStringLiteral("existingCount")]  = existing.size();
+    payload[QStringLiteral("existingValues")] = toJsonArray(existing);
+    payload[QStringLiteral("instructions")]   = tr(
+        "IMPORTANT: Reply ONLY with the raw JSON object shown in 'replyFormat' — "
+        "no prose, no markdown, no text outside the JSON.\n\n"
+        "List up to %1 distinct general symptoms that are systemic or whole-body and "
+        "NOT specific to a single body part or organ — for example: Fatigue, Fever, "
+        "Nausea, Dizziness, Chills, Night Sweats, Unexplained Weight Loss, Malaise, "
+        "Loss of Appetite, Insomnia, Excessive Thirst, Frequent Urination, Brain Fog. "
+        "Do NOT include symptoms that are inherently localised (e.g. 'Knee Pain', "
+        "'Shoulder Ache', 'Abdominal Cramp'). "
+        "STRONGLY PREFER reusing names already in 'existingValues' — use the EXACT "
+        "same string whenever a symptom already appears there. "
+        "Only add a symptom NOT in 'existingValues' if it is genuinely general and "
+        "has no close equivalent in the list. "
+        "Return fewer entries if fewer non-duplicate general symptoms remain.")
+        .arg(MAX_RESULTS_PER_JOB);
 
     QJsonObject replyFormat;
     replyFormat[QStringLiteral("jobId")]   = QString{};
@@ -1042,6 +1083,9 @@ QJsonObject GeneratorHealth::buildJobPayload(const QString &jobId) const
     if (isSymptomsForBpJobId(jobId)) {
         return buildSymptomsForBpPayload(entitySlug(jobId));
     }
+    if (isSymptomGeneralJobId(jobId)) {
+        return buildSymptomsGeneralPayload(pageFromJobId(jobId));
+    }
     if (isOrgansForBpJobId(jobId)) {
         return buildOrgansForBpPayload(entitySlug(jobId));
     }
@@ -1193,10 +1237,11 @@ void GeneratorHealth::processReply(const QString &jobId, const QJsonObject &repl
         }
 
         const int newCount = seen.size() - existingList.size();
-        qDebug() << "GeneratorHealth: body parts" << (isBrain ? "(brain)" : "(general)")
-                 << "page" << page << "—" << names.size() << "received,"
-                 << newCount << "new,"
-                 << dbCount(QStringLiteral("PageAttributesHealthBodyPart")) << "total in DB";
+        qDebug() << "GeneratorHealth [body parts" << (isBrain ? "brain" : "general")
+                 << "p." << page << "] +"
+                 << newCount << "new |"
+                 << dbCount(QStringLiteral("PageAttributesHealthBodyPart")) << "total |"
+                 << (pendingCount() - 1) << "pending";
 
         if (names.size() < MAX_RESULTS_PER_JOB) {
             // Last page: mark step complete.
@@ -1231,10 +1276,10 @@ void GeneratorHealth::processReply(const QString &jobId, const QJsonObject &repl
         }
 
         const int newCount = seen.size() - existingList.size();
-        qDebug() << "GeneratorHealth: organs page" << page
-                 << "—" << names.size() << "received,"
-                 << newCount << "new,"
-                 << dbCount(QStringLiteral("PageAttributesHealthOrgan")) << "total in DB";
+        qDebug() << "GeneratorHealth [organs p." << page << "] +"
+                 << newCount << "new |"
+                 << dbCount(QStringLiteral("PageAttributesHealthOrgan")) << "total |"
+                 << (pendingCount() - 1) << "pending";
 
         if (names.size() < MAX_RESULTS_PER_JOB) {
             markPaginatedStepDone(QStringLiteral("organs"));
@@ -1264,10 +1309,10 @@ void GeneratorHealth::processReply(const QString &jobId, const QJsonObject &repl
         }
 
         const int newCount = seen.size() - existingList.size();
-        qDebug() << "GeneratorHealth: injuries page" << page
-                 << "—" << names.size() << "received,"
-                 << newCount << "new,"
-                 << dbCount(QStringLiteral("PageAttributesHealthInjury")) << "total in DB";
+        qDebug() << "GeneratorHealth [injuries p." << page << "] +"
+                 << newCount << "new |"
+                 << dbCount(QStringLiteral("PageAttributesHealthInjury")) << "total |"
+                 << (pendingCount() - 1) << "pending";
 
         if (names.size() < MAX_RESULTS_PER_JOB) {
             markPaginatedStepDone(QStringLiteral("injuries"));
@@ -1298,10 +1343,44 @@ void GeneratorHealth::processReply(const QString &jobId, const QJsonObject &repl
         }
 
         const int newCount = seen.size() - existing.size();
-        qDebug() << "GeneratorHealth: symptoms for body part" << entitySlug(jobId)
-                 << "—" << names.size() << "received,"
-                 << newCount << "new,"
-                 << dbCount(QStringLiteral("PageAttributesHealthSymptom")) << "total in DB";
+        qDebug() << "GeneratorHealth [symptoms for" << resolveBodyPartName(entitySlug(jobId)) << "] +"
+                 << newCount << "new |"
+                 << dbCount(QStringLiteral("PageAttributesHealthSymptom")) << "total |"
+                 << (pendingCount() - 1) << "pending";
+        return;
+    }
+
+    // --- Step 4b: general symptoms (systemic, not body-part-specific) ---------
+    if (isSymptomGeneralJobId(jobId)) {
+        const int        page  = pageFromJobId(jobId);
+        const QJsonArray names = reply.value(QStringLiteral("values")).toArray();
+        const QStringList existing = loadSymptoms();
+        QSet<QString> seen(existing.begin(), existing.end());
+
+        for (const QJsonValue &v : names) {
+            const QString name = v.toString().trimmed();
+            if (name.isEmpty() || seen.contains(name)) {
+                continue;
+            }
+            seen.insert(name);
+            QHash<QString, QString> attrs;
+            attrs.insert(PageAttributesHealthSymptom::ID_SYMPTOM_NAME, name);
+            recordResultPage(QStringLiteral("PageAttributesHealthSymptom"), attrs);
+
+            addDiscoveredJob(QStringLiteral("condition/symptom/") + slugify(name));
+        }
+
+        const int newCount = seen.size() - existing.size();
+        qDebug() << "GeneratorHealth [symptoms general p." << page << "] +"
+                 << newCount << "new |"
+                 << dbCount(QStringLiteral("PageAttributesHealthSymptom")) << "total |"
+                 << (pendingCount() - 1) << "pending";
+
+        if (names.size() < MAX_RESULTS_PER_JOB) {
+            markPaginatedStepDone(QStringLiteral("symptoms_general"));
+        } else {
+            addDiscoveredJob(QStringLiteral("symptom/general/") + QString::number(page + 1));
+        }
         return;
     }
 
@@ -1323,10 +1402,10 @@ void GeneratorHealth::processReply(const QString &jobId, const QJsonObject &repl
         }
 
         const int newCount = seen.size() - existing.size();
-        qDebug() << "GeneratorHealth: organs for body part" << entitySlug(jobId)
-                 << "—" << names.size() << "received,"
-                 << newCount << "new,"
-                 << dbCount(QStringLiteral("PageAttributesHealthOrgan")) << "total in DB";
+        qDebug() << "GeneratorHealth [organs for" << resolveBodyPartName(entitySlug(jobId)) << "] +"
+                 << newCount << "new |"
+                 << dbCount(QStringLiteral("PageAttributesHealthOrgan")) << "total |"
+                 << (pendingCount() - 1) << "pending";
         return;
     }
 
@@ -1337,10 +1416,10 @@ void GeneratorHealth::processReply(const QString &jobId, const QJsonObject &repl
         QSet<QString> seen(existing.begin(), existing.end());
         const int seenBefore = seen.size();
         recordConditions(conds, /*isMental=*/false, seen);
-        qDebug() << "GeneratorHealth: physical conditions for symptom" << entitySlug(jobId)
-                 << "—" << conds.size() << "received,"
-                 << (seen.size() - seenBefore) << "new,"
-                 << dbCount(QStringLiteral("PageAttributesHealthCondition")) << "total in DB";
+        qDebug() << "GeneratorHealth [conditions for symptom:" << resolveSymptomName(entitySlug(jobId)) << "] +"
+                 << (seen.size() - seenBefore) << "new |"
+                 << dbCount(QStringLiteral("PageAttributesHealthCondition")) << "total |"
+                 << (pendingCount() - 1) << "pending";
         return;
     }
 
@@ -1351,10 +1430,10 @@ void GeneratorHealth::processReply(const QString &jobId, const QJsonObject &repl
         QSet<QString> seen(existing.begin(), existing.end());
         const int seenBefore = seen.size();
         recordConditions(conds, /*isMental=*/true, seen);
-        qDebug() << "GeneratorHealth: mental conditions for brain part" << entitySlug(jobId)
-                 << "—" << conds.size() << "received,"
-                 << (seen.size() - seenBefore) << "new,"
-                 << dbCount(QStringLiteral("PageAttributesHealthMentalCondition")) << "total in DB";
+        qDebug() << "GeneratorHealth [mental conditions for brain part:" << resolveBodyPartName(entitySlug(jobId)) << "] +"
+                 << (seen.size() - seenBefore) << "new |"
+                 << dbCount(QStringLiteral("PageAttributesHealthMentalCondition")) << "total |"
+                 << (pendingCount() - 1) << "pending";
         return;
     }
 
@@ -1366,10 +1445,10 @@ void GeneratorHealth::processReply(const QString &jobId, const QJsonObject &repl
         QSet<QString> seen(existing.begin(), existing.end());
         const int seenBefore = seen.size();
         recordConditions(conds, /*isMental=*/true, seen);
-        qDebug() << "GeneratorHealth: mental completion page" << page
-                 << "—" << conds.size() << "received,"
-                 << (seen.size() - seenBefore) << "new,"
-                 << dbCount(QStringLiteral("PageAttributesHealthMentalCondition")) << "total in DB";
+        qDebug() << "GeneratorHealth [mental completion p." << page << "] +"
+                 << (seen.size() - seenBefore) << "new |"
+                 << dbCount(QStringLiteral("PageAttributesHealthMentalCondition")) << "total |"
+                 << (pendingCount() - 1) << "pending";
 
         if (conds.size() < MAX_RESULTS_PER_JOB) {
             markPaginatedStepDone(QStringLiteral("mental_completion"));
@@ -1403,12 +1482,12 @@ void GeneratorHealth::processReply(const QString &jobId, const QJsonObject &repl
 
         const int newPhys   = seenPhys.size()   - existingPhys.size();
         const int newMental = seenMental.size() - existingMental.size();
-        qDebug() << "GeneratorHealth: recent conditions page" << page
-                 << "—" << conds.size() << "received,"
-                 << newPhys << "new physical (total:"
-                 << dbCount(QStringLiteral("PageAttributesHealthCondition")) << "),"
-                 << newMental << "new mental (total:"
-                 << dbCount(QStringLiteral("PageAttributesHealthMentalCondition")) << ")";
+        qDebug() << "GeneratorHealth [recent p." << page << "]"
+                 << "+" << newPhys << "physical (total:"
+                 << dbCount(QStringLiteral("PageAttributesHealthCondition")) << ") |"
+                 << "+" << newMental << "mental (total:"
+                 << dbCount(QStringLiteral("PageAttributesHealthMentalCondition")) << ") |"
+                 << (pendingCount() - 1) << "pending";
 
         if (conds.size() < MAX_RESULTS_PER_JOB) {
             markPaginatedStepDone(QStringLiteral("recent"));
@@ -1459,8 +1538,10 @@ void GeneratorHealth::processReply(const QString &jobId, const QJsonObject &repl
             }
         }
 
-        qDebug() << "GeneratorHealth: difficulty backfill" << (isMental ? "mental" : "physical")
-                 << "page" << page << "—" << scored.size() << "received," << updated << "updated";
+        qDebug() << "GeneratorHealth [difficulty" << (isMental ? "mental" : "physical")
+                 << "p." << page << "]"
+                 << updated << "updated |"
+                 << (pendingCount() - 1) << "pending";
 
         // After updating, query again at offset 0: scored rows are gone from the WHERE clause.
         const QStringList remaining = loadUnscoredConditionNames(isMental);
@@ -1520,10 +1601,10 @@ void GeneratorHealth::processReply(const QString &jobId, const QJsonObject &repl
             ++inserted;
         }
 
-        qDebug() << "GeneratorHealth: health goals page" << page
-                 << "—" << goals.size() << "received,"
-                 << inserted << "new,"
-                 << dbCount(QStringLiteral("PageAttributesHealthGoal")) << "total in DB";
+        qDebug() << "GeneratorHealth [goals p." << page << "] +"
+                 << inserted << "new |"
+                 << dbCount(QStringLiteral("PageAttributesHealthGoal")) << "total |"
+                 << (pendingCount() - 1) << "pending";
 
         if (goals.size() < MAX_RESULTS_PER_JOB) {
             markPaginatedStepDone(QStringLiteral("goals"));

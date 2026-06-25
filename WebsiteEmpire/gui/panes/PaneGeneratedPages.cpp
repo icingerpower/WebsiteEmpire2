@@ -203,6 +203,18 @@ void PaneGeneratedPages::syncStubs()
         m_syncer->syncStubs(lang);
         m_symptomSyncer->syncStubs(m_workingDir, lang);
         m_taxonomyIndexSyncer->syncStubs(lang);
+
+        // Ensure the /symptoms index stub exists so it appears in the page picker.
+        if (m_pageRepo) {
+            const QList<PageRecord> all = m_pageRepo->findAll();
+            const bool found = std::any_of(all.begin(), all.end(), [](const PageRecord &r) {
+                return r.permalink == QStringLiteral("/symptoms");
+            });
+            if (!found) {
+                m_pageRepo->create(QLatin1String(PageTypeSymptomIndex::TYPE_ID),
+                                   QStringLiteral("/symptoms"), lang);
+            }
+        }
     }
     _refreshModel();
 }
