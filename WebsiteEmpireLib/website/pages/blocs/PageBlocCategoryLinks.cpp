@@ -85,7 +85,7 @@ static QString _buildCatLinkPermalink(const QString &name)
     if (slug.isEmpty()) {
         return {};
     }
-    return QStringLiteral("/") + slug + QStringLiteral(".html");
+    return QStringLiteral("/") + slug;
 }
 
 void PageBlocCategoryLinks::addCode(QStringView     /*origContent*/,

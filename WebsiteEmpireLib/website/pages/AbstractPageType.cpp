@@ -121,6 +121,15 @@ QList<AbstractPageType::AiUpdateTarget> AbstractPageType::aiUpdateTargets() cons
 }
 
 // =============================================================================
+// isCountedInTranslationStats
+// =============================================================================
+
+bool AbstractPageType::isCountedInTranslationStats() const
+{
+    return false;
+}
+
+// =============================================================================
 // bindGenerationContext
 // =============================================================================
 

@@ -90,7 +90,7 @@ void PageBlocCategory::save(QHash<QString, QString> &values) const
 // ---- WebCodeAdder -----------------------------------------------------------
 
 // Converts a category name to a page permalink slug, e.g.
-// "Bone Conditions" → "/bone-conditions.html".
+// "Bone Conditions" → "/bone-conditions".
 // Returns an empty string if the name produces an empty slug.
 static QString _categoryPermalink(const QString &name)
 {
@@ -104,7 +104,7 @@ static QString _categoryPermalink(const QString &name)
     if (slug.isEmpty()) {
         return {};
     }
-    return QStringLiteral("/") + slug + QStringLiteral(".html");
+    return QStringLiteral("/") + slug;
 }
 
 void PageBlocCategory::addCode(QStringView     /*origContent*/,

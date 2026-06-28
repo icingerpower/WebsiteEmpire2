@@ -100,11 +100,13 @@ private:
     QStringList _loadArticlesForSymptomSlug(const QString &slug) const;
 
     /**
-     * Batch-loads the body text (key "1_text") for the given article permalinks
-     * from pages.db.  Returns a map from permalink → text; absent entries mean
-     * the article has no text stored yet.
+     * Batch-loads the body text for the given article permalinks from pages.db.
+     * Prefers the translated text at key "1_tr:{lang}:text" when available;
+     * falls back to the English source at "1_text".
+     * Returns a map from permalink → text; absent entries mean no text stored.
      */
-    QHash<QString, QString> _loadArticleTexts(const QStringList &permalinks) const;
+    QHash<QString, QString> _loadArticleTexts(const QStringList &permalinks,
+                                               const QString     &lang) const;
 
     mutable QString m_permalink;
     mutable QDir    m_workingDir;

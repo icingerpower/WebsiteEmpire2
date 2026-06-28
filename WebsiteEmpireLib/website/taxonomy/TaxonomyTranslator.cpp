@@ -1,9 +1,8 @@
-#include "CategoryTranslator.h"
+#include "TaxonomyTranslator.h"
 
 #include "aicli/AbstractCli.h"
-
-#include "TranslationProtocol.h"
-#include "website/pages/attributes/CategoryTable.h"
+#include "website/taxonomy/TaxonomyDb.h"
+#include "website/translation/TranslationProtocol.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -17,18 +16,18 @@
 // Constructor / Destructor
 // =============================================================================
 
-CategoryTranslator::CategoryTranslator(CategoryTable &categoryTable,
-                                         const QDir    &workingDir,
-                                         AbstractCli   *cli,
-                                         QObject       *parent)
+TaxonomyTranslator::TaxonomyTranslator(TaxonomyDb  &taxonomyDb,
+                                         const QDir  &workingDir,
+                                         AbstractCli *cli,
+                                         QObject     *parent)
     : QObject(parent)
-    , m_categoryTable(categoryTable)
+    , m_taxonomyDb(taxonomyDb)
     , m_workingDir(workingDir)
     , m_cli(cli)
 {
 }
 
-CategoryTranslator::~CategoryTranslator()
+TaxonomyTranslator::~TaxonomyTranslator()
 {
     if (m_logFile && m_logFile->isOpen()) {
         m_logFile->close();
@@ -40,36 +39,39 @@ CategoryTranslator::~CategoryTranslator()
 // buildJobs (static)
 // =============================================================================
 
-QList<CategoryTranslator::TranslationJob>
-CategoryTranslator::buildJobs(const CategoryTable &table,
-                                const QString       &sourceLang,
-                                const QStringList   &targetLangs)
+QList<TaxonomyTranslator::TranslationJob>
+TaxonomyTranslator::buildJobs(TaxonomyDb        &taxonomyDb,
+                                const QStringList &types,
+                                const QString     &sourceLang,
+                                const QStringList &targetLangs)
 {
     QList<TranslationJob> jobs;
 
-    for (const QString &targetLang : std::as_const(targetLangs)) {
-        if (targetLang == sourceLang) {
-            continue;
-        }
-
-        QList<TranslatableField> fields;
-        for (const CategoryTable::CategoryRow &row : std::as_const(table.categories())) {
-            if (row.name.isEmpty()) {
+    for (const QString &type : std::as_const(types)) {
+        for (const QString &targetLang : std::as_const(targetLangs)) {
+            if (targetLang == sourceLang) {
                 continue;
             }
-            if (!row.translations.contains(targetLang)) {
-                TranslatableField f;
-                f.id         = QString::number(row.id);
-                f.sourceText = row.name;
-                fields.append(f);
-            }
-        }
 
-        if (!fields.isEmpty()) {
+            const QStringList untranslated = taxonomyDb.loadUntranslated(type, targetLang);
+            if (untranslated.isEmpty()) {
+                continue;
+            }
+
             TranslationJob job;
+            job.type       = type;
             job.targetLang = targetLang;
-            job.fields     = std::move(fields);
-            jobs.append(job);
+            job.englishNames = untranslated;
+
+            job.fields.reserve(untranslated.size());
+            for (int i = 0; i < untranslated.size(); ++i) {
+                TranslatableField f;
+                f.id         = QString::number(i);
+                f.sourceText = untranslated.at(i);
+                job.fields.append(std::move(f));
+            }
+
+            jobs.append(std::move(job));
         }
     }
 
@@ -80,16 +82,16 @@ CategoryTranslator::buildJobs(const CategoryTable &table,
 // startWithJobs
 // =============================================================================
 
-void CategoryTranslator::startWithJobs(const QList<TranslationJob> &jobs)
+void TaxonomyTranslator::startWithJobs(const QList<TranslationJob> &jobs)
 {
     _openLogFile();
 
     m_queue = jobs;
-    _log(QStringLiteral("Category translation started. %1 job(s) queued.")
+    _log(QStringLiteral("Taxonomy translation started. %1 job(s) queued.")
              .arg(m_queue.size()));
 
     if (m_queue.isEmpty()) {
-        _log(QStringLiteral("Nothing to translate. All category names are up to date."));
+        _log(QStringLiteral("Nothing to translate. All taxonomy names are up to date."));
         _emitFinished(0, 0);
         return;
     }
@@ -101,7 +103,7 @@ void CategoryTranslator::startWithJobs(const QList<TranslationJob> &jobs)
 // Private: _processNextJob
 // =============================================================================
 
-void CategoryTranslator::_processNextJob()
+void TaxonomyTranslator::_processNextJob()
 {
     if (m_queue.isEmpty()) {
         _log(QStringLiteral("All jobs done. Translated: %1  Errors: %2")
@@ -112,19 +114,17 @@ void CategoryTranslator::_processNextJob()
 
     m_currentJob = m_queue.takeFirst();
 
-    _log(QStringLiteral("Processing %1 category name(s) → %2 …")
+    _log(QStringLiteral("Processing %1 '%2' name(s) → %3 …")
              .arg(m_currentJob.fields.size())
-             .arg(m_currentJob.targetLang));
+             .arg(m_currentJob.type, m_currentJob.targetLang));
 
-    // Source lang is implicit: the field sourceText is already the English name.
-    // We use "en" as placeholder — TranslationProtocol only uses it for the prompt header.
     const QString prompt = TranslationProtocol::buildPrompt(
         m_currentJob.fields, QStringLiteral("en"), m_currentJob.targetLang);
 
     m_tempDir = std::make_unique<QTemporaryDir>();
     if (!m_tempDir->isValid()) {
-        _log(QStringLiteral("  Failed to create temp dir for categories → %1")
-                 .arg(m_currentJob.targetLang), true);
+        _log(QStringLiteral("  Failed to create temp dir for '%1' → %2")
+                 .arg(m_currentJob.type, m_currentJob.targetLang), true);
         ++m_errors;
         m_tempDir.reset();
         _processNextJob();
@@ -135,8 +135,8 @@ void CategoryTranslator::_processNextJob()
     {
         QFile f(promptPath);
         if (!f.open(QIODevice::WriteOnly)) {
-            _log(QStringLiteral("  Failed to write prompt file for categories → %1")
-                     .arg(m_currentJob.targetLang), true);
+            _log(QStringLiteral("  Failed to write prompt for '%1' → %2")
+                     .arg(m_currentJob.type, m_currentJob.targetLang), true);
             ++m_errors;
             m_tempDir.reset();
             _processNextJob();
@@ -154,10 +154,10 @@ void CategoryTranslator::_processNextJob()
     m_process->setWorkingDirectory(m_tempDir->path());
 
     connect(m_process, &QProcess::readyReadStandardOutput,
-            this, &CategoryTranslator::_onProcessReadyRead);
+            this, &TaxonomyTranslator::_onProcessReadyRead);
     connect(m_process,
             QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            this, &CategoryTranslator::_onProcessFinished);
+            this, &TaxonomyTranslator::_onProcessFinished);
 
     m_process->start();
 }
@@ -166,25 +166,34 @@ void CategoryTranslator::_processNextJob()
 // Private: _onProcessFinished
 // =============================================================================
 
-void CategoryTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*status*/)
+void TaxonomyTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*status*/)
 {
-    QString translatedJson;
+    QString translatedText;
     bool hasError = false;
 
     if (m_process->error() == QProcess::FailedToStart) {
-        _log(QStringLiteral("  %1 executable not found for categories → %2")
-                 .arg(m_cli->getName(), m_currentJob.targetLang), true);
+        _log(QStringLiteral("  %1 executable not found for '%2' → %3")
+                 .arg(m_cli->getName(), m_currentJob.type, m_currentJob.targetLang), true);
         hasError = true;
     } else if (exitCode != 0) {
         const QString err = QString::fromUtf8(m_process->readAllStandardError()).trimmed();
-        _log(QStringLiteral("  %1 error for categories → %2: %3")
-                 .arg(m_cli->getName(), m_currentJob.targetLang,
-                      err.isEmpty() ? QStringLiteral("exit code %1").arg(exitCode) : err),
-             true);
+        QString detail = err;
+        if (detail.isEmpty()) {
+            const QString outPath = m_tempDir ? m_tempDir->path() + QStringLiteral("/output") : QString();
+            QFile f(outPath);
+            if (f.open(QIODevice::ReadOnly)) {
+                detail = QString::fromUtf8(f.readAll()).trimmed().left(300);
+            }
+        }
+        if (detail.isEmpty()) {
+            detail = QStringLiteral("exit code %1").arg(exitCode);
+        }
+        _log(QStringLiteral("  %1 error for '%2' → %3: %4")
+                 .arg(m_cli->getName(), m_currentJob.type, m_currentJob.targetLang, detail), true);
         hasError = true;
     } else {
         m_processOutput += m_process->readAllStandardOutput();
-        translatedJson = m_cli->extractTextFromOutput(m_processOutput);
+        translatedText = m_cli->extractTextFromOutput(m_processOutput);
     }
 
     m_process->deleteLater();
@@ -198,10 +207,10 @@ void CategoryTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /
         return;
     }
 
-    const QHash<QString, QString> &translations = TranslationProtocol::parseResponse(translatedJson);
+    const QHash<QString, QString> &translations = TranslationProtocol::parseResponse(translatedText);
     if (translations.isEmpty()) {
-        _log(QStringLiteral("  Could not parse translation response for categories → %1")
-                 .arg(m_currentJob.targetLang), true);
+        _log(QStringLiteral("  Could not parse translation response for '%1' → %2")
+                 .arg(m_currentJob.type, m_currentJob.targetLang), true);
         ++m_errors;
         _processNextJob();
         return;
@@ -210,36 +219,42 @@ void CategoryTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /
     int saved = 0;
     for (auto it = translations.cbegin(); it != translations.cend(); ++it) {
         bool ok = false;
-        const int catId = it.key().toInt(&ok);
-        if (!ok || it.value().isEmpty()) {
+        const int idx = it.key().toInt(&ok);
+        if (!ok || idx < 0 || idx >= m_currentJob.englishNames.size()) {
             continue;
         }
-        m_categoryTable.setTranslation(catId, m_currentJob.targetLang, it.value());
+        if (it.value().isEmpty()) {
+            continue;
+        }
+        m_taxonomyDb.setTranslation(m_currentJob.type,
+                                     m_currentJob.englishNames.at(idx),
+                                     m_currentJob.targetLang,
+                                     it.value());
         ++saved;
     }
 
-    _log(QStringLiteral("  Categories → %1: done (%2 name(s) saved)")
-             .arg(m_currentJob.targetLang).arg(saved));
+    _log(QStringLiteral("  '%1' → %2: done (%3 name(s) saved)")
+             .arg(m_currentJob.type, m_currentJob.targetLang).arg(saved));
     ++m_translated;
 
     _processNextJob();
 }
 
-void CategoryTranslator::_onProcessReadyRead()
+void TaxonomyTranslator::_onProcessReadyRead()
 {
     if (m_process) {
         m_processOutput += m_process->readAllStandardOutput();
     }
 }
 
-void CategoryTranslator::_emitFinished(int translated, int errors)
+void TaxonomyTranslator::_emitFinished(int translated, int errors)
 {
     QMetaObject::invokeMethod(this, [this, translated, errors]() {
         emit finished(translated, errors);
     }, Qt::QueuedConnection);
 }
 
-void CategoryTranslator::_log(const QString &msg, bool errorLevel)
+void TaxonomyTranslator::_log(const QString &msg, bool errorLevel)
 {
     emit logMessage(msg);
 
@@ -252,7 +267,7 @@ void CategoryTranslator::_log(const QString &msg, bool errorLevel)
     }
 }
 
-void CategoryTranslator::_openLogFile()
+void TaxonomyTranslator::_openLogFile()
 {
     const QDir logDir = QDir(m_workingDir.filePath(QStringLiteral("translation_logs")));
     if (!logDir.exists()) {
@@ -262,14 +277,14 @@ void CategoryTranslator::_openLogFile()
     const QString stamp    = QDateTime::currentDateTimeUtc()
                                  .toString(QStringLiteral("yyyyMMdd_HHmmss"));
     const QString filePath = logDir.filePath(
-        QStringLiteral("translate_categories_%1.txt").arg(stamp));
+        QStringLiteral("translate_taxonomy_%1.txt").arg(stamp));
 
     m_logFile = new QFile(filePath, this);
     if (!m_logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
-        qDebug() << "[TranslateCategories] Could not open log file:" << filePath;
+        qDebug() << "[TranslateTaxonomy] Could not open log file:" << filePath;
         delete m_logFile;
         m_logFile = nullptr;
     } else {
-        qDebug() << "[TranslateCategories] Log file:" << filePath;
+        qDebug() << "[TranslateTaxonomy] Log file:" << filePath;
     }
 }

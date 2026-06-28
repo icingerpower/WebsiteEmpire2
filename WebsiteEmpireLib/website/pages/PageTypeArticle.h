@@ -67,6 +67,8 @@ public:
      */
     QList<const AbstractPageBloc *> getRenderBlocs() const override;
 
+    bool isCountedInTranslationStats() const override;
+
     /**
      * Stores the working directory; delegates to bindWorkingDir().
      */

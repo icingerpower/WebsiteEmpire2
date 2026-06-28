@@ -5,6 +5,8 @@
 #include "website/HostTable.h"
 #include "website/commonblocs/AbstractCommonBloc.h"
 #include "website/pages/attributes/CategoryTable.h"
+#include "website/taxonomy/TaxonomyDb.h"
+#include "website/taxonomy/TaxonomyTranslator.h"
 #include "website/theme/AbstractTheme.h"
 #include "website/translation/CategoryTranslator.h"
 #include "website/translation/CommonBlocTranslator.h"
@@ -131,7 +133,7 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
     }
 
     // -------------------------------------------------------------------------
-    // Build jobs and run — common blocs first, then categories
+    // Build jobs and run — blocs → categories → taxonomy (sequential)
     // -------------------------------------------------------------------------
     const QList<AbstractCommonBloc *> blocs =
         theme->getTopBlocs() + theme->getBottomBlocs() + theme->getArticleBlocs();
@@ -142,11 +144,18 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
     const QList<CategoryTranslator::TranslationJob> catJobs =
         CategoryTranslator::buildJobs(*categoryTable, sourceLang, targetLangs);
 
+    auto *taxonomyDb = new TaxonomyDb(workingDir);
+    const QStringList taxTypes = taxonomyDb->allTypes();
+    const QList<TaxonomyTranslator::TranslationJob> taxJobs =
+        TaxonomyTranslator::buildJobs(*taxonomyDb, taxTypes, sourceLang, targetLangs);
+
     qDebug() << "[TranslateCommon] Bloc jobs:" << blocJobs.size()
-             << " Category jobs:" << catJobs.size();
+             << " Category jobs:" << catJobs.size()
+             << " Taxonomy jobs:" << taxJobs.size();
 
     auto *blocTranslator = new CommonBlocTranslator(*theme, workingDir, cli, holder);
     auto *catTranslator  = new CategoryTranslator(*categoryTable, workingDir, cli, holder);
+    auto *taxTranslator  = new TaxonomyTranslator(*taxonomyDb, workingDir, cli, holder);
 
     QObject::connect(blocTranslator, &CommonBlocTranslator::logMessage, holder,
                      [](const QString &msg) {
@@ -155,6 +164,10 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
     QObject::connect(catTranslator, &CategoryTranslator::logMessage, holder,
                      [](const QString &msg) {
                          qDebug() << "[TranslateCategories]" << qPrintable(msg);
+                     });
+    QObject::connect(taxTranslator, &TaxonomyTranslator::logMessage, holder,
+                     [](const QString &msg) {
+                         qDebug() << "[TranslateTaxonomy]" << qPrintable(msg);
                      });
 
     QObject::connect(blocTranslator, &CommonBlocTranslator::finished, holder,
@@ -165,9 +178,17 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
                      });
 
     QObject::connect(catTranslator, &CategoryTranslator::finished, holder,
-                     [holder](int translated, int errors) {
+                     [taxTranslator, taxJobs](int translated, int errors) {
                          qDebug() << "[TranslateCategories] Done. Translated:" << translated
                                   << " Errors:" << errors;
+                         taxTranslator->startWithJobs(taxJobs);
+                     });
+
+    QObject::connect(taxTranslator, &TaxonomyTranslator::finished, holder,
+                     [holder, taxonomyDb](int translated, int errors) {
+                         qDebug() << "[TranslateTaxonomy] Done. Translated:" << translated
+                                  << " Errors:" << errors;
+                         delete taxonomyDb;
                          holder->deleteLater();
                          QCoreApplication::quit();
                      });

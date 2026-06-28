@@ -133,6 +133,17 @@ public:
                                const QString &lang) const override;
 
     /**
+     * Returns true if this page type should be counted when deciding whether a
+     * language has enough translated pages to qualify for publishing.
+     *
+     * Defaults to false.  Override to return true in page types whose blocs
+     * properly implement isTranslationComplete() (i.e. return false when no
+     * translation exists).  Hub/taxonomy types must NOT override this — their
+     * blocs return the default true for every language, which inflates counts.
+     */
+    virtual bool isCountedInTranslationStats() const;
+
+    /**
      * Called by PageGenerator after createForTypeId() + load() + setAuthorLang().
      * Page types that need repository access during addCode() (e.g. PageTypeCategory
      * reading stats for article sorting) override this to receive the repo and dir.

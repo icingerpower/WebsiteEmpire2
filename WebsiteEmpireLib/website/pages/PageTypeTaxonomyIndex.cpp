@@ -273,11 +273,13 @@ void PageTypeTaxonomyIndex::addInnerTopCode(AbstractEngine &engine,
         if (!engine.isPageAvailable(e->permalink, websiteIndex)) {
             continue;
         }
-        const QString resolved = engine.resolvePermalink(e->permalink, websiteIndex);
+        const QString resolved    = engine.resolvePermalink(e->permalink, websiteIndex);
+        const QString trSlug      = resolved.section(QLatin1Char('/'), -1, -1);
+        const QString displayName = trSlug.isEmpty() ? e->displayName : _slugToDisplayName(trSlug);
         html += QStringLiteral("<li><a href=\"");
         html += resolved.startsWith(QLatin1Char('/')) ? resolved.mid(1) : resolved;
         html += QStringLiteral("\">");
-        html += e->displayName;
+        html += displayName;
         html += QStringLiteral("</a></li>");
     }
     html += QStringLiteral("</ul>");

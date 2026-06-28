@@ -49,12 +49,14 @@ public:
     void reload();
 
     /**
-     * Returns the number of source pages whose translation is complete for
-     * each requested language, in a single pass over the repository.
+     * Returns the number of translated pages per language, counting only page
+     * types where isCountedInTranslationStats() returns true (currently only
+     * PageTypeArticle).  Hub/taxonomy types are excluded because their blocs
+     * return the default true from isTranslationComplete() regardless of whether
+     * any translation actually exists, which would inflate counts.
      *
      * Used by the publish launchers to decide which languages have ≥ N pages
-     * ready to deploy.  Shares the exact same completion logic as the
-     * Translations pane (AbstractPageType::isTranslationComplete).
+     * ready to deploy.
      */
     static QHash<QString, int> countCompletedPerLang(
         IPageRepository   &repo,

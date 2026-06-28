@@ -5,6 +5,7 @@
 #include "website/theme/AbstractTheme.h"
 #include "website/pages/blocs/PageBlocSymptomLinks.h"   // for SymptomNav::slugify
 #include "website/pages/blocs/widgets/PageBlocReadOnlyWidget.h"
+#include "website/taxonomy/TaxonomyDb.h"
 
 #include <QCoreApplication>
 #include <QFile>
@@ -201,7 +202,8 @@ QStringList PageBlocConditionList::_loadArticlesForSymptomSlug(const QString &sl
 // _loadArticleTexts
 // =============================================================================
 
-QHash<QString, QString> PageBlocConditionList::_loadArticleTexts(const QStringList &permalinks) const
+QHash<QString, QString> PageBlocConditionList::_loadArticleTexts(const QStringList &permalinks,
+                                                                   const QString     &lang) const
 {
     QHash<QString, QString> result;
     if (permalinks.isEmpty()) {
@@ -219,6 +221,9 @@ QHash<QString, QString> PageBlocConditionList::_loadArticleTexts(const QStringLi
     }
     const QString inClause = placeholders.join(QLatin1Char(','));
 
+    // Translated text is stored at key "1_tr:{lang}:text"; fall back to "1_text".
+    const QString trKey = QStringLiteral("1_tr:") + lang + QStringLiteral(":text");
+
     {
         static int s_seed = 0;
         const QString connName = QStringLiteral("condlist_txt_") + QString::number(++s_seed);
@@ -228,12 +233,15 @@ QHash<QString, QString> PageBlocConditionList::_loadArticleTexts(const QStringLi
             db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
             if (db.open()) {
                 QSqlQuery q(db);
-                q.prepare(QStringLiteral(
-                    "SELECT p.permalink, pd.value"
-                    " FROM pages p"
-                    " JOIN page_data pd ON pd.page_id = p.id"
-                    " WHERE p.permalink IN (") + inClause + QStringLiteral(")"
-                    "   AND pd.key = '1_text'"));
+                q.prepare(
+                    QStringLiteral(
+                        "SELECT p.permalink,"
+                        " COALESCE(NULLIF(pd_tr.value,''),pd_en.value)"
+                        " FROM pages p"
+                        " LEFT JOIN page_data pd_en ON pd_en.page_id=p.id AND pd_en.key='1_text'"
+                        " LEFT JOIN page_data pd_tr ON pd_tr.page_id=p.id AND pd_tr.key=?"
+                        " WHERE p.permalink IN (") + inClause + QStringLiteral(")"));
+                q.addBindValue(trKey);
                 for (const QString &pl : std::as_const(permalinks)) {
                     q.addBindValue(pl);
                 }
@@ -354,6 +362,8 @@ void PageBlocConditionList::addCode(QStringView,
     }
 
     // Batch-load article body texts to extract real titles and excerpts.
+    // Prefer translated text for the current language.
+    const QString lang = engine.getLangCode(websiteIndex);
     QStringList allPermalinks;
     allPermalinks.reserve(entries.size());
     for (const Entry &e : std::as_const(entries)) {
@@ -361,7 +371,7 @@ void PageBlocConditionList::addCode(QStringView,
             allPermalinks.append(e.permalink);
         }
     }
-    const QHash<QString, QString> texts = _loadArticleTexts(allPermalinks);
+    const QHash<QString, QString> texts = _loadArticleTexts(allPermalinks, lang);
     for (Entry &e : entries) {
         const QString &body = texts.value(e.permalink);
         if (!body.isEmpty()) {
@@ -376,11 +386,33 @@ void PageBlocConditionList::addCode(QStringView,
         }
     }
 
-    // Symptom display name for the <h1>: prefer canonical name from aspire DB,
-    // fall back to title-casing the URL slug.
-    const QString symptomDisplayName = symptomName.isEmpty()
-                                       ? ArticleCardUtils::permalinkToTitle(m_permalink)
-                                       : symptomName;
+    // Symptom display name for <h1>: prefer TaxonomyDb translation, then
+    // English canonical name, then URL-derived title.
+    QString symptomDisplayName;
+    if (!symptomName.isEmpty()) {
+        // Found in aspire DB — look up translation directly by name.
+        symptomDisplayName = TaxonomyDb(m_workingDir).translationFor(
+            QStringLiteral("symptoms"), symptomName, lang);
+        if (symptomDisplayName.isEmpty()) {
+            symptomDisplayName = symptomName; // English fallback
+        }
+    } else {
+        // Not in aspire DB — find by slug in TaxonomyDb (covers symptoms that
+        // exist in pages but were never scraped into the aspire DB).
+        const auto allSymptoms = TaxonomyDb(m_workingDir).loadTranslated(
+            QStringLiteral("symptoms"), lang);
+        for (const auto &[englishName, displayName] : std::as_const(allSymptoms)) {
+            if (SymptomNav::slugify(englishName) == slug) {
+                symptomDisplayName = displayName;
+                break;
+            }
+        }
+        if (symptomDisplayName.isEmpty()) {
+            // Last resort: title-case just the slug (not the full path).
+            symptomDisplayName = ArticleCardUtils::permalinkToTitle(
+                QLatin1Char('/') + slug);
+        }
+    }
 
     // CSS — shared with PageBlocHubGrid (same CSS_ID, emitted once per page).
     {

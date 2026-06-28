@@ -7,9 +7,12 @@
 #include "website/pages/PageRecord.h"
 #include "website/pages/PermalinkHistoryEntry.h"
 #include "website/pages/attributes/CategoryTable.h"
+#include "website/pages/blocs/PageBlocSymptomLinks.h"   // SymptomNav::slugify
 #include "website/sitemap/SitemapOrchestrator.h"
+#include "website/taxonomy/TaxonomyDb.h"
 
 #include <QCryptographicHash>
+#include <QFile>
 #include <QDateTime>
 #include <QHash>
 #include <QRegularExpression>
@@ -38,7 +41,7 @@ QString PageGenerator::categoryHubSlug(const QString &name)
     while (slug.startsWith(QLatin1Char('-'))) { slug.remove(0, 1); }
     while (slug.endsWith(QLatin1Char('-'))) { slug.chop(1); }
     if (slug.isEmpty()) { return {}; }
-    return QStringLiteral("/") + slug + QStringLiteral(".html");
+    return QStringLiteral("/") + slug;
 }
 
 // =============================================================================
@@ -138,8 +141,14 @@ bool PageGenerator::_writePage(AbstractPageType &type,
                                 const QString    &connName,
                                 const QString    &domain,
                                 AbstractEngine   &engine,
-                                int               websiteIndex)
+                                int               websiteIndex,
+                                const QString    &outputPath)
 {
+    // Blocs that resolve content by slug (e.g. PageBlocConditionList) always
+    // receive the original English permalink via setGenerationContext.
+    // The translated permalink is used only for the content.db path.
+    const QString &outPath = outputPath.isEmpty() ? record.permalink : outputPath;
+
     QHash<QString, QString> publishedByLang;
     QHash<QString, QString> updatedByLang;
     publishedByLang[record.lang] = record.createdAt;
@@ -181,7 +190,7 @@ bool PageGenerator::_writePage(AbstractPageType &type,
         " ON CONFLICT(path) DO UPDATE SET"
         "   domain=excluded.domain, lang=excluded.lang,"
         "   etag=excluded.etag, updated_at=excluded.updated_at"));
-    upsertPage.bindValue(QStringLiteral(":path"),   record.permalink);
+    upsertPage.bindValue(QStringLiteral(":path"),   outPath);
     upsertPage.bindValue(QStringLiteral(":domain"), domain);
     upsertPage.bindValue(QStringLiteral(":lang"),   engine.getLangCode(websiteIndex));
     upsertPage.bindValue(QStringLiteral(":etag"),   etag);
@@ -190,7 +199,7 @@ bool PageGenerator::_writePage(AbstractPageType &type,
 
     QSqlQuery idQ(db);
     idQ.prepare(QStringLiteral("SELECT id FROM pages WHERE path = :path"));
-    idQ.bindValue(QStringLiteral(":path"), record.permalink);
+    idQ.bindValue(QStringLiteral(":path"), outPath);
     idQ.exec();
     idQ.next();
     const int contentPageId = idQ.value(0).toInt();
@@ -223,7 +232,7 @@ bool PageGenerator::_writePage(AbstractPageType &type,
                 "INSERT OR IGNORE INTO redirects (old_path, new_path, status_code)"
                 " VALUES (:old_path, :new_path, :code)"));
             redirect.bindValue(QStringLiteral(":old_path"), entry.permalink);
-            redirect.bindValue(QStringLiteral(":new_path"), record.permalink);
+            redirect.bindValue(QStringLiteral(":new_path"), outPath);
             redirect.bindValue(QStringLiteral(":code"),     code);
         }
         redirect.exec();
@@ -321,6 +330,47 @@ int PageGenerator::generateAll(const QDir     &workingDir,
             }
         }
 
+        // Load all symptom names and translations into memory — used to derive
+        // translated permalinks for symptom_hub pages (slug stays in /symptoms/ base).
+        QHash<QString, QString>                  symptomBySlug;  // english-slug → english-name
+        QHash<QString, QHash<QString, QString>>  symptomTrMap;   // english-name → lang → translated-name
+        {
+            const QString taxPath = workingDir.filePath(QStringLiteral("taxonomy/taxonomy.db"));
+            if (QFile::exists(taxPath)) {
+                static std::atomic<int> s_taxSeed{0};
+                const QString cName = QStringLiteral("pgen_tax_")
+                                      + QString::number(s_taxSeed.fetch_add(1));
+                {
+                    QSqlDatabase tdb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), cName);
+                    tdb.setDatabaseName(taxPath);
+                    tdb.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
+                    if (tdb.open()) {
+                        QSqlQuery tq(tdb);
+                        tq.exec(QStringLiteral(
+                            "SELECT name FROM items WHERE type='symptoms'"));
+                        while (tq.next()) {
+                            const QString &name = tq.value(0).toString();
+                            if (!name.isEmpty()) {
+                                symptomBySlug.insert(SymptomNav::slugify(name), name);
+                            }
+                        }
+                        tq.exec(QStringLiteral(
+                            "SELECT name, lang_code, translated_name"
+                            " FROM translations WHERE type='symptoms'"));
+                        while (tq.next()) {
+                            const QString name = tq.value(0).toString();
+                            const QString lang = tq.value(1).toString();
+                            const QString tr   = tq.value(2).toString();
+                            if (!tr.isEmpty() && tr != name) {
+                                symptomTrMap[name][lang] = tr;
+                            }
+                        }
+                    }
+                }
+                QSqlDatabase::removeDatabase(cName);
+            }
+        }
+
         QHash<QString, QSet<QString>>            availablePages;
         QHash<QString, QHash<QString, QString>>  translatedPermalinks;
 
@@ -366,6 +416,15 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                             }
                         }
                     }
+                } else if (r.typeId == QStringLiteral("symptom_hub")) {
+                    // Symptom hub pages render their condition list dynamically via
+                    // addCode (PageBlocConditionList reads from the aspire DB at
+                    // generation time) — no per-page translation data is required for
+                    // the main content.  Mark available for all target languages so the
+                    // symptoms index page can link to them regardless of translation state.
+                    for (const QString &lang : std::as_const(r.langCodesToTranslate)) {
+                        availablePages[lang].insert(r.permalink);
+                    }
                 } else {
                     // Non-hub pages: only mark a target language available when inline
                     // translation data actually exists. Pages assessed for translation but
@@ -410,6 +469,32 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                         }
                     }
                     break; // use first category only
+                }
+            }
+
+            // Symptom hub pages: build a translated permalink from the TaxonomyDb
+            // translation of the symptom name, keeping the /symptoms/ base path.
+            if (r.typeId == QStringLiteral("symptom_hub")) {
+                const QString prefix = QStringLiteral("/symptoms/");
+                if (r.permalink.startsWith(prefix)) {
+                    const QString slug = r.permalink.mid(prefix.length());
+                    const QString &englishName = symptomBySlug.value(slug);
+                    if (!englishName.isEmpty()) {
+                        const QStringList &hubLangs = r.langCodesToTranslate.isEmpty()
+                            ? QStringList{currentLang}
+                            : r.langCodesToTranslate;
+                        const auto &trByLang = symptomTrMap.value(englishName);
+                        for (const QString &lang : std::as_const(hubLangs)) {
+                            const QString &translatedName = trByLang.value(lang);
+                            if (translatedName.isEmpty()) { continue; }
+                            const QString trSlug = SymptomNav::slugify(translatedName);
+                            if (trSlug.isEmpty()) { continue; }
+                            const QString trPermalink = prefix + trSlug;
+                            if (trPermalink == r.permalink) { continue; }
+                            translatedPermalinks[lang][r.permalink] = trPermalink;
+                            availablePages[lang].insert(trPermalink);
+                        }
+                    }
                 }
             }
 
@@ -503,6 +588,22 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                     }
                 }
                 break;
+            }
+        }
+        // Symptom hub pages: write at the translated URL but pass the original
+        // English record to setGenerationContext so slug-based lookups
+        // (PageBlocConditionList) keep working with English aspire DB slugs.
+        if (record.typeId == QStringLiteral("symptom_hub")) {
+            const QString resolved = engine.resolvePermalink(record.permalink, websiteIndex);
+            if (!resolved.isEmpty() && resolved != record.permalink) {
+                if (_writePage(*type, record, connName, domain, engine, websiteIndex, resolved)) {
+                    ++count;
+                    if (record.id > 0 && record.sourcePageId == 0) {
+                        m_pageRepo.setGeneratedAt(record.id,
+                            QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+                    }
+                }
+                continue;
             }
         }
 
@@ -622,6 +723,17 @@ int PageGenerator::generateSubset(const QList<int> &pageIds,
                     }
                 }
                 break;
+            }
+        }
+        // Symptom hub pages: write at the translated URL but pass the original
+        // English record to setGenerationContext so slug-based lookups keep working.
+        if (record.typeId == QStringLiteral("symptom_hub")) {
+            const QString resolved = engine.resolvePermalink(record.permalink, websiteIndex);
+            if (!resolved.isEmpty() && resolved != record.permalink) {
+                if (_writePage(*type, record, connName, domain, engine, websiteIndex, resolved)) {
+                    ++count;
+                }
+                continue;
             }
         }
 

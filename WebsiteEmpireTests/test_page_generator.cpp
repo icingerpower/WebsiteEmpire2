@@ -531,9 +531,9 @@ void Test_PageGenerator::test_pagegen_hub_diacritic_slug_strips_accents()
 {
     // "Santé mentale": the accented é must be decomposed via NFD into 'e' + a
     // combining accent, then the combining character is stripped.  Without NFD
-    // the é is removed entirely and the result would be "/sant-mentale.html".
+    // the é is removed entirely and the result would be "/sant-mentale".
     QCOMPARE(PageGenerator::categoryHubSlug(QStringLiteral("Santé mentale")),
-             QStringLiteral("/sante-mentale.html"));
+             QStringLiteral("/sante-mentale"));
 }
 
 // ---------------------------------------------------------------------------

@@ -39,15 +39,14 @@ QString categoryNameToSlug(const QString &name)
 }
 
 // Returns a permalink for a new hub page that doesn't conflict with any
-// existing page in the repo.  Prefers "/<slug>.html"; falls back to
-// "/<slug>-<id>.html" if the slug is already taken.
+// existing page in the repo.  Prefers "/<slug>"; falls back to
+// "/<slug>-<id>" if the slug is already taken.
 QString uniqueHubPermalink(int categoryId, const QString &name, const IPageRepository &repo)
 {
     const QString slug = categoryNameToSlug(name);
     const QString preferred = QStringLiteral("/") + (slug.isEmpty()
         ? QStringLiteral("category-") + QString::number(categoryId)
-        : slug)
-        + QStringLiteral(".html");
+        : slug);
 
     const QList<PageRecord> &all = repo.findAll();
     const bool taken = std::any_of(all.constBegin(), all.constEnd(),
@@ -60,7 +59,7 @@ QString uniqueHubPermalink(int categoryId, const QString &name, const IPageRepos
         ? QStringLiteral("category")
         : slug;
     return QStringLiteral("/") + base + QStringLiteral("-")
-           + QString::number(categoryId) + QStringLiteral(".html");
+           + QString::number(categoryId);
 }
 
 } // namespace

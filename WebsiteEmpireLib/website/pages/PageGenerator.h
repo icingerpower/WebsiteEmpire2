@@ -103,7 +103,7 @@ public:
      * Derives a hub page permalink from a category name.
      * Applies NFD decomposition so accented letters (é, ü, …) map to their
      * ASCII base before non-alphanumeric characters are replaced with hyphens.
-     * Example: "Santé mentale" → "/sante-mentale.html".
+     * Example: "Santé mentale" → "/sante-mentale".
      * Returns an empty string when the name yields an empty slug.
      * Exposed as a static method so unit tests can exercise it directly.
      */
@@ -124,12 +124,20 @@ private:
      * content.db via connName (which must already be open and schema-ready).
      * Returns true on success.
      */
+    /**
+     * outputPath overrides record.permalink for the content.db path and the
+     * sitemap/redirect target.  record.permalink is still passed to
+     * setGenerationContext so page-type blocs that resolve content by their own
+     * slug (e.g. PageBlocConditionList) keep the original English permalink.
+     * Pass an empty string to use record.permalink for both (default behaviour).
+     */
     bool _writePage(AbstractPageType &type,
                     const PageRecord &record,
                     const QString    &connName,
                     const QString    &domain,
                     AbstractEngine   &engine,
-                    int               websiteIndex);
+                    int               websiteIndex,
+                    const QString    &outputPath = QString());
 };
 
 #endif // PAGEGENERATOR_H

@@ -66,11 +66,13 @@ QHash<QString, int> TranslationStatusTable::countCompletedPerLang(
         if (page.sourcePageId != 0) {
             continue;
         }
-        if (page.typeId == QLatin1String("category_hub")) {
-            continue;
-        }
         auto type = AbstractPageType::createForTypeId(page.typeId, categoryTable);
-        if (!type) {
+        // Only count page types that have real translatable content
+        // (isCountedInTranslationStats() returns true).  Hub / taxonomy types
+        // return the default false — their blocs always return true from
+        // isTranslationComplete(), which would inflate counts for languages
+        // that have zero real translations.
+        if (!type || !type->isCountedInTranslationStats()) {
             continue;
         }
         const QHash<QString, QString> data = repo.loadData(page.id);

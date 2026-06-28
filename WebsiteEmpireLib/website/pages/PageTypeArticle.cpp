@@ -56,8 +56,9 @@ void PageTypeArticle::bindWorkingDir(const QDir &workingDir)
 // Accessors
 // =============================================================================
 
-QString PageTypeArticle::getTypeId()      const { return QLatin1String(TYPE_ID); }
-QString PageTypeArticle::getDisplayName() const { return QLatin1String(DISPLAY_NAME); }
+QString PageTypeArticle::getTypeId()                   const { return QLatin1String(TYPE_ID); }
+QString PageTypeArticle::getDisplayName()              const { return QLatin1String(DISPLAY_NAME); }
+bool    PageTypeArticle::isCountedInTranslationStats() const { return true; }
 
 const QList<const AbstractPageBloc *> &PageTypeArticle::getPageBlocs() const
 {

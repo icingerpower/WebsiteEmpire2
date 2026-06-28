@@ -132,14 +132,19 @@ void PageTypeSymptomIndex::addInnerTopCode(AbstractEngine &engine,
     }
 
     // -------------------------------------------------------------------
-    // Load symptom names from the taxonomy (same vocabulary as PageBlocSymptomLinks).
+    // Load symptom names from the taxonomy with translations when available.
+    // englishName drives permalink/slug; displayName is rendered in the HTML.
     // -------------------------------------------------------------------
-    const QStringList symNames = TaxonomyDb(m_workingDir).load(QStringLiteral("symptoms"));
-    QList<QPair<QString, QString>> symptoms; // (name, slug)
-    symptoms.reserve(symNames.size());
-    for (const QString &name : std::as_const(symNames)) {
-        if (!name.isEmpty()) {
-            symptoms.append({name, SymptomNav::slugify(name)});
+    const QString lang = engine.getLangCode(websiteIndex);
+    const QList<QPair<QString, QString>> rawSymptoms =
+        TaxonomyDb(m_workingDir).loadTranslated(QStringLiteral("symptoms"), lang);
+
+    struct Symptom { QString englishName; QString displayName; QString slug; };
+    QList<Symptom> symptoms;
+    symptoms.reserve(rawSymptoms.size());
+    for (const auto &[englishName, displayName] : std::as_const(rawSymptoms)) {
+        if (!englishName.isEmpty()) {
+            symptoms.append({englishName, displayName, SymptomNav::slugify(englishName)});
         }
     }
 
@@ -163,10 +168,10 @@ void PageTypeSymptomIndex::addInnerTopCode(AbstractEngine &engine,
     }
 
     html += QStringLiteral("<ul class=\"symptom-index-grid\">");
-    for (const auto &[name, slug] : std::as_const(symptoms)) {
+    for (const auto &[englishName, displayName, slug] : std::as_const(symptoms)) {
         const QString permalink = QStringLiteral("/symptoms/") + slug;
         const QString resolved  = engine.resolvePermalink(permalink, websiteIndex);
-        const int     count     = condCountBySymptom.value(name, 0);
+        const int     count     = condCountBySymptom.value(englishName, 0);
 
         // Skip symptoms with no articles from either source.
         if (count == 0 && !slugsWithDirectArticles.contains(slug)) {
@@ -178,7 +183,7 @@ void PageTypeSymptomIndex::addInnerTopCode(AbstractEngine &engine,
             html += QStringLiteral("<a href=\"");
             html += resolved.startsWith(QLatin1Char('/')) ? resolved.mid(1) : resolved;
             html += QStringLiteral("\">");
-            html += name;
+            html += displayName;
             if (count > 0) {
                 html += QStringLiteral("<span class=\"sym-count\">");
                 html += QString::number(count);
@@ -186,7 +191,7 @@ void PageTypeSymptomIndex::addInnerTopCode(AbstractEngine &engine,
             }
             html += QStringLiteral("</a>");
         } else {
-            html += name;
+            html += displayName;
         }
         html += QStringLiteral("</li>");
     }
