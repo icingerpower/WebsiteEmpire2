@@ -12,6 +12,7 @@
 #include "website/pages/PageRepositoryDb.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/blocs/PageBlocText.h"
+#include "website/taxonomy/TaxonomyDb.h"
 #include "website/EngineArticles.h"
 #include "website/HostTable.h"
 
@@ -92,6 +93,45 @@ struct Fixture {
         QSqlDatabase::removeDatabase(conn);
     }
 };
+// Shared setup for the symptom-hub multilingual regression tests.
+// Creates TaxonomyDb entry "Hot Flashes"→fr:"Bouffées de chaleur", one article
+// linked to that symptom with a French translation, and a symptom_hub page
+// targeting /symptoms/hot-flashes for French.  Runs generateAll for the French
+// engine index and sets frIndex.
+void setupFrenchSymptomHub(Fixture &f, int &frIndex)
+{
+    TaxonomyDb taxDb(QDir(f.dir.path()));
+    taxDb.sync(QStringLiteral("symptoms"), {QStringLiteral("Hot Flashes")});
+    taxDb.setTranslation(QStringLiteral("symptoms"), QStringLiteral("Hot Flashes"),
+                          QStringLiteral("fr"), QStringLiteral("Bouffées de chaleur"));
+
+    const int articleId = f.repo.create(QStringLiteral("article"),
+                                         QStringLiteral("/hot-flashes-article"),
+                                         QStringLiteral("en"));
+    f.repo.saveData(articleId, {
+        {QStringLiteral("1_text"),       QStringLiteral("<h1>Hot Flashes Article</h1><p>Content.</p>")},
+        {QStringLiteral("0_categories"), QString()},
+        {QStringLiteral("2_symptoms"),   QStringLiteral("Hot Flashes")},
+        {QStringLiteral("1_tr:fr:text"), QStringLiteral("<h1>Article bouffées</h1><p>Contenu.</p>")},
+    });
+    f.repo.setLangCodesToTranslate(articleId, {QStringLiteral("fr")});
+
+    const int hubId = f.repo.create(QStringLiteral("symptom_hub"),
+                                     QStringLiteral("/symptoms/hot-flashes"),
+                                     QStringLiteral("en"));
+    f.repo.setLangCodesToTranslate(hubId, {QStringLiteral("fr")});
+
+    frIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        if (f.engine.getLangCode(i) == QStringLiteral("fr")) {
+            frIndex = i;
+            break;
+        }
+    }
+
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, frIndex);
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -145,6 +185,12 @@ private slots:
     // --- taxonomy_index excludes pending (unavailable) hub pages ---
     void test_pagegen_taxonomy_index_excludes_pending_category_hub();
     void test_pagegen_taxonomy_index_includes_pending_symptom_hub();
+
+    // --- multilingual symptom/category hub regressions ---
+    void test_pagegen_category_hub_slug_has_no_html_suffix();
+    void test_pagegen_symptom_hub_french_permalink_is_translated_slug();
+    void test_pagegen_symptom_hub_article_card_appears_on_translated_domain();
+    void test_pagegen_symptom_hub_h1_uses_taxonomy_translation_on_translated_domain();
 };
 
 // ---------------------------------------------------------------------------
@@ -600,6 +646,103 @@ void Test_PageGenerator::test_pagegen_taxonomy_index_includes_pending_symptom_hu
     // Symptom hub "Fatigue" must NOT appear in the categories grid.
     QVERIFY2(!html.contains("Fatigue"),
              "taxonomy index must not list symptom hub pages (only category_hub)");
+}
+
+// ---------------------------------------------------------------------------
+// Category hub: .html suffix must not appear in generated permalink
+// ---------------------------------------------------------------------------
+
+void Test_PageGenerator::test_pagegen_category_hub_slug_has_no_html_suffix()
+{
+    // Regression: categoryHubSlug() previously appended ".html", causing category hub pages
+    // to be stored at "/brain-disorders.html" and breaking routing and sitemap generation.
+    QCOMPARE(PageGenerator::categoryHubSlug(QStringLiteral("Brain Disorders")),
+             QStringLiteral("/brain-disorders"));
+    QVERIFY(!PageGenerator::categoryHubSlug(QStringLiteral("Mental Health")).contains(
+        QStringLiteral(".html")));
+}
+
+// ---------------------------------------------------------------------------
+// Symptom hub multilingual regression
+// ---------------------------------------------------------------------------
+
+void Test_PageGenerator::test_pagegen_symptom_hub_french_permalink_is_translated_slug()
+{
+    // Regression: when TaxonomyDb has a French translation for a symptom, the French
+    // symptom hub page must be written at the translated slug, not the English one.
+    // A missing pre-pass would leave the page at "/symptoms/hot-flashes" (English).
+    Fixture f;
+    int frIndex = -1;
+    setupFrenchSymptomHub(f, frIndex);
+    QVERIFY(frIndex >= 0);
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+
+    q.exec(QStringLiteral("SELECT COUNT(*) FROM pages WHERE path = '/symptoms/bouffees-de-chaleur'"));
+    q.next();
+    QCOMPARE(q.value(0).toInt(), 1); // translated path must be written
+
+    q.exec(QStringLiteral("SELECT COUNT(*) FROM pages WHERE path = '/symptoms/hot-flashes'"));
+    q.next();
+    QCOMPARE(q.value(0).toInt(), 0); // English path must NOT appear when generating French
+
+    f.closeContentDb(conn);
+}
+
+void Test_PageGenerator::test_pagegen_symptom_hub_article_card_appears_on_translated_domain()
+{
+    // Regression: on the French domain the symptom hub page rendered empty — no article cards.
+    // Root cause: _writePage passed the translated slug ("/symptoms/bouffees-de-chaleur") to
+    // setGenerationContext, so PageBlocConditionList searched pages.db with the French slug
+    // and found nothing (article symptom "Hot Flashes" slugifies to "hot-flashes").
+    // Fix: record.permalink (English) is passed to setGenerationContext; only the output path
+    // in content.db uses the translated slug.
+    Fixture f;
+    int frIndex = -1;
+    setupFrenchSymptomHub(f, frIndex);
+    QVERIFY(frIndex >= 0);
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT pv.html_gz FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id"
+        " WHERE p.path = '/symptoms/bouffees-de-chaleur'"));
+    QVERIFY2(q.next(), "French symptom hub page not found in content.db");
+    const QByteArray html = gzipDecompress(q.value(0).toByteArray());
+    f.closeContentDb(conn);
+
+    QVERIFY2(html.contains("hot-flashes-article"),
+             "article card must appear in French symptom hub (English slug used for lookup)");
+}
+
+void Test_PageGenerator::test_pagegen_symptom_hub_h1_uses_taxonomy_translation_on_translated_domain()
+{
+    // Regression: the symptom hub h1 showed the raw URL slug instead of the translated name.
+    // Root cause: same slug mismatch — the French slug was used to look up TaxonomyDb entries,
+    // but TaxonomyDb stores (englishName → translatedName) and the slug is derived from
+    // the English name.  With the fix, record.permalink keeps the English slug so
+    // SymptomNav::slugify(englishName) == slug matches and the translation is displayed.
+    Fixture f;
+    int frIndex = -1;
+    setupFrenchSymptomHub(f, frIndex);
+    QVERIFY(frIndex >= 0);
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT pv.html_gz FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id"
+        " WHERE p.path = '/symptoms/bouffees-de-chaleur'"));
+    QVERIFY2(q.next(), "French symptom hub page not found in content.db");
+    const QByteArray html = gzipDecompress(q.value(0).toByteArray());
+    f.closeContentDb(conn);
+
+    // "Bouffées de chaleur": "Bouff" (capital B) is unique to the translated h1.
+    // The article card text uses lowercase "bouffées"; the slug uses no accents.
+    QVERIFY2(html.contains("Bouff"),
+             "h1 must show French translated symptom name from TaxonomyDb");
 }
 
 QTEST_MAIN(Test_PageGenerator)
