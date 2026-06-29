@@ -82,6 +82,9 @@
      </item>
      <item>
       <widget class="QPushButton" name="buttonUpload">
+       <property name="toolTip">
+        <string>Upload images.db + content.db and restart each language service. Does NOT update the StaticWebsiteServe binary.</string>
+       </property>
        <property name="text">
         <string>Upload</string>
        </property>

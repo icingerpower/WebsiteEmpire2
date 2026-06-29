@@ -173,22 +173,39 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now website-en website-fr
-systemctl status website-en website-fr
+systemctl enable --now website-en website-fr website-de website-ja
+systemctl status website-en website-fr website-de website-ja
 ```
 
 ---
 
 ## Redeploying after a republish
 
-When you republish from WebsiteEmpire, just sync the updated files and restart:
+When you republish from WebsiteEmpire, sync the updated files, verify integrity, then restart.
+**Important:** wait for WebsiteEmpire to finish publishing before running rsync — copying a
+SQLite file while it is still being written produces a malformed image on the VPS.
 
 ```bash
 rsync -avz --progress \
     /path/to/workingDirectory/deploy/ \
     root@YOUR_VPS_IP:/opt/websiteempire/deploy/
 
-ssh root@YOUR_VPS_IP "systemctl restart website-en website-fr"
+# Verify each content.db arrived intact before restarting
+ssh root@YOUR_VPS_IP "for lang in en fr de ja; do \
+    echo \"=== \$lang ===\"; \
+    sqlite3 /opt/websiteempire/deploy/\$lang/content.db 'PRAGMA integrity_check; SELECT COUNT(*) FROM pages;'; \
+done"
+
+ssh root@YOUR_VPS_IP "systemctl restart website-en website-fr website-de website-ja"
+```
+
+If `PRAGMA integrity_check` returns anything other than `ok`, re-sync that language individually:
+
+```bash
+rsync -avz --progress --checksum \
+    /path/to/workingDirectory/deploy/de/content.db \
+    root@YOUR_VPS_IP:/opt/websiteempire/deploy/de/content.db
+ssh root@YOUR_VPS_IP "systemctl restart website-de"
 ```
 
 ---
@@ -197,11 +214,13 @@ ssh root@YOUR_VPS_IP "systemctl restart website-en website-fr"
 
 ```bash
 # Check servers are running
-systemctl status website-en website-fr
+systemctl status website-en website-fr website-de website-ja
 
 # View logs
 journalctl -u website-en -f
 journalctl -u website-fr -f
+journalctl -u website-de -f
+journalctl -u website-ja -f
 
 # Check a page is served correctly
 curl -s --compressed https://yourdomain.com/index.html | head -5

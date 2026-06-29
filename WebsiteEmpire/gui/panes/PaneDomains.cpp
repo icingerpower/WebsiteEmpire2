@@ -697,17 +697,26 @@ void PaneDomains::deployLocally()
         const QString urlList  = urls.join(QStringLiteral("\n"));
         const QString firstUrl = QStringLiteral("http://localhost:%1/index.html")
                                      .arg(targets.first().port);
-        const QString msg = tr("Generated %1 page(s):\n%2\n\nServing:\n%3")
+
+        QStringList serviceNames;
+        for (const auto &t : std::as_const(targets)) {
+            serviceNames.append(QStringLiteral("website-") + t.lang);
+        }
+        const QString restartCmd = QStringLiteral("systemctl restart ") + serviceNames.join(QLatin1Char(' '));
+
+        const QString msg = tr("Generated %1 page(s):\n%2\n\nServing:\n%3\n\nTo deploy on server:\n%4")
                                .arg(totalPages)
                                .arg(langSummaries.join(QStringLiteral("\n")))
-                               .arg(urlList);
+                               .arg(urlList)
+                               .arg(restartCmd);
 
         QMessageBox msgBox(this);
         msgBox.setWindowTitle(tr("Generate & Publish"));
         msgBox.setText(msg);
-        QPushButton *openBtn    = msgBox.addButton(tr("Open"),       QMessageBox::ActionRole);
-        QPushButton *copyUrlBtn = msgBox.addButton(tr("Copy URL"),   QMessageBox::ActionRole);
-        QPushButton *copyPathBtn = msgBox.addButton(tr("Copy path"), QMessageBox::ActionRole);
+        QPushButton *openBtn       = msgBox.addButton(tr("Open"),            QMessageBox::ActionRole);
+        QPushButton *copyUrlBtn    = msgBox.addButton(tr("Copy URL"),        QMessageBox::ActionRole);
+        QPushButton *copyPathBtn   = msgBox.addButton(tr("Copy path"),       QMessageBox::ActionRole);
+        QPushButton *copyCmdBtn    = msgBox.addButton(tr("Copy restart cmd"), QMessageBox::ActionRole);
         msgBox.addButton(QMessageBox::Ok);
         msgBox.exec();
 
@@ -717,6 +726,8 @@ void PaneDomains::deployLocally()
             QGuiApplication::clipboard()->setText(firstUrl);
         } else if (msgBox.clickedButton() == copyPathBtn) {
             QGuiApplication::clipboard()->setText(deployBase);
+        } else if (msgBox.clickedButton() == copyCmdBtn) {
+            QGuiApplication::clipboard()->setText(restartCmd);
         }
 
     } catch (const ExceptionWithTitleText &ex) {
