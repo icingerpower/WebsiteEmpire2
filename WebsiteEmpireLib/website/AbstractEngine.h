@@ -135,8 +135,25 @@ public:
      * Returns the language-specific permalink for the given source permalink
      * and the language at websiteIndex.  Returns permalink unchanged when no
      * translation is registered or when permalink is an external URL.
+     * Use this only for paths stored in content.db (prefix-free).
      */
     QString resolvePermalink(const QString &permalink, int websiteIndex) const;
+
+    /**
+     * Sets the URL path prefix prepended to internal link hrefs during HTML
+     * generation.  Set to "/fr" when generating pages served under nginx's
+     * /fr/ location, empty for the primary (English) deployment.
+     * Called by PageGenerator::generateAll; reset to empty after each pass.
+     */
+    void setLangPathPrefix(const QString &prefix);
+
+    /**
+     * Like resolvePermalink() but also prepends the active lang path prefix.
+     * Use this for every href= attribute in generated HTML so that links stay
+     * on the correct language site when served behind nginx's /lang/ prefix.
+     * External URLs (http/https) are returned unchanged.
+     */
+    QString resolveLinkHref(const QString &permalink, int websiteIndex) const;
 
     // Binds this engine to workingDir and hostTable, then loads engine_domains.csv.
     // Must be called before using the model.
@@ -198,6 +215,9 @@ private:
     /// Populated by setTranslatedPermalinks(); queried by resolvePermalink().
     /// langCode → (sourcePermalink → translatedPermalink)
     QHash<QString, QHash<QString, QString>> m_translatedPermalinks;
+
+    /// Set by setLangPathPrefix(); prepended to internal hrefs by resolveLinkHref().
+    QString m_langPathPrefix;
     QList<DomainRow> m_rows;
 
     // Backing storage for the default getPageTypes() implementation.

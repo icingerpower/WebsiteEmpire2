@@ -98,6 +98,24 @@ QString AbstractEngine::resolvePermalink(const QString &permalink, int websiteIn
     return it->value(permalink, permalink);
 }
 
+void AbstractEngine::setLangPathPrefix(const QString &prefix)
+{
+    m_langPathPrefix = prefix;
+}
+
+QString AbstractEngine::resolveLinkHref(const QString &permalink, int websiteIndex) const
+{
+    const QString resolved = resolvePermalink(permalink, websiteIndex);
+    if (resolved.startsWith(QStringLiteral("http://"))
+            || resolved.startsWith(QStringLiteral("https://"))) {
+        return resolved;
+    }
+    if (!m_langPathPrefix.isEmpty() && resolved.startsWith(QLatin1Char('/'))) {
+        return m_langPathPrefix + resolved;
+    }
+    return resolved;
+}
+
 bool AbstractEngine::isPageAvailable(const QString &permalink, int websiteIndex) const
 {
     // Permissive default: if no availability map has been set, every page is

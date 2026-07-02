@@ -446,14 +446,14 @@ void PageBlocConditionList::addCode(QStringView,
         if (e.permalink.isEmpty() || !engine.isPageAvailable(e.permalink, websiteIndex)) {
             continue;
         }
-        const QString resolved = engine.resolvePermalink(e.permalink, websiteIndex);
+        const QString resolved = engine.resolveLinkHref(e.permalink, websiteIndex);
         ArticleCardUtils::renderHubCard(html, resolved, e.title, e.excerpt);
     }
     html += QStringLiteral("</div>");
 
     // Back-link to the symptom index.
     const QString indexPermalink = QStringLiteral("/symptoms");
-    const QString indexResolved  = engine.resolvePermalink(indexPermalink, websiteIndex);
+    const QString indexResolved  = engine.resolveLinkHref(indexPermalink, websiteIndex);
     if (!indexResolved.isEmpty() && engine.isPageAvailable(indexPermalink, websiteIndex)) {
         html += QStringLiteral("<a href=\"");
         html += indexResolved;

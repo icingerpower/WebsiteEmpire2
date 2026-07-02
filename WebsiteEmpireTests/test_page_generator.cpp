@@ -191,6 +191,9 @@ private slots:
     void test_pagegen_symptom_hub_french_permalink_is_translated_slug();
     void test_pagegen_symptom_hub_article_card_appears_on_translated_domain();
     void test_pagegen_symptom_hub_h1_uses_taxonomy_translation_on_translated_domain();
+
+    // --- lang path prefix for nginx reverse-proxy deployments ---
+    void test_pagegen_links_include_lang_prefix_on_translated_domain();
 };
 
 // ---------------------------------------------------------------------------
@@ -743,6 +746,43 @@ void Test_PageGenerator::test_pagegen_symptom_hub_h1_uses_taxonomy_translation_o
     // The article card text uses lowercase "bouffées"; the slug uses no accents.
     QVERIFY2(html.contains("Bouff"),
              "h1 must show French translated symptom name from TaxonomyDb");
+}
+
+// ---------------------------------------------------------------------------
+// Lang path prefix: nginx reverse-proxy deployments
+// ---------------------------------------------------------------------------
+
+void Test_PageGenerator::test_pagegen_links_include_lang_prefix_on_translated_domain()
+{
+    // Regression: menu and hub card hrefs used absolute paths like "/symptoms"
+    // which a browser at "https://example.com/fr/…" resolves to the English server.
+    // The two-dir generateAll must derive the path prefix ("/fr") from sitemapBaseUrl
+    // and prepend it to all internal link hrefs so French navigation stays on the
+    // French server.
+    Fixture f;
+    int frIndex = -1;
+    setupFrenchSymptomHub(f, frIndex);
+    QVERIFY(frIndex >= 0);
+
+    // Re-run the generation using the two-dir overload with a sitemapBaseUrl that
+    // carries the "/fr" path prefix. The output still goes to f.dir.path().
+    f.gen.generateAll(QDir(f.dir.path()), QDir(f.dir.path()),
+                      QStringLiteral("example.com"), f.engine, frIndex,
+                      QStringLiteral("https://example.com/fr"));
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT pv.html_gz FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id"
+        " WHERE p.path = '/symptoms/bouffees-de-chaleur'"));
+    QVERIFY2(q.next(), "French symptom hub page not found in content.db");
+    const QByteArray html = gzipDecompress(q.value(0).toByteArray());
+    f.closeContentDb(conn);
+
+    QVERIFY2(html.contains("/fr/hot-flashes-article"),
+             "article card href must include /fr/ prefix so French navigation "
+             "stays on the French site when served behind an nginx /fr/ proxy");
 }
 
 QTEST_MAIN(Test_PageGenerator)
