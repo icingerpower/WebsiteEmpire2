@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <QCryptographicHash>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTemporaryDir>
@@ -71,6 +72,31 @@ struct Fixture {
         repo.saveData(id, {
             {QStringLiteral("1_") + QLatin1String(PageBlocText::KEY_TEXT), text},
             {QStringLiteral("0_categories"), QString()},
+        });
+        return id;
+    }
+
+    // SHA-1 of UTF-8 encoded text — mirrors BlocTranslations::_sha1.
+    static QString sha1(const QString &text)
+    {
+        return QString::fromLatin1(
+            QCryptographicHash::hash(text.toUtf8(), QCryptographicHash::Sha1).toHex());
+    }
+
+    // Creates an article with a complete French translation (text + hash) so that
+    // isTranslationComplete("fr") returns true and the generator writes the page.
+    int addTranslatedArticle(const QString &permalink,
+                             const QString &enText,
+                             const QString &frText)
+    {
+        const int id = repo.create(QStringLiteral("article"), permalink, QStringLiteral("en"));
+        // KEY_TEXT is "text"; bloc index 1 is PageBlocText, so raw key is "1_text".
+        // Translation keys: "1_tr:fr:text" (value) + "1_tr:fr:text:hash" (sha1 of source).
+        repo.saveData(id, {
+            {QStringLiteral("1_") + QLatin1String(PageBlocText::KEY_TEXT), enText},
+            {QStringLiteral("0_categories"),    QString()},
+            {QStringLiteral("1_tr:fr:text"),    frText},
+            {QStringLiteral("1_tr:fr:text:hash"), sha1(enText)},
         });
         return id;
     }
@@ -194,6 +220,10 @@ private slots:
 
     // --- lang path prefix for nginx reverse-proxy deployments ---
     void test_pagegen_links_include_lang_prefix_on_translated_domain();
+
+    // --- translated article permalink ---
+    void test_pagegen_article_stored_at_translated_permalink_when_tr_slug_set();
+    void test_pagegen_article_falls_back_to_english_permalink_when_no_tr_slug();
 };
 
 // ---------------------------------------------------------------------------
@@ -783,6 +813,99 @@ void Test_PageGenerator::test_pagegen_links_include_lang_prefix_on_translated_do
     QVERIFY2(html.contains("/fr/hot-flashes-article"),
              "article card href must include /fr/ prefix so French navigation "
              "stays on the French site when served behind an nginx /fr/ proxy");
+}
+
+// ---------------------------------------------------------------------------
+// Translated article permalink
+// ---------------------------------------------------------------------------
+
+void Test_PageGenerator::test_pagegen_article_stored_at_translated_permalink_when_tr_slug_set()
+{
+    // When an article has a non-empty endPermalink AND a stored tr:fr:_permalink_slug,
+    // the French content.db must contain the page at the French slug, not the English one.
+    Fixture f;
+
+    const QString enText = QStringLiteral("<h1>Master Sleep Article</h1><p>English content.</p>");
+    const QString frText = QStringLiteral("<h1>Maîtriser le sommeil</h1><p>Contenu français.</p>");
+
+    const int id = f.repo.create(QStringLiteral("article"),
+                                  QStringLiteral("/master-sleep-genes-biomarkers"),
+                                  QStringLiteral("en"));
+    f.repo.setEndPermalink(id, QStringLiteral("genes-biomarkers"));
+    // tr:fr:_permalink_slug has no bloc-number prefix — read by PageGenerator
+    // directly from page_data, outside the bloc dispatch path.
+    f.repo.saveData(id, {
+        {QStringLiteral("1_text"),              enText},
+        {QStringLiteral("0_categories"),         QString()},
+        {QStringLiteral("1_tr:fr:text"),         frText},
+        {QStringLiteral("1_tr:fr:text:hash"),    Fixture::sha1(enText)},
+        {QStringLiteral("tr:fr:_permalink_slug"),
+         QStringLiteral("maitriser-le-sommeil-genes-biomarqueurs")},
+    });
+    f.repo.setLangCodesToTranslate(id, {QStringLiteral("fr")});
+
+    int frIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        if (f.engine.getLangCode(i) == QStringLiteral("fr")) {
+            frIndex = i;
+            break;
+        }
+    }
+    QVERIFY(frIndex >= 0);
+
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, frIndex);
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+
+    q.exec(QStringLiteral(
+        "SELECT COUNT(*) FROM pages WHERE path = '/maitriser-le-sommeil-genes-biomarqueurs'"));
+    q.next();
+    QCOMPARE(q.value(0).toInt(), 1); // French slug must be present
+
+    q.exec(QStringLiteral(
+        "SELECT COUNT(*) FROM pages WHERE path = '/master-sleep-genes-biomarkers'"));
+    q.next();
+    QCOMPARE(q.value(0).toInt(), 0); // English slug must NOT appear in the French content.db
+
+    f.closeContentDb(conn);
+}
+
+void Test_PageGenerator::test_pagegen_article_falls_back_to_english_permalink_when_no_tr_slug()
+{
+    // When tr:fr:_permalink_slug is not stored (translator hasn't run yet),
+    // the French content.db must still contain the page at the English permalink.
+    Fixture f;
+
+    const QString enText = QStringLiteral("<h1>Master Sleep Article</h1><p>English content.</p>");
+    const QString frText = QStringLiteral("<h1>Maîtriser le sommeil</h1><p>Contenu français.</p>");
+
+    const int id = f.addTranslatedArticle(
+        QStringLiteral("/master-sleep-genes-biomarkers"), enText, frText);
+    f.repo.setEndPermalink(id, QStringLiteral("genes-biomarkers"));
+    // NOTE: no tr:fr:_permalink_slug key — translator hasn't stored the slug yet.
+    f.repo.setLangCodesToTranslate(id, {QStringLiteral("fr")});
+
+    int frIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        if (f.engine.getLangCode(i) == QStringLiteral("fr")) {
+            frIndex = i;
+            break;
+        }
+    }
+    QVERIFY(frIndex >= 0);
+
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, frIndex);
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+
+    q.exec(QStringLiteral(
+        "SELECT COUNT(*) FROM pages WHERE path = '/master-sleep-genes-biomarkers'"));
+    q.next();
+    QCOMPARE(q.value(0).toInt(), 1); // Falls back to English slug
+
+    f.closeContentDb(conn);
 }
 
 QTEST_MAIN(Test_PageGenerator)
