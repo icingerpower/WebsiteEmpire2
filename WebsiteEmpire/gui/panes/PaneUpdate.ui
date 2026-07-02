@@ -113,6 +113,9 @@
          <property name="headerHidden">
           <bool>false</bool>
          </property>
+         <attribute name="headerStretchLastSection">
+          <bool>false</bool>
+         </attribute>
         </widget>
        </item>
       </layout>
@@ -126,7 +129,26 @@
       </property>
       <layout class="QVBoxLayout" name="verticalLayout_2">
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_2">
+        <widget class="QWidget" name="widgetUpdateToolbar" native="true">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Ignored" vsizetype="Preferred">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout_2">
+          <property name="leftMargin">
+           <number>0</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
          <item>
           <widget class="QPushButton" name="buttonUpdateAll">
            <property name="enabled">
@@ -294,7 +316,8 @@
            </property>
           </widget>
          </item>
-        </layout>
+         </layout>
+        </widget>
        </item>
        <item>
         <widget class="QSplitter" name="splitterPromptOutput">

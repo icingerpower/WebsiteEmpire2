@@ -53,9 +53,10 @@ void PaneUpdate::setup(const QDir           &workingDir,
 
     auto *header = ui->treeViewStrategies->header();
     header->setVisible(true);
-    header->setSectionResizeMode(UpdateStrategyTree::COL_NAME,       QHeaderView::Stretch);
+    header->setSectionResizeMode(UpdateStrategyTree::COL_NAME,       QHeaderView::Interactive);
     header->setSectionResizeMode(UpdateStrategyTree::COL_UPDATE_SVG, QHeaderView::Fixed);
     header->setSectionResizeMode(UpdateStrategyTree::COL_UPDATE_IMG, QHeaderView::Fixed);
+    header->resizeSection(UpdateStrategyTree::COL_NAME, 300);
     header->resizeSection(UpdateStrategyTree::COL_UPDATE_SVG, 38);
     header->resizeSection(UpdateStrategyTree::COL_UPDATE_IMG, 38);
 

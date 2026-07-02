@@ -53,18 +53,24 @@ static bool isUpdatedArticleValid(const QString &text)
         QStringLiteral("<svg\\b[^>]*>.*?</svg>"),
         QRegularExpression::DotMatchesEverythingOption
         | QRegularExpression::CaseInsensitiveOption);
-    static const QString kTitle = QStringLiteral("[TITLE level=\"1\"]");
+    // Require a properly formed first TITLE shortcode: [TITLE level="1"]…[/TITLE]
+    // with at least one character between the tags that is not '['.
+    // This rejects cases where Claude writes `[TITLE level="1"]` shortcode. as
+    // a preamble before the actual article starts.
+    static const QRegularExpression reTitleFirst(
+        QStringLiteral("^\\[TITLE level=\"1\"\\][^\\[]+\\[/TITLE\\]"),
+        QRegularExpression::DotMatchesEverythingOption);
 
     QString clean = text.trimmed();
     clean.remove(reSvg);
     clean = clean.trimmed();
     if (!clean.startsWith(QLatin1Char('['))) {
-        const int pos = clean.indexOf(kTitle);
+        const int pos = clean.indexOf(QStringLiteral("[TITLE level=\"1\"]"));
         if (pos > 0) {
             clean = clean.mid(pos);
         }
     }
-    return clean.startsWith(kTitle) && clean.size() >= 2000;
+    return reTitleFirst.match(clean).hasMatch() && clean.size() >= 2000;
 }
 
 static bool isCommaSeparatedIntsValid(const QString &text)
