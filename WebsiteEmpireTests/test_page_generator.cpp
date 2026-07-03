@@ -228,6 +228,9 @@ private slots:
     // --- symptom hub availability gating ---
     void test_pagegen_symptom_hub_excluded_when_no_articles_translated_for_lang();
     void test_pagegen_symptom_hub_included_when_article_translated_for_lang();
+
+    // --- symptom link href format on translated domain ---
+    void test_pagegen_symptom_link_href_is_absolute_on_translated_domain();
 };
 
 // ---------------------------------------------------------------------------
@@ -974,6 +977,71 @@ void Test_PageGenerator::test_pagegen_symptom_hub_included_when_article_translat
     q.next();
     QCOMPARE(q.value(0).toInt(), 1);
     f.closeContentDb(conn);
+}
+
+void Test_PageGenerator::test_pagegen_symptom_link_href_is_absolute_on_translated_domain()
+{
+    // Regression: PageBlocSymptomLinks was stripping the leading '/' from the href
+    // returned by resolveLinkHref.  On a French page at /fr/<article>, the relative
+    // href "fr/symptoms/bouffees-de-chaleur" resolves in the browser to
+    // /fr/fr/symptoms/... which is a 404.  The href must be an absolute path
+    // "/fr/symptoms/bouffees-de-chaleur" so it always resolves correctly.
+    Fixture f;
+
+    TaxonomyDb taxDb(QDir(f.dir.path()));
+    taxDb.sync(QStringLiteral("symptoms"), {QStringLiteral("Hot Flashes")});
+    taxDb.setTranslation(QStringLiteral("symptoms"), QStringLiteral("Hot Flashes"),
+                          QStringLiteral("fr"), QStringLiteral("Bouffées de chaleur"));
+
+    const QString enText = QStringLiteral("[TITLE level=\"1\"]Hot Flashes Article[/TITLE]<p>Content.</p>");
+    const QString frText = QStringLiteral("[TITLE level=\"1\"]Article Bouffées[/TITLE]<p>Contenu.</p>");
+
+    const int articleId = f.repo.create(QStringLiteral("article"),
+                                         QStringLiteral("/hot-flashes-article"),
+                                         QStringLiteral("en"));
+    f.repo.saveData(articleId, {
+        {QStringLiteral("1_text"),              enText},
+        {QStringLiteral("0_categories"),         QString()},
+        {QStringLiteral("7_symptoms"),           QStringLiteral("Hot Flashes")},
+        {QStringLiteral("1_tr:fr:text"),         frText},
+        {QStringLiteral("1_tr:fr:text:hash"),    Fixture::sha1(enText)},
+    });
+    f.repo.setLangCodesToTranslate(articleId, {QStringLiteral("fr")});
+
+    const int hubId = f.repo.create(QStringLiteral("symptom_hub"),
+                                     QStringLiteral("/symptoms/hot-flashes"),
+                                     QStringLiteral("en"));
+    f.repo.setLangCodesToTranslate(hubId, {QStringLiteral("fr")});
+
+    int frIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        if (f.engine.getLangCode(i) == QStringLiteral("fr")) {
+            frIndex = i;
+            break;
+        }
+    }
+    QVERIFY(frIndex >= 0);
+
+    f.gen.generateAll(QDir(f.dir.path()), QDir(f.dir.path()),
+                      QStringLiteral("example.com"), f.engine, frIndex,
+                      QStringLiteral("https://example.com/fr"));
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT pv.html_gz FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id"
+        " WHERE p.path = '/hot-flashes-article'"));
+    QVERIFY2(q.next(), "French article page not found in content.db");
+    const QByteArray html = gzipDecompress(q.value(0).toByteArray());
+    f.closeContentDb(conn);
+
+    QVERIFY2(html.contains("/fr/symptoms/bouffees-de-chaleur"),
+             "Symptom link href must be an absolute path (/fr/symptoms/...) — "
+             "a relative href (fr/symptoms/...) resolves to /fr/fr/symptoms/... "
+             "in the browser when the article page is served under the /fr/ proxy");
+    QVERIFY2(!html.contains("\"fr/symptoms/"),
+             "Symptom link href must not be a relative path (missing leading slash)");
 }
 
 QTEST_MAIN(Test_PageGenerator)
