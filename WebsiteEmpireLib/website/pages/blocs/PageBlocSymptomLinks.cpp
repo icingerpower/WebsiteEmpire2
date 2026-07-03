@@ -143,7 +143,7 @@ void PageBlocSymptomLinks::addCode(QStringView,
         if (resolved.isEmpty()) {
             continue;
         }
-        links.append({name, resolved.startsWith(QLatin1Char('/')) ? resolved.mid(1) : resolved});
+        links.append({name, resolved});
     }
 
     if (links.isEmpty()) {
