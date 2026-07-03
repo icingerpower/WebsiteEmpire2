@@ -298,7 +298,8 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         // Also build translatedCatIds[lang]: category IDs that have at least one
         // article translated to lang. Used to gate category hub availability per lang.
         QSet<int> articleCatIds;
-        QHash<QString, QSet<int>> translatedCatIds;
+        QHash<QString, QSet<int>>    translatedCatIds;      // lang → category IDs with ≥1 translated article
+        QHash<QString, QSet<QString>> translatedSymptomSlugs; // lang → symptom slugs with ≥1 translated article
 
         for (const PageRecord &r : std::as_const(pages)) {
             if (r.typeId != QStringLiteral("article")) {
@@ -306,24 +307,32 @@ int PageGenerator::generateAll(const QDir     &workingDir,
             }
             const QHash<QString, QString> &data = m_pageRepo.loadData(r.id);
 
-            QSet<int> artCatIds;
+            QSet<int>     artCatIds;
+            QSet<QString> artSymptomSlugs;
             for (auto it = data.constBegin(); it != data.constEnd(); ++it) {
-                if (!it.key().endsWith(QStringLiteral("_categories"))) {
-                    continue;
-                }
-                for (const QString &part : it.value().split(QLatin1Char(','), Qt::SkipEmptyParts)) {
-                    bool ok = false;
-                    const int id = part.trimmed().toInt(&ok);
-                    if (ok && id > 0) {
-                        artCatIds.insert(id);
-                        articleCatIds.insert(id);
+                if (it.key().endsWith(QStringLiteral("_categories"))) {
+                    for (const QString &part : it.value().split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+                        bool ok = false;
+                        const int id = part.trimmed().toInt(&ok);
+                        if (ok && id > 0) {
+                            artCatIds.insert(id);
+                            articleCatIds.insert(id);
+                        }
+                    }
+                } else if (it.key().endsWith(QStringLiteral("_symptoms"))) {
+                    for (const QString &part : it.value().split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+                        const QString slug = SymptomNav::slugify(part.trimmed());
+                        if (!slug.isEmpty()) {
+                            artSymptomSlugs.insert(slug);
+                        }
                     }
                 }
             }
 
             // For each target language that has translation data for this article,
-            // record its categories as "translated for that language".
-            if (!r.langCodesToTranslate.isEmpty() && !artCatIds.isEmpty()) {
+            // record its categories and symptoms as "translated for that language".
+            if (!r.langCodesToTranslate.isEmpty()
+                    && (!artCatIds.isEmpty() || !artSymptomSlugs.isEmpty())) {
                 for (const QString &lang : std::as_const(r.langCodesToTranslate)) {
                     const QString marker = QStringLiteral("_tr:") + lang + QLatin1Char(':');
                     bool hasData = false;
@@ -336,6 +345,9 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                     if (hasData) {
                         for (const int catId : std::as_const(artCatIds)) {
                             translatedCatIds[lang].insert(catId);
+                        }
+                        for (const QString &slug : std::as_const(artSymptomSlugs)) {
+                            translatedSymptomSlugs[lang].insert(slug);
                         }
                     }
                 }
@@ -429,13 +441,19 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                         }
                     }
                 } else if (r.typeId == QStringLiteral("symptom_hub")) {
-                    // Symptom hub pages render their condition list dynamically via
-                    // addCode (PageBlocConditionList reads from the aspire DB at
-                    // generation time) — no per-page translation data is required for
-                    // the main content.  Mark available for all target languages so the
-                    // symptoms index page can link to them regardless of translation state.
+                    // Symptom hub pages render their condition list dynamically (no inline
+                    // translation data required), but only mark a language available when
+                    // at least one article with this symptom has been translated — prevents
+                    // empty hub pages appearing in translated symptoms indexes.
+                    const QString hubPrefix = QStringLiteral("/symptoms/");
+                    const QString hubSlug = r.permalink.startsWith(hubPrefix)
+                        ? r.permalink.mid(hubPrefix.length())
+                        : QString{};
                     for (const QString &lang : std::as_const(r.langCodesToTranslate)) {
-                        availablePages[lang].insert(r.permalink);
+                        if (!hubSlug.isEmpty()
+                                && translatedSymptomSlugs.value(lang).contains(hubSlug)) {
+                            availablePages[lang].insert(r.permalink);
+                        }
                     }
                 } else {
                     // Non-hub pages: only mark a target language available when inline
@@ -543,11 +561,12 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         if (!isTargetLang && !engine.isPageAvailable(record.permalink, websiteIndex)) {
             continue;
         }
-        // Category hubs bypass the target-lang check above (they have no inline
+        // Hub pages bypass the target-lang check above (they have no inline
         // translation data), but must still be gated by isPageAvailable: the
         // pre-pass only marks a hub available for a language when at least one
-        // article in its category has been translated to that language.
-        if (record.typeId == QStringLiteral("category_hub")
+        // article in its category/symptom has been translated to that language.
+        if ((record.typeId == QStringLiteral("category_hub")
+                || record.typeId == QStringLiteral("symptom_hub"))
                 && !engine.isPageAvailable(record.permalink, websiteIndex)) {
             continue;
         }

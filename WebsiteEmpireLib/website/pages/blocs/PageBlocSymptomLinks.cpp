@@ -70,6 +70,51 @@ void PageBlocSymptomLinks::save(QHash<QString, QString> &values) const
 }
 
 // =============================================================================
+// addCode helpers
+// =============================================================================
+
+static const QString &_relatedSymptomsLabel(const QString &lang)
+{
+    static const QHash<QString, QString> s_labels = {
+        {QStringLiteral("en"), QStringLiteral("Related symptoms:")},
+        {QStringLiteral("fr"), QStringLiteral("Symptômes associés :")},
+        {QStringLiteral("de"), QStringLiteral("Verwandte Symptome:")},
+        {QStringLiteral("ja"), QStringLiteral("関連症状：")},
+        {QStringLiteral("es"), QStringLiteral("Síntomas relacionados:")},
+        {QStringLiteral("pt"), QStringLiteral("Sintomas relacionados:")},
+        {QStringLiteral("it"), QStringLiteral("Sintomi correlati:")},
+        {QStringLiteral("nl"), QStringLiteral("Gerelateerde symptomen:")},
+        {QStringLiteral("pl"), QStringLiteral("Powiązane objawy:")},
+        {QStringLiteral("ru"), QStringLiteral("Связанные симптомы:")},
+        {QStringLiteral("zh"), QStringLiteral("相关症状：")},
+        {QStringLiteral("ar"), QStringLiteral("الأعراض ذات الصلة:")},
+        {QStringLiteral("ko"), QStringLiteral("관련 증상:")},
+        {QStringLiteral("hi"), QStringLiteral("संबंधित लक्षण:")},
+        {QStringLiteral("tr"), QStringLiteral("İlgili belirtiler:")},
+        {QStringLiteral("id"), QStringLiteral("Gejala terkait:")},
+        {QStringLiteral("ms"), QStringLiteral("Simptom berkaitan:")},
+        {QStringLiteral("vi"), QStringLiteral("Triệu chứng liên quan:")},
+        {QStringLiteral("th"), QStringLiteral("อาการที่เกี่ยวข้อง:")},
+        {QStringLiteral("uk"), QStringLiteral("Пов'язані симптоми:")},
+        {QStringLiteral("sv"), QStringLiteral("Relaterade symptom:")},
+        {QStringLiteral("ro"), QStringLiteral("Simptome înrudite:")},
+        {QStringLiteral("hu"), QStringLiteral("Kapcsolódó tünetek:")},
+        {QStringLiteral("el"), QStringLiteral("Σχετικά συμπτώματα:")},
+        {QStringLiteral("fa"), QStringLiteral("علائم مرتبط:")},
+        {QStringLiteral("bn"), QStringLiteral("সম্পর্কিত লক্ষণ:")},
+        {QStringLiteral("sw"), QStringLiteral("Dalili zinazohusiana:")},
+        {QStringLiteral("pa"), QStringLiteral("ਸੰਬੰਧਿਤ ਲੱਛਣ:")},
+        {QStringLiteral("ta"), QStringLiteral("தொடர்புடைய அறிகுறிகள்:")},
+        {QStringLiteral("te"), QStringLiteral("సంబంధిత లక్షణాలు:")},
+        {QStringLiteral("mr"), QStringLiteral("संबंधित लक्षणे:")},
+        {QStringLiteral("ur"), QStringLiteral("متعلقہ علامات:")},
+    };
+    static const QString s_fallback = QStringLiteral("Related symptoms:");
+    const auto it = s_labels.constFind(lang);
+    return it != s_labels.constEnd() ? it.value() : s_fallback;
+}
+
+// =============================================================================
 // addCode
 // =============================================================================
 
@@ -102,7 +147,7 @@ void PageBlocSymptomLinks::addCode(QStringView,
 
     html += QStringLiteral("<div class=\"symptom-links\">");
     html += QStringLiteral("<span class=\"symptom-links-label\">");
-    html += QCoreApplication::translate("PageBlocSymptomLinks", "Related symptoms:");
+    html += _relatedSymptomsLabel(engine.getLangCode(websiteIndex));
     html += QStringLiteral("</span>");
 
     for (const QString &name : std::as_const(m_selectedSymptoms)) {

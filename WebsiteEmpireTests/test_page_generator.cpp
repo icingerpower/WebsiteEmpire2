@@ -224,6 +224,10 @@ private slots:
     // --- translated article permalink ---
     void test_pagegen_article_stored_at_translated_permalink_when_tr_slug_set();
     void test_pagegen_article_falls_back_to_english_permalink_when_no_tr_slug();
+
+    // --- symptom hub availability gating ---
+    void test_pagegen_symptom_hub_excluded_when_no_articles_translated_for_lang();
+    void test_pagegen_symptom_hub_included_when_article_translated_for_lang();
 };
 
 // ---------------------------------------------------------------------------
@@ -905,6 +909,70 @@ void Test_PageGenerator::test_pagegen_article_falls_back_to_english_permalink_wh
     q.next();
     QCOMPARE(q.value(0).toInt(), 1); // Falls back to English slug
 
+    f.closeContentDb(conn);
+}
+
+// ---------------------------------------------------------------------------
+// Symptom hub availability gating
+// ---------------------------------------------------------------------------
+
+void Test_PageGenerator::test_pagegen_symptom_hub_excluded_when_no_articles_translated_for_lang()
+{
+    // Regression: symptom hubs were previously always marked available for every
+    // target language, causing empty hub pages in the French symptoms index when
+    // no French articles existed for that symptom.
+    Fixture f;
+
+    // Article with "Tinnitus" symptom, but NO French translation.
+    const int artId = f.repo.create(QStringLiteral("article"),
+                                     QStringLiteral("/tinnitus-article"),
+                                     QStringLiteral("en"));
+    f.repo.saveData(artId, {
+        {QStringLiteral("1_text"),        QStringLiteral("<h1>Tinnitus</h1><p>Content.</p>")},
+        {QStringLiteral("0_categories"),  QString()},
+        {QStringLiteral("2_symptoms"),    QStringLiteral("Tinnitus")},
+    });
+    // Article targets French for translation but no tr:fr: data exists yet.
+    f.repo.setLangCodesToTranslate(artId, {QStringLiteral("fr")});
+
+    // Symptom hub for Tinnitus, targeting French.
+    const int hubId = f.repo.create(QStringLiteral("symptom_hub"),
+                                     QStringLiteral("/symptoms/tinnitus"),
+                                     QStringLiteral("en"));
+    f.repo.setLangCodesToTranslate(hubId, {QStringLiteral("fr")});
+
+    int frIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        if (f.engine.getLangCode(i) == QStringLiteral("fr")) { frIndex = i; break; }
+    }
+    QVERIFY(frIndex >= 0);
+
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, frIndex);
+
+    // Hub must NOT appear in the French content.db — no translated articles exist.
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral("SELECT COUNT(*) FROM pages WHERE path LIKE '/symptoms/tinnitus%'"));
+    q.next();
+    QCOMPARE(q.value(0).toInt(), 0);
+    f.closeContentDb(conn);
+}
+
+void Test_PageGenerator::test_pagegen_symptom_hub_included_when_article_translated_for_lang()
+{
+    // Symptom hub must appear in the French content.db when at least one article
+    // with that symptom has been translated to French.
+    Fixture f;
+    int frIndex = -1;
+    setupFrenchSymptomHub(f, frIndex); // creates article with "Hot Flashes" + French translation
+    QVERIFY(frIndex >= 0);
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    // Hub written at the French translated slug.
+    q.exec(QStringLiteral("SELECT COUNT(*) FROM pages WHERE path = '/symptoms/bouffees-de-chaleur'"));
+    q.next();
+    QCOMPARE(q.value(0).toInt(), 1);
     f.closeContentDb(conn);
 }
 
