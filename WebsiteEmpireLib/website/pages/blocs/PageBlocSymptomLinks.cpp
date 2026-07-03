@@ -131,13 +131,32 @@ void PageBlocSymptomLinks::addCode(QStringView,
         return;
     }
 
+    struct SymLink { QString name; QString href; };
+    QList<SymLink> links;
+    for (const QString &name : std::as_const(m_selectedSymptoms)) {
+        const QString slug      = SymptomNav::slugify(name);
+        const QString permalink = QStringLiteral("/symptoms/") + slug;
+        if (!engine.isPageAvailable(permalink, websiteIndex)) {
+            continue;
+        }
+        const QString resolved = engine.resolveLinkHref(permalink, websiteIndex);
+        if (resolved.isEmpty()) {
+            continue;
+        }
+        links.append({name, resolved.startsWith(QLatin1Char('/')) ? resolved.mid(1) : resolved});
+    }
+
+    if (links.isEmpty()) {
+        return;
+    }
+
     static const QString CSS_ID = QStringLiteral("symptom-links-bloc");
     if (!cssDoneIds.contains(CSS_ID)) {
         cssDoneIds.insert(CSS_ID);
         css += QStringLiteral(
             ".symptom-links{margin:1em 0}"
             ".symptom-links-label{font-weight:600;margin-right:.4em}"
-            ".symptom-links a,.symptom-links span.sym-tag{"
+            ".symptom-links a{"
             "display:inline-block;margin:.2em .25em .2em 0;"
             "padding:.2em .65em;border-radius:3em;"
             "background:#e8f0fe;color:#1a73e8;"
@@ -150,22 +169,12 @@ void PageBlocSymptomLinks::addCode(QStringView,
     html += _relatedSymptomsLabel(engine.getLangCode(websiteIndex));
     html += QStringLiteral("</span>");
 
-    for (const QString &name : std::as_const(m_selectedSymptoms)) {
-        const QString slug      = SymptomNav::slugify(name);
-        const QString permalink = QStringLiteral("/symptoms/") + slug;
-        const QString resolved  = engine.resolvePermalink(permalink, websiteIndex);
-
-        if (!resolved.isEmpty() && engine.isPageAvailable(permalink, websiteIndex)) {
-            html += QStringLiteral("<a href=\"");
-            html += resolved.startsWith(QLatin1Char('/')) ? resolved.mid(1) : resolved;
-            html += QStringLiteral("\">");
-            html += name;
-            html += QStringLiteral("</a>");
-        } else {
-            html += QStringLiteral("<span class=\"sym-tag\">");
-            html += name;
-            html += QStringLiteral("</span>");
-        }
+    for (const auto &link : std::as_const(links)) {
+        html += QStringLiteral("<a href=\"");
+        html += link.href;
+        html += QStringLiteral("\">");
+        html += link.name;
+        html += QStringLiteral("</a>");
     }
 
     html += QStringLiteral("</div>");
