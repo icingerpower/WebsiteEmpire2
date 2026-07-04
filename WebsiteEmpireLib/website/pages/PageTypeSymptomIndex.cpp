@@ -177,23 +177,27 @@ void PageTypeSymptomIndex::addInnerTopCode(AbstractEngine &engine,
         if (count == 0 && !slugsWithDirectArticles.contains(slug)) {
             continue;
         }
-
-        html += QStringLiteral("<li>");
-        if (!resolved.isEmpty() && engine.isPageAvailable(permalink, websiteIndex)) {
-            html += QStringLiteral("<a href=\"");
-            html += resolved.startsWith(QLatin1Char('/')) ? resolved.mid(1) : resolved;
-            html += QStringLiteral("\">");
-            html += displayName;
-            if (count > 0) {
-                html += QStringLiteral("<span class=\"sym-count\">");
-                html += QString::number(count);
-                html += QStringLiteral("</span>");
-            }
-            html += QStringLiteral("</a>");
-        } else {
-            html += displayName;
+        // Skip symptoms whose hub is not available for the current language
+        // (e.g. no translated articles exist for a non-English build).
+        if (!engine.isPageAvailable(permalink, websiteIndex)) {
+            continue;
         }
-        html += QStringLiteral("</li>");
+
+        const QString href = engine.resolveLinkHref(permalink, websiteIndex);
+        if (href.isEmpty()) {
+            continue;
+        }
+
+        html += QStringLiteral("<li><a href=\"");
+        html += href;
+        html += QStringLiteral("\">");
+        html += displayName;
+        if (count > 0) {
+            html += QStringLiteral("<span class=\"sym-count\">");
+            html += QString::number(count);
+            html += QStringLiteral("</span>");
+        }
+        html += QStringLiteral("</a></li>");
     }
     html += QStringLiteral("</ul>");
 }

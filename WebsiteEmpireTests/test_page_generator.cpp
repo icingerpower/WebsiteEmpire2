@@ -231,6 +231,10 @@ private slots:
 
     // --- symptom link href format on translated domain ---
     void test_pagegen_symptom_link_href_is_absolute_on_translated_domain();
+
+    // --- symptom index excludes hubs with no translated articles ---
+    void test_pagegen_symptom_index_excludes_untranslated_hubs();
+    void test_pagegen_symptom_index_includes_translated_hubs();
 };
 
 // ---------------------------------------------------------------------------
@@ -1042,6 +1046,95 @@ void Test_PageGenerator::test_pagegen_symptom_link_href_is_absolute_on_translate
              "in the browser when the article page is served under the /fr/ proxy");
     QVERIFY2(!html.contains("\"fr/symptoms/"),
              "Symptom link href must not be a relative path (missing leading slash)");
+}
+
+void Test_PageGenerator::test_pagegen_symptom_index_excludes_untranslated_hubs()
+{
+    // Regression: PageTypeSymptomIndex used slugsWithDirectArticles (built from ALL
+    // articles regardless of language) to decide whether to show a symptom on the
+    // index page.  A symptom with only English articles was included as non-clickable
+    // text on the French /symptoms index.  It must be omitted entirely.
+    Fixture f;
+
+    TaxonomyDb taxDb(QDir(f.dir.path()));
+    taxDb.sync(QStringLiteral("symptoms"),
+               {QStringLiteral("Hot Flashes"), QStringLiteral("Tinnitus")});
+    taxDb.setTranslation(QStringLiteral("symptoms"), QStringLiteral("Hot Flashes"),
+                          QStringLiteral("fr"), QStringLiteral("Bouffées de chaleur"));
+    taxDb.setTranslation(QStringLiteral("symptoms"), QStringLiteral("Tinnitus"),
+                          QStringLiteral("fr"), QStringLiteral("Acouphènes"));
+
+    // Article referencing Tinnitus — English only, no French translation.
+    const int tinnitusArticle = f.repo.create(QStringLiteral("article"),
+                                               QStringLiteral("/tinnitus-article"),
+                                               QStringLiteral("en"));
+    f.repo.saveData(tinnitusArticle, {
+        {QStringLiteral("1_text"),      QStringLiteral("<h1>Tinnitus</h1><p>EN only.</p>")},
+        {QStringLiteral("0_categories"), QString()},
+        {QStringLiteral("7_symptoms"),  QStringLiteral("Tinnitus")},
+    });
+    f.repo.setLangCodesToTranslate(tinnitusArticle, {QStringLiteral("fr")});
+
+    const int tinnitusHub = f.repo.create(QStringLiteral("symptom_hub"),
+                                           QStringLiteral("/symptoms/tinnitus"),
+                                           QStringLiteral("en"));
+    f.repo.setLangCodesToTranslate(tinnitusHub, {QStringLiteral("fr")});
+
+    // Symptom index page.
+    const int symIndexId = f.repo.create(QStringLiteral("symptom_index"),
+                                          QStringLiteral("/symptoms"), QStringLiteral("en"));
+    f.repo.setLangCodesToTranslate(symIndexId, {QStringLiteral("fr")});
+
+    int frIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        if (f.engine.getLangCode(i) == QStringLiteral("fr")) { frIndex = i; break; }
+    }
+    QVERIFY(frIndex >= 0);
+
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, frIndex);
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT pv.html_gz FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id WHERE p.path = '/symptoms'"));
+    QVERIFY2(q.next(), "French symptom index page not found");
+    const QByteArray html = gzipDecompress(q.value(0).toByteArray());
+    f.closeContentDb(conn);
+
+    QVERIFY2(!html.contains("Acouph"),
+             "Tinnitus/Acouphenes must NOT appear on the French symptoms index "
+             "— no French article references it");
+}
+
+void Test_PageGenerator::test_pagegen_symptom_index_includes_translated_hubs()
+{
+    // A symptom hub with at least one French-translated article must appear
+    // as a clickable link on the French /symptoms index.
+    Fixture f;
+    int frIndex = -1;
+    setupFrenchSymptomHub(f, frIndex); // Hot Flashes + French article
+    QVERIFY(frIndex >= 0);
+
+    const int symIndexId2 = f.repo.create(QStringLiteral("symptom_index"),
+                                           QStringLiteral("/symptoms"), QStringLiteral("en"));
+    f.repo.setLangCodesToTranslate(symIndexId2, {QStringLiteral("fr")});
+
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, frIndex);
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT pv.html_gz FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id WHERE p.path = '/symptoms'"));
+    QVERIFY2(q.next(), "French symptom index page not found");
+    const QByteArray html = gzipDecompress(q.value(0).toByteArray());
+    f.closeContentDb(conn);
+
+    QVERIFY2(html.contains("Bouff"),
+             "Hot Flashes (Bouffées de chaleur) must appear on the French symptoms index");
+    QVERIFY2(html.contains("href="),
+             "Hot Flashes entry must be a clickable link, not plain text");
 }
 
 QTEST_MAIN(Test_PageGenerator)
