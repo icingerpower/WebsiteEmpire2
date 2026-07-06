@@ -236,6 +236,9 @@ private slots:
     void test_pagegen_symptom_index_excludes_untranslated_hubs();
     void test_pagegen_symptom_index_includes_translated_hubs();
 
+    // --- articleless symptom hub pruning ---
+    void test_pagegen_symptom_hub_without_articles_excluded_for_english();
+
     // --- corrupt translation resilience ---
     void test_pagegen_corrupt_shortcode_skips_page_does_not_crash();
 };
@@ -1138,6 +1141,64 @@ void Test_PageGenerator::test_pagegen_symptom_index_includes_translated_hubs()
              "Hot Flashes (Bouffées de chaleur) must appear on the French symptoms index");
     QVERIFY2(html.contains("href="),
              "Hot Flashes entry must be a clickable link, not plain text");
+}
+
+// ---------------------------------------------------------------------------
+// Articleless symptom hub pruning
+// ---------------------------------------------------------------------------
+
+void Test_PageGenerator::test_pagegen_symptom_hub_without_articles_excluded_for_english()
+{
+    // Regression: symptom_hub pages whose slug does not appear in any article's
+    // *_symptoms field were generated for English but not for translated languages,
+    // causing a ~437-page gap (1377 en vs 940 es/fr/…).
+    // After the fix, empty hubs are excluded for ALL languages including English.
+
+    Fixture f;
+
+    // Hub with no articles referencing it.
+    f.repo.create(QStringLiteral("symptom_hub"),
+                  QStringLiteral("/symptoms/orphan-symptom"),
+                  QStringLiteral("en"));
+
+    // Hub that DOES have an article.
+    const int hubId = f.repo.create(QStringLiteral("symptom_hub"),
+                                     QStringLiteral("/symptoms/hot-flashes"),
+                                     QStringLiteral("en"));
+    f.repo.setLangCodesToTranslate(hubId, {QStringLiteral("fr")});
+
+    const int artId = f.repo.create(QStringLiteral("article"),
+                                     QStringLiteral("/hot-flashes-article"),
+                                     QStringLiteral("en"));
+    f.repo.saveData(artId, {
+        {QStringLiteral("1_text"),      QStringLiteral("<h1>Hot Flashes</h1><p>Content.</p>")},
+        {QStringLiteral("0_categories"), QString()},
+        {QStringLiteral("7_symptoms"),  QStringLiteral("Hot Flashes")},
+    });
+
+    int enIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        if (f.engine.getLangCode(i) == QStringLiteral("en")) { enIndex = i; break; }
+    }
+    QVERIFY(enIndex >= 0);
+
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, enIndex);
+
+    const QString &conn = f.openContentDb();
+
+    // The orphan hub must NOT appear — no articles reference it.
+    QSqlQuery orphan(QSqlDatabase::database(conn));
+    orphan.exec(QStringLiteral("SELECT count(*) FROM pages WHERE path='/symptoms/orphan-symptom'"));
+    QVERIFY(orphan.next());
+    QCOMPARE(orphan.value(0).toInt(), 0);
+
+    // The backed hub MUST appear — one article references it.
+    QSqlQuery backed(QSqlDatabase::database(conn));
+    backed.exec(QStringLiteral("SELECT count(*) FROM pages WHERE path='/symptoms/hot-flashes'"));
+    QVERIFY(backed.next());
+    QCOMPARE(backed.value(0).toInt(), 1);
+
+    f.closeContentDb(conn);
 }
 
 // ---------------------------------------------------------------------------

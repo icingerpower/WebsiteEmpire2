@@ -301,7 +301,8 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         //
         // Also build translatedCatIds[lang]: category IDs that have at least one
         // article translated to lang. Used to gate category hub availability per lang.
-        QSet<int> articleCatIds;
+        QSet<int>     articleCatIds;
+        QSet<QString> articleSymptomSlugs;         // slugs with ≥1 article in any language
         QHash<QString, QSet<int>>    translatedCatIds;      // lang → category IDs with ≥1 translated article
         QHash<QString, QSet<QString>> translatedSymptomSlugs; // lang → symptom slugs with ≥1 translated article
 
@@ -328,6 +329,7 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                         const QString slug = SymptomNav::slugify(part.trimmed());
                         if (!slug.isEmpty()) {
                             artSymptomSlugs.insert(slug);
+                            articleSymptomSlugs.insert(slug);
                         }
                     }
                 }
@@ -405,6 +407,15 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         for (const PageRecord &r : std::as_const(pages)) {
             // Skip hub pages whose category has no articles — they would render
             // empty and should not appear as link targets.
+            if (r.typeId == QStringLiteral("symptom_hub")) {
+                const QString hubPrefix = QStringLiteral("/symptoms/");
+                const QString hubSlug = r.permalink.startsWith(hubPrefix)
+                    ? r.permalink.mid(hubPrefix.length())
+                    : QString{};
+                if (hubSlug.isEmpty() || !articleSymptomSlugs.contains(hubSlug)) {
+                    continue;
+                }
+            }
             if (r.typeId == QStringLiteral("category_hub")) {
                 const QHash<QString, QString> &data = m_pageRepo.loadData(r.id);
                 const auto &catStr = data.value(QStringLiteral("0_categories"));
