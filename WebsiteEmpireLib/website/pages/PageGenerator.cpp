@@ -169,11 +169,15 @@ bool PageGenerator::_writePage(AbstractPageType &type,
     try {
         type.addCode(QStringView{}, engine, websiteIndex, html, css, js, cssDoneIds, jsDoneIds);
     } catch (ExceptionWithTitleText &ex) {
+        // Corrupt shortcode in a translated text field — log and skip this page variant
+        // rather than crashing the entire generation run.  The same shortcode validation
+        // (AbstractShortCode::validateAllInText) gates CLI translation acceptance; any
+        // page that slips through should be fixed in the DB and re-published.
         const QString lang = engine.getLangCode(websiteIndex);
-        ExceptionWithTitleText enriched(
-            ex.errorTitle(),
-            record.permalink + QStringLiteral(" [") + lang + QStringLiteral("]\n\n") + ex.errorText());
-        enriched.raise();
+        qWarning().noquote()
+            << QStringLiteral("Skipping corrupt page %1 [%2]: %3")
+               .arg(record.permalink, lang, ex.errorText());
+        return false;
     }
 
     const QByteArray &htmlGz = gzipCompress(html.toUtf8());

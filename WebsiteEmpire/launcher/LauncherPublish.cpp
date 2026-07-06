@@ -15,6 +15,7 @@
 #include "website/pages/PageDb.h"
 #include "website/pages/PageGenerator.h"
 #include "website/pages/PageRepositoryDb.h"
+#include "website/shortcodes/AbstractShortCode.h"
 #include "website/translation/TranslationStatusTable.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
 
@@ -240,6 +241,40 @@ void LauncherPublish::run(const QString & /*value*/)
                     out.flush();
                 }
             }
+        }
+    }
+
+    // ── Pre-validate translated texts (same check as CLI translation acceptance) ──
+    // AbstractShortCode::validateAllInText is the shared primitive: LauncherUpdate
+    // uses it to reject corrupt AI output before saving; we use it here to detect
+    // any corruption that slipped into the DB and warn before generation starts.
+    // _writePage already skips individual corrupt pages rather than crashing, so
+    // this pass is informational — it surfaces problems early with full context.
+    {
+        int badCount = 0;
+        for (const PageRecord &r : pageRepo.findAll()) {
+            if (r.langCodesToTranslate.isEmpty()) {
+                continue;
+            }
+            const QHash<QString, QString> data = pageRepo.loadData(r.id);
+            for (auto it = data.constBegin(); it != data.constEnd(); ++it) {
+                const QString &key = it.key();
+                if (!key.contains(QStringLiteral("_tr:")) || !key.endsWith(QStringLiteral(":text"))) {
+                    continue;
+                }
+                const QString err = AbstractShortCode::validateAllInText(it.value());
+                if (!err.isEmpty()) {
+                    out << QStringLiteral("WARNING: corrupt shortcode in %1 (%2): %3\n")
+                           .arg(r.permalink, key, err);
+                    out.flush();
+                    ++badCount;
+                }
+            }
+        }
+        if (badCount > 0) {
+            out << QStringLiteral("Found %1 corrupt translation(s) — affected page variants will be skipped.\n")
+                   .arg(badCount);
+            out.flush();
         }
     }
 

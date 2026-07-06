@@ -235,6 +235,9 @@ private slots:
     // --- symptom index excludes hubs with no translated articles ---
     void test_pagegen_symptom_index_excludes_untranslated_hubs();
     void test_pagegen_symptom_index_includes_translated_hubs();
+
+    // --- corrupt translation resilience ---
+    void test_pagegen_corrupt_shortcode_skips_page_does_not_crash();
 };
 
 // ---------------------------------------------------------------------------
@@ -1135,6 +1138,68 @@ void Test_PageGenerator::test_pagegen_symptom_index_includes_translated_hubs()
              "Hot Flashes (Bouffées de chaleur) must appear on the French symptoms index");
     QVERIFY2(html.contains("href="),
              "Hot Flashes entry must be a clickable link, not plain text");
+}
+
+// ---------------------------------------------------------------------------
+// Corrupt translation resilience
+// ---------------------------------------------------------------------------
+
+void Test_PageGenerator::test_pagegen_corrupt_shortcode_skips_page_does_not_crash()
+{
+    // Regression: a duplicate shortcode argument in a translated text field
+    // (e.g. [TITLE level="2" level="3"]) previously crashed the entire publish
+    // run via an uncaught ExceptionWithTitleText.  After the fix, _writePage
+    // catches the exception, logs a warning, and skips that page variant —
+    // the run completes and unaffected pages are still written.
+
+    Fixture f;
+
+    // Valid French article — must appear in content.db.
+    const int goodId = f.addTranslatedArticle(
+        QStringLiteral("/good-article"),
+        QStringLiteral("<h1>Good</h1><p>Content.</p>"),
+        QStringLiteral("[TITLE level=\"1\"]Bon article[/TITLE]\n<p>Contenu valide.</p>"));
+    f.repo.setLangCodesToTranslate(goodId, {QStringLiteral("fr")});
+
+    // Article whose French translation contains a duplicate 'level' argument —
+    // identical to the real corruption seen in production.
+    const int badId = f.repo.create(QStringLiteral("article"),
+                                     QStringLiteral("/bad-article"),
+                                     QStringLiteral("en"));
+    const QString enText = QStringLiteral("<h1>Bad</h1><p>Content.</p>");
+    f.repo.saveData(badId, {
+        {QStringLiteral("1_text"),            enText},
+        {QStringLiteral("0_categories"),      QString()},
+        // Corrupt: duplicate 'level' argument — the same error as in production.
+        {QStringLiteral("1_tr:fr:text"),
+         QStringLiteral("[TITLE level=\"1\" level=\"1\"]Mauvais article[/TITLE]\n<p>Contenu.</p>")},
+        {QStringLiteral("1_tr:fr:text:hash"), Fixture::sha1(enText)},
+    });
+    f.repo.setLangCodesToTranslate(badId, {QStringLiteral("fr")});
+
+    int frIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        if (f.engine.getLangCode(i) == QStringLiteral("fr")) { frIndex = i; break; }
+    }
+    QVERIFY(frIndex >= 0);
+
+    // Must not throw — the corrupt page is skipped, the good page is written.
+    QVERIFY_THROWS_NO_EXCEPTION(
+        f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, frIndex));
+
+    const QString &conn = f.openContentDb();
+
+    QSqlQuery good(QSqlDatabase::database(conn));
+    good.exec(QStringLiteral("SELECT count(*) FROM pages WHERE path='/good-article'"));
+    QVERIFY(good.next());
+    QCOMPARE(good.value(0).toInt(), 1);
+
+    QSqlQuery bad(QSqlDatabase::database(conn));
+    bad.exec(QStringLiteral("SELECT count(*) FROM pages WHERE path='/bad-article'"));
+    QVERIFY(bad.next());
+    QCOMPARE(bad.value(0).toInt(), 0);
+
+    f.closeContentDb(conn);
 }
 
 QTEST_MAIN(Test_PageGenerator)
