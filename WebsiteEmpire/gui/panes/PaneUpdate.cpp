@@ -2,6 +2,8 @@
 #include "ui_PaneUpdate.h"
 
 #include "aicli/AbstractCli.h"
+#include "aicli/AvailableCliList.h"
+#include "aicli/AvailableCliTable.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
 #include "UpdateStrategyTree.h"
 #include "../dialogs/DialogAddUpdateStrategy.h"
@@ -67,21 +69,24 @@ void PaneUpdate::setup(const QDir           &workingDir,
             this,
             &PaneUpdate::_onSelectionChanged);
 
-    for (AbstractCli *c : AbstractCli::ALL_CLIS()) {
-        ui->comboBoxCli->addItem(c->getName(), c->getName());
-    }
-    const QString savedCli = WorkingDirectoryManager::instance()->settings()
-                                 ->value(QStringLiteral("updateCli")).toString();
-    if (!savedCli.isEmpty()) {
-        const int idx = ui->comboBoxCli->findData(savedCli);
-        if (idx >= 0) {
-            ui->comboBoxCli->setCurrentIndex(idx);
-        }
-    }
-    connect(ui->comboBoxCli, &QComboBox::currentIndexChanged, this, [this](int index) {
+    // Only list CLIs confirmed available (found in PATH) — see AvailableCliList.
+    // Populating from the raw AbstractCli::ALL_CLIS() registry would let the
+    // user select a CLI that isn't actually installed, failing later with a
+    // "not found in PATH" error instead of not being selectable at all.
+    m_cliTable = new AvailableCliTable(this);
+    m_cliList  = new AvailableCliList(m_cliTable, this);
+    ui->comboBoxCli->setModel(m_cliList);
+
+    // Restore saved selection now and again each time a new CLI becomes available
+    // (availability checks are async and may not have resolved yet).
+    connect(m_cliList, &QAbstractListModel::rowsInserted, this,
+            [this](const QModelIndex &, int, int) { _restoreUpdateCli(); });
+    _restoreUpdateCli();
+
+    connect(ui->comboBoxCli, &QComboBox::activated, this, [this](int) {
+        AbstractCli *cli = _selectedCli();
         WorkingDirectoryManager::instance()->settings()
-            ->setValue(QStringLiteral("updateCli"),
-                       ui->comboBoxCli->itemData(index).toString());
+            ->setValue(QStringLiteral("updateCli"), cli ? cli->getName() : QString{});
     });
 
     m_isSetup = true;
@@ -269,7 +274,8 @@ void PaneUpdate::_runUpdate(int limit, const QList<int> &pageIds)
         args << QStringLiteral("--") + LauncherUpdate::OPTION_PAGES
              << idStrs.join(QLatin1Char(','));
     }
-    const QString cliName = ui->comboBoxCli->currentData().toString();
+    AbstractCli *selectedCli = _selectedCli();
+    const QString cliName = selectedCli ? selectedCli->getName() : QString{};
     if (!cliName.isEmpty()) {
         args << QStringLiteral("--") + AbstractLauncher::OPTION_CLI << cliName;
     }
@@ -385,7 +391,8 @@ void PaneUpdate::viewUpdateCommand()
         cmd += QStringLiteral(" --") + LauncherUpdate::OPTION_PROMPT
                + QStringLiteral(" ") + promptId;
     }
-    const QString cliName = ui->comboBoxCli->currentData().toString();
+    AbstractCli *selectedCli = _selectedCli();
+    const QString cliName = selectedCli ? selectedCli->getName() : QString{};
     if (!cliName.isEmpty()) {
         cmd += QStringLiteral(" --") + AbstractLauncher::OPTION_CLI
                + QStringLiteral(" ") + cliName;
@@ -577,4 +584,27 @@ QString PaneUpdate::_currentPromptId() const
         return {};
     }
     return m_strategies->nodeId(current);
+}
+
+AbstractCli *PaneUpdate::_selectedCli() const
+{
+    return m_cliList ? m_cliList->cliAt(ui->comboBoxCli->currentIndex()) : nullptr;
+}
+
+void PaneUpdate::_restoreUpdateCli()
+{
+    const QString saved = WorkingDirectoryManager::instance()->settings()
+                              ->value(QStringLiteral("updateCli")).toString();
+    if (saved.isEmpty()) {
+        return;
+    }
+    for (int i = 0; i < m_cliList->rowCount(); ++i) {
+        const QString name =
+            m_cliList->data(m_cliList->index(i, 0), Qt::DisplayRole).toString();
+        if (name == saved) {
+            const QSignalBlocker blocker(ui->comboBoxCli);
+            ui->comboBoxCli->setCurrentIndex(i);
+            return;
+        }
+    }
 }

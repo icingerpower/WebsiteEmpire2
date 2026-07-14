@@ -7,6 +7,9 @@
 #include <QWidget>
 
 class AbstractEngine;
+class AbstractCli;
+class AvailableCliList;
+class AvailableCliTable;
 class UpdateStrategyTree;
 class WebsiteSettingsTable;
 class QProcess;
@@ -76,6 +79,12 @@ private:
     /** Returns the prompt UUID for the current selection (empty if strategy selected). */
     QString _currentPromptId() const;
 
+    /** Restores comboBoxCli's selection from the "updateCli" setting, if available. */
+    void _restoreUpdateCli();
+
+    /** Returns the AbstractCli currently selected in comboBoxCli, or nullptr if none. */
+    AbstractCli *_selectedCli() const;
+
     Ui::PaneUpdate     *ui;
     QDir                m_workingDir;
     bool                m_isSetup         = false;
@@ -84,6 +93,8 @@ private:
     QProcess           *m_activeProcess     = nullptr;
     QTimer             *m_inactivityTimer  = nullptr;
     QString             m_outputBuffer;   // accumulates partial lines from the subprocess
+    AvailableCliTable  *m_cliTable         = nullptr;
+    AvailableCliList   *m_cliList          = nullptr;
 };
 
 #endif // PANEUPDATE_H
