@@ -15,4 +15,6 @@ set(TRANSLATION_FILES
     ${CMAKE_CURRENT_LIST_DIR}/CommonBlocTranslator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/CategoryTranslator.h
     ${CMAKE_CURRENT_LIST_DIR}/CategoryTranslator.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/HubSeoTranslator.h
+    ${CMAKE_CURRENT_LIST_DIR}/HubSeoTranslator.cpp
 )

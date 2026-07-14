@@ -4,16 +4,19 @@
 #include "website/AbstractEngine.h"
 #include "website/HostTable.h"
 #include "website/commonblocs/AbstractCommonBloc.h"
+#include "website/pages/AbstractPageType.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/taxonomy/TaxonomyDb.h"
 #include "website/taxonomy/TaxonomyTranslator.h"
 #include "website/theme/AbstractTheme.h"
 #include "website/translation/CategoryTranslator.h"
 #include "website/translation/CommonBlocTranslator.h"
+#include "website/translation/HubSeoTranslator.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QMap>
 #include <QSet>
 #include <QStringList>
 
@@ -133,7 +136,7 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
     }
 
     // -------------------------------------------------------------------------
-    // Build jobs and run — blocs → categories → taxonomy (sequential)
+    // Build jobs and run — blocs → categories → taxonomy → hub SEO (sequential)
     // -------------------------------------------------------------------------
     const QList<AbstractCommonBloc *> blocs =
         theme->getTopBlocs() + theme->getBottomBlocs() + theme->getArticleBlocs();
@@ -149,9 +152,27 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
     const QList<TaxonomyTranslator::TranslationJob> taxJobs =
         TaxonomyTranslator::buildJobs(*taxonomyDb, taxTypes, sourceLang, targetLangs);
 
+    // Collect SEO templates from every registered page type.
+    QMap<QString, QMap<QString, QString>> hubTemplates;
+    for (const QString &typeId : AbstractPageType::allTypeIds()) {
+        CategoryTable dummyTable(workingDir, nullptr);
+        const auto pageType = AbstractPageType::createForTypeId(typeId, dummyTable);
+        if (pageType) {
+            const QMap<QString, QString> tmpls = pageType->seoTemplateStrings();
+            if (!tmpls.isEmpty()) {
+                hubTemplates.insert(typeId, tmpls);
+            }
+        }
+    }
+
+    auto *hubSeoTranslator = new HubSeoTranslator(workingDir, cli, holder);
+    const QList<HubSeoTranslator::TranslationJob> hubJobs =
+        hubSeoTranslator->buildJobs(hubTemplates, sourceLang, targetLangs);
+
     qDebug() << "[TranslateCommon] Bloc jobs:" << blocJobs.size()
              << " Category jobs:" << catJobs.size()
-             << " Taxonomy jobs:" << taxJobs.size();
+             << " Taxonomy jobs:" << taxJobs.size()
+             << " Hub SEO jobs:" << hubJobs.size();
 
     auto *blocTranslator = new CommonBlocTranslator(*theme, workingDir, cli, holder);
     auto *catTranslator  = new CategoryTranslator(*categoryTable, workingDir, cli, holder);
@@ -169,6 +190,10 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
                      [](const QString &msg) {
                          qDebug() << "[TranslateTaxonomy]" << qPrintable(msg);
                      });
+    QObject::connect(hubSeoTranslator, &HubSeoTranslator::logMessage, holder,
+                     [](const QString &msg) {
+                         qDebug() << "[TranslateHubSeo]" << qPrintable(msg);
+                     });
 
     QObject::connect(blocTranslator, &CommonBlocTranslator::finished, holder,
                      [catTranslator, catJobs](int translated, int errors) {
@@ -185,10 +210,17 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
                      });
 
     QObject::connect(taxTranslator, &TaxonomyTranslator::finished, holder,
-                     [holder, taxonomyDb](int translated, int errors) {
+                     [hubSeoTranslator, hubJobs, taxonomyDb](int translated, int errors) {
                          qDebug() << "[TranslateTaxonomy] Done. Translated:" << translated
                                   << " Errors:" << errors;
                          delete taxonomyDb;
+                         hubSeoTranslator->startWithJobs(hubJobs);
+                     });
+
+    QObject::connect(hubSeoTranslator, &HubSeoTranslator::finished, holder,
+                     [holder](int translated, int errors) {
+                         qDebug() << "[TranslateHubSeo] Done. Translated:" << translated
+                                  << " Errors:" << errors;
                          holder->deleteLater();
                          QCoreApplication::quit();
                      });
