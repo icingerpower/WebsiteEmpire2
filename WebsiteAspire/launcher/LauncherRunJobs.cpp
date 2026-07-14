@@ -52,6 +52,16 @@ static QCoro::Task<void> runSession(AbstractGenerator *gen,
 {
     const int sNum = sessionIndex + 1; // 1-based for display
 
+    // A run of consecutive failures (e.g. "exit 0, no JSON") almost always means
+    // the CLI's backend has hit its own rate/usage limit and is silently
+    // returning nothing — not that these specific jobs are unprocessable.
+    // Without this circuit breaker, a rate-limited session grinds through the
+    // *entire* remaining backlog failing one-by-one (seen: ~491 jobs, each
+    // costing 5-20s) instead of stopping so the operator can retry later once
+    // the limit has cleared.
+    constexpr int MAX_CONSECUTIVE_FAILURES = 3;
+    int consecutiveFailures = 0;
+
     while (!g_stopRequested) {
         const QString jobJson = gen->getNextJob();
         if (jobJson.isEmpty()) {
@@ -86,6 +96,15 @@ static QCoro::Task<void> runSession(AbstractGenerator *gen,
                         .arg(result.exitCode)
                         .arg(result.durationMs);
             out->flush();
+            if (++consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                *out << QStringLiteral("[S%1] %2 consecutive failures — likely an upstream CLI/API "
+                                       "rate limit. Stopping this session; the job stays pending, "
+                                       "so re-running later will pick up where this left off.\n")
+                            .arg(sNum)
+                            .arg(consecutiveFailures);
+                out->flush();
+                break;
+            }
             continue;
         }
 
@@ -95,18 +114,31 @@ static QCoro::Task<void> runSession(AbstractGenerator *gen,
                             .arg(sNum)
                             .arg(jobId)
                             .arg(result.durationMs);
+                consecutiveFailures = 0;
             } else {
                 *out << QStringLiteral("[S%1] FAIL: %2 — unknown jobId or malformed reply\n")
                             .arg(sNum)
                             .arg(jobId);
+                ++consecutiveFailures;
             }
         } catch (const QException &ex) {
             *out << QStringLiteral("[S%1] FAIL: %2 — %3\n")
                         .arg(sNum)
                         .arg(jobId)
                         .arg(QString::fromUtf8(ex.what()));
+            ++consecutiveFailures;
         }
         out->flush();
+
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            *out << QStringLiteral("[S%1] %2 consecutive failures — likely an upstream CLI/API "
+                                   "rate limit. Stopping this session; the job stays pending, "
+                                   "so re-running later will pick up where this left off.\n")
+                        .arg(sNum)
+                        .arg(consecutiveFailures);
+            out->flush();
+            break;
+        }
     }
 
     if (g_stopRequested) {
@@ -115,7 +147,14 @@ static QCoro::Task<void> runSession(AbstractGenerator *gen,
     }
 
     if (--(*activeCount) == 0) {
-        QCoreApplication::quit();
+        // Queued, not direct: when there are zero pending jobs at startup, this
+        // coroutine never suspends on a co_await, so it runs to completion inside
+        // LauncherRunJobs::run() — before main() calls app.exec(). A direct quit()
+        // call at that point is a silent no-op (no event loop is running yet), so
+        // exec() would then block forever with nothing left to wake it.
+        QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                   &QCoreApplication::quit,
+                                   Qt::QueuedConnection);
     }
 }
 
@@ -130,7 +169,7 @@ void LauncherRunJobs::registerOptions(QCommandLineParser &parser)
 {
     parser.addOption(QCommandLineOption(
         OPTION_SESSIONS,
-        QCoreApplication::tr("Number of parallel Claude sessions (1-10, default 1)."),
+        QCoreApplication::tr("Number of parallel AI CLI sessions (1-10, default 1)."),
         QStringLiteral("n"),
         QStringLiteral("1")));
 }
