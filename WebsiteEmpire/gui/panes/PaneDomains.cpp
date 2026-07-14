@@ -29,6 +29,9 @@
 #include <QMessageBox>
 #include <QProcess>
 #include <QPushButton>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QThread>
 #include <QSettings>
 #include <QStandardPaths>
@@ -286,15 +289,42 @@ void PaneDomains::upload()
             continue;
         }
 
+        // Refuse to ship a database that is already broken locally.
+        QString integrityError;
+        if (!_verifyLocalDbIntegrity(contentDbLocal, integrityError)) {
+            QMessageBox::critical(this, tr("Upload"),
+                                  tr("Refusing to upload content.db for %1 — it failed a local "
+                                     "integrity check:\n%2")
+                                      .arg(lang.isEmpty() ? host.name : lang, integrityError));
+            anyError = true;
+            continue;
+        }
+
         // Upload content.db
+        const QString remoteContentPath = host.hostFolder + QStringLiteral("/content.db");
         const QString remoteContent = host.username + QStringLiteral("@") + host.url
-                                      + QStringLiteral(":") + host.hostFolder
-                                      + QStringLiteral("/content.db");
+                                      + QStringLiteral(":") + remoteContentPath;
         QString errorOutput;
         if (!_runRsync(host, contentDbLocal, remoteContent, errorOutput)) {
             QMessageBox::critical(this, tr("Upload"),
                                   tr("Failed to upload content.db to %1:\n%2")
                                       .arg(host.name, errorOutput));
+            anyError = true;
+            continue;
+        }
+
+        // Verify the file that landed on the server is actually intact before
+        // restarting the service on top of it — a torn transfer would otherwise
+        // go live silently with the old process still holding a stale (but valid)
+        // copy open. Pass the plain remote path (no "user@host:" prefix) since
+        // this runs inside an SSH session already connected to that host.
+        QString remoteIntegrityError;
+        if (!_verifyRemoteDbIntegrity(host, remoteContentPath, remoteIntegrityError)) {
+            QMessageBox::critical(this, tr("Upload"),
+                                  tr("Uploaded content.db to %1 but the remote copy failed "
+                                     "integrity check — NOT restarting website-%2, the previous "
+                                     "version keeps serving:\n%3")
+                                      .arg(host.name, lang, remoteIntegrityError));
             anyError = true;
             continue;
         }
@@ -460,14 +490,35 @@ void PaneDomains::uploadFull()
             continue;
         }
 
+        QString integrityError;
+        if (!_verifyLocalDbIntegrity(contentDbLocal, integrityError)) {
+            QMessageBox::critical(this, tr("Upload Full"),
+                                  tr("Refusing to upload content.db for %1 — it failed a local "
+                                     "integrity check:\n%2")
+                                      .arg(lang.isEmpty() ? host.name : lang, integrityError));
+            anyError = true;
+            continue;
+        }
+
+        const QString remoteContentPath = host.hostFolder + QStringLiteral("/content.db");
         const QString remoteContent = host.username + QStringLiteral("@") + host.url
-                                      + QStringLiteral(":") + host.hostFolder
-                                      + QStringLiteral("/content.db");
+                                      + QStringLiteral(":") + remoteContentPath;
         QString contentError;
         if (!_runRsync(host, contentDbLocal, remoteContent, contentError)) {
             QMessageBox::critical(this, tr("Upload Full"),
                                   tr("Failed to upload content.db to %1:\n%2")
                                       .arg(host.name, contentError));
+            anyError = true;
+            continue;
+        }
+
+        QString remoteIntegrityError;
+        if (!_verifyRemoteDbIntegrity(host, remoteContentPath, remoteIntegrityError)) {
+            QMessageBox::critical(this, tr("Upload Full"),
+                                  tr("Uploaded content.db to %1 but the remote copy failed "
+                                     "integrity check — NOT restarting website-%2, the previous "
+                                     "version keeps serving:\n%3")
+                                      .arg(host.name, lang, remoteIntegrityError));
             anyError = true;
             continue;
         }
@@ -972,7 +1023,7 @@ void PaneDomains::_restartLocalDrogon(const QString &deployPath,
 }
 
 bool PaneDomains::_runSshCommand(const HostInfo &host, const QString &command,
-                                  QString &errorOutput) const
+                                  QString &errorOutput, QString *output) const
 {
     const QString remote = host.username + QStringLiteral("@") + host.url;
     QProcess process;
@@ -1004,6 +1055,63 @@ bool PaneDomains::_runSshCommand(const HostInfo &host, const QString &command,
     }
     if (process.exitCode() != 0) {
         errorOutput = QString::fromUtf8(process.readAllStandardError());
+        return false;
+    }
+    if (output) {
+        *output = QString::fromUtf8(process.readAllStandardOutput());
+    }
+    return true;
+}
+
+bool PaneDomains::_verifyLocalDbIntegrity(const QString &dbPath, QString &errorOutput) const
+{
+    const QString connName = QStringLiteral("integrity_check_") + QFileInfo(dbPath).absoluteFilePath();
+    QString result;
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+        db.setDatabaseName(dbPath);
+        if (!db.open()) {
+            errorOutput = tr("Could not open %1 for integrity check: %2")
+                              .arg(dbPath, db.lastError().text());
+            QSqlDatabase::removeDatabase(connName);
+            return false;
+        }
+
+        // Fold the WAL into the main file first so the check (and the file that
+        // gets rsynced) reflects a fully-settled snapshot, not one with pending
+        // frames that a mid-checkpoint copy could tear.
+        QSqlQuery checkpoint(db);
+        checkpoint.exec(QStringLiteral("PRAGMA wal_checkpoint(TRUNCATE);"));
+
+        QSqlQuery check(db);
+        if (check.exec(QStringLiteral("PRAGMA integrity_check;")) && check.next()) {
+            result = check.value(0).toString();
+        } else {
+            result = tr("(integrity_check query failed: %1)").arg(check.lastError().text());
+        }
+    }
+    QSqlDatabase::removeDatabase(connName);
+
+    if (result.compare(QStringLiteral("ok"), Qt::CaseInsensitive) != 0) {
+        errorOutput = tr("Local database %1 failed integrity check:\n%2").arg(dbPath, result);
+        return false;
+    }
+    return true;
+}
+
+bool PaneDomains::_verifyRemoteDbIntegrity(const HostInfo &host, const QString &remotePath,
+                                            QString &errorOutput) const
+{
+    const QString cmd = QStringLiteral("sqlite3 '") + remotePath
+                        + QStringLiteral("' 'PRAGMA integrity_check;'");
+    QString output;
+    if (!_runSshCommand(host, cmd, errorOutput, &output)) {
+        return false;
+    }
+
+    const QString trimmed = output.trimmed();
+    if (trimmed.compare(QStringLiteral("ok"), Qt::CaseInsensitive) != 0) {
+        errorOutput = tr("Remote database %1 failed integrity check:\n%2").arg(remotePath, trimmed);
         return false;
     }
     return true;

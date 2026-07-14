@@ -126,9 +126,29 @@ private:
      * Runs a single command on the remote host over SSH.
      * Uses sshpass when host.password is set, direct SSH otherwise.
      * Returns true on success; on failure errorOutput is populated.
+     * If output is non-null, it receives the command's stdout on success.
      */
     bool _runSshCommand(const HostInfo &host, const QString &command,
-                        QString &errorOutput) const;
+                        QString &errorOutput, QString *output = nullptr) const;
+
+    /**
+     * Runs "PRAGMA integrity_check" on a local SQLite file, after truncating
+     * its WAL so the check sees a fully-settled single-file snapshot (the same
+     * state that will be rsynced). Returns false with errorOutput populated
+     * if the result is anything other than "ok" — callers must not upload a
+     * database that fails this check.
+     */
+    bool _verifyLocalDbIntegrity(const QString &dbPath, QString &errorOutput) const;
+
+    /**
+     * Runs "PRAGMA integrity_check" on a remote SQLite file via the sqlite3
+     * CLI over SSH. Returns false with errorOutput populated if the result
+     * is anything other than "ok" — callers must not restart the remote
+     * service on top of a database that fails this check, since a torn
+     * rsync transfer would otherwise go live silently.
+     */
+    bool _verifyRemoteDbIntegrity(const HostInfo &host, const QString &remotePath,
+                                  QString &errorOutput) const;
 
     Ui::PaneDomains  *ui;
     QDir              m_workingDir;
