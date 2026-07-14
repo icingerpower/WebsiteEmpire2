@@ -352,7 +352,7 @@ QString PageTranslator::buildPrompts(AbstractEngine *engine, const QString &edit
             continue;
         }
 
-        ts << QStringLiteral("User message to send to Claude:\n\n");
+        ts << QStringLiteral("User message to send to your AI CLI:\n\n");
         ts << TranslationProtocol::buildPrompt(fields, job.sourceLang, job.targetLang);
         ts << QStringLiteral("\n\n");
     }
@@ -526,9 +526,9 @@ void PageTranslator::_processNextJob()
 
         m_process = new QProcess(this);
         m_process->setProgram(m_cli->getExecutable());
-        m_process->setArguments(m_cli->translationPromptArgs());
         m_process->setWorkingDirectory(m_tempDir->path());
-        m_process->setStandardInputFile(promptPath);
+        m_cli->configurePromptProcess(m_process, m_cli->translationPromptArgs(),
+                                      prompt, promptPath);
 
         connect(m_process, &QProcess::readyReadStandardOutput,
                 this, &PageTranslator::_onProcessReadyRead);
@@ -1049,9 +1049,9 @@ void PageTranslator::_launchTextTranslation(const QList<TranslatableField> &fiel
 
     m_process = new QProcess(this);
     m_process->setProgram(m_cli->getExecutable());
-    m_process->setArguments(m_cli->translationPromptArgs());
     m_process->setWorkingDirectory(m_tempDir->path());
-    m_process->setStandardInputFile(promptPath);
+    m_cli->configurePromptProcess(m_process, m_cli->translationPromptArgs(),
+                                  prompt, promptPath);
 
     connect(m_process, &QProcess::readyReadStandardOutput,
             this, &PageTranslator::_onProcessReadyRead);
@@ -1123,9 +1123,9 @@ void PageTranslator::_launchDirectChunkTranslation(const QString &chunkText)
 
     m_process = new QProcess(this);
     m_process->setProgram(m_cli->getExecutable());
-    m_process->setArguments(m_cli->translationPromptArgs());
     m_process->setWorkingDirectory(m_tempDir->path());
-    m_process->setStandardInputFile(promptPath);
+    m_cli->configurePromptProcess(m_process, m_cli->translationPromptArgs(),
+                                  prompt, promptPath);
 
     connect(m_process, &QProcess::readyReadStandardOutput,
             this, &PageTranslator::_onProcessReadyRead);

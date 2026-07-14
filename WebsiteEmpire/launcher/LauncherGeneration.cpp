@@ -11,6 +11,7 @@
 #include "website/pages/PageDb.h"
 #include "website/pages/PageGenerationState.h"
 #include "website/pages/PageRepositoryDb.h"
+#include "website/ArticleContentValidator.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/PageFlag.h"
 #include "website/pages/blocs/AbstractSecondaryPageBloc.h"
@@ -79,33 +80,14 @@ struct GenRunState {
 };
 
 // ---------------------------------------------------------------------------
-// Article pre-validation — mirrors processContentAndMetadata's checks without saving.
+// Article pre-validation — delegates to ArticleContentValidator, shared with
+// LauncherUpdate so both launchers reject the same malformed content
+// (missing/short title, malformed shortcodes, raw Markdown artifacts).
 // ---------------------------------------------------------------------------
 
 static bool isArticleValid(const QString &text)
 {
-    static const QRegularExpression reSvg(
-        QStringLiteral("<svg\\b[^>]*>.*?</svg>"),
-        QRegularExpression::DotMatchesEverythingOption
-        | QRegularExpression::CaseInsensitiveOption);
-    // Require a properly formed first TITLE shortcode: [TITLE level="1"]…[/TITLE]
-    // with at least one character between the tags that is not '['.
-    // This rejects cases where Claude writes `[TITLE level="1"]` shortcode. as
-    // a preamble before the actual article starts.
-    static const QRegularExpression reTitleFirst(
-        QStringLiteral("^\\[TITLE level=\"1\"\\][^\\[]+\\[/TITLE\\]"),
-        QRegularExpression::DotMatchesEverythingOption);
-
-    QString clean = text.trimmed();
-    clean.remove(reSvg);
-    clean = clean.trimmed();
-    if (!clean.startsWith(QLatin1Char('['))) {
-        const int pos = clean.indexOf(QStringLiteral("[TITLE level=\"1\"]"));
-        if (pos > 0) {
-            clean = clean.mid(pos);
-        }
-    }
-    return reTitleFirst.match(clean).hasMatch() && clean.size() >= 2000;
+    return ArticleContentValidator::isValid(text);
 }
 
 // ---------------------------------------------------------------------------
@@ -147,8 +129,7 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt, AbstractCli *cli)
     QProcess process;
     process.setWorkingDirectory(tempDir.path());
     process.setProgram(cli->getExecutable());
-    process.setArguments(cli->promptArgs());
-    process.setStandardInputFile(promptPath);
+    cli->configurePromptProcess(&process, cli->promptArgs(), prompt, promptPath);
     process.setStandardOutputFile(outputPath);
     // SVG generation can produce large XML outputs.  Raise the Claude Code output
     // token limit so SVG responses are never truncated by the default 32 k cap.
@@ -522,15 +503,16 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
 
         static const int kMaxContentAttempts = 3;
         QString articleText;
-        bool contentValid = false;
+        bool contentValid  = false;
+        bool hadPolicyError = false;
 
         for (int attempt = 1; attempt <= kMaxContentAttempts; ++attempt) {
             if (g_stopRequested) {
                 break;
             }
 
-            *(state->out) << QStringLiteral("[S%1] Prompt ready (%2 chars) — launching Claude (content, attempt %3/%4)...\n")
-                                 .arg(sNum).arg(contentPrompt.size()).arg(attempt).arg(kMaxContentAttempts);
+            *(state->out) << QStringLiteral("[S%1] Prompt ready (%2 chars) — launching %3 (content, attempt %4/%5)...\n")
+                                 .arg(sNum).arg(contentPrompt.size()).arg(cli->getName()).arg(attempt).arg(kMaxContentAttempts);
             state->out->flush();
 
             // First attempt uses the original prompt.
@@ -556,7 +538,10 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                 *(state->out) << QStringLiteral("[S%1] FAIL (content attempt %2): %3\n")
                                      .arg(sNum).arg(attempt).arg(raw);
                 state->out->flush();
-                break; // claude process error — no point retrying
+                if (isUsagePolicyError(raw)) {
+                    hadPolicyError = true;
+                }
+                break; // process error — no point retrying
             }
 
             articleText = raw;
@@ -575,7 +560,38 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
             *(state->out) << QStringLiteral("[S%1] FAIL (content): %2 — all %3 attempts invalid, skipping\n")
                                  .arg(sNum).arg(page.permalink).arg(kMaxContentAttempts);
             state->out->flush();
-            continue; // no page row was created — nothing to clean up
+            // Policy blocks are per-CLI: record which CLI failed so other CLIs
+            // can still retry this page.
+            if (hadPolicyError) {
+                if (page.id == 0) {
+                    // New page: create a Complete stub with the blocking CLI recorded.
+                    const int blockedId = pageRepo.create(page.typeId, page.permalink, page.lang);
+                    if (blockedId > 0) {
+                        pageRepo.setGenerationState(blockedId, PageGenerationState::Complete);
+                        QHash<QString, QString> blockData;
+                        blockData.insert(QStringLiteral("policy_blocked_cli"), cli->getName());
+                        pageRepo.saveData(blockedId, blockData);
+                        *(state->out) << QStringLiteral("[S%1] POLICY-BLOCK: %2 — stub created, blocked for %3\n")
+                                             .arg(sNum).arg(page.permalink, cli->getName());
+                        state->out->flush();
+                    }
+                } else {
+                    // Existing page (cross-CLI retry that also failed): append CLI to the block list.
+                    QHash<QString, QString> data = pageRepo.loadData(page.id);
+                    const QString &existing = data.value(QStringLiteral("policy_blocked_cli"));
+                    if (!existing.split(QLatin1Char(','), Qt::SkipEmptyParts).contains(cli->getName())) {
+                        data.insert(QStringLiteral("policy_blocked_cli"),
+                                    existing.isEmpty() ? cli->getName()
+                                                       : existing + QLatin1Char(',') + cli->getName());
+                        pageRepo.saveData(page.id, data);
+                    }
+                    pageRepo.setGenerationState(page.id, PageGenerationState::Complete);
+                    *(state->out) << QStringLiteral("[S%1] POLICY-BLOCK: %2 — %3 added to blocked CLIs\n")
+                                         .arg(sNum).arg(page.permalink, cli->getName());
+                    state->out->flush();
+                }
+            }
+            continue;
         }
 
         // ---- Call 1.5: inject missing SVG IMGFIX if the strategy needs one ---
@@ -607,8 +623,14 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
             state->out->flush();
         }
 
-        *(state->out) << QStringLiteral("[S%1] Content done: %2 (%3 chars) — launching Claude (2/2: metadata)...\n")
-                             .arg(sNum).arg(page.permalink).arg(articleText.size());
+        // ---- Fix a known AI mistake: title starting with the raw permalink --
+        // slug instead of a human-readable topic name (e.g. Antigravity writing
+        // "/osteoarthritis-dos-and-dont Dos and Don'ts: ..." instead of
+        // "Osteoarthritis Dos and Don'ts: ..."). No-op when the title is clean.
+        articleText = GenPageQueue::fixSlugTitle(articleText, page.permalink, endPermalink);
+
+        *(state->out) << QStringLiteral("[S%1] Content done: %2 (%3 chars) — launching %4 (2/2: metadata)...\n")
+                             .arg(sNum).arg(page.permalink).arg(articleText.size()).arg(cli->getName());
         state->out->flush();
 
         // ---- Call 2: metadata JSON from the article -------------------------
@@ -877,15 +899,31 @@ void LauncherGeneration::run(const QString & /*value*/)
     const QString editingLang = settingsTable.editingLangCode();
     QString primaryDomain;
     int editingLangIndex = 0;
+    bool foundEditingLangRow = false;
     for (int i = 0; i < engine->rowCount(); ++i) {
         const QString lang = engine->data(
             engine->index(i, AbstractEngine::COL_LANG_CODE)).toString();
         if (lang == editingLang) {
-            primaryDomain    = engine->data(
+            primaryDomain      = engine->data(
                 engine->index(i, AbstractEngine::COL_DOMAIN)).toString();
-            editingLangIndex = i;
+            editingLangIndex   = i;
+            foundEditingLangRow = true;
             break;
         }
+    }
+    if (!foundEditingLangRow && engine->rowCount() > 0) {
+        // AbstractEngine::_reconcileRows() should always create a row for the
+        // editing language, so reaching this means engine_domains.csv was
+        // hand-edited into an inconsistent state. Falling back to row 0 would
+        // silently generate content in the wrong language, so warn loudly.
+        const QString fallbackLang = engine->data(
+            engine->index(0, AbstractEngine::COL_LANG_CODE)).toString();
+        *out << QStringLiteral(
+            "WARNING: editing language '%1' not found in engine_domains.csv — "
+            "falling back to row 0 ('%2'). Content will be generated in '%2' "
+            "instead of '%1'. Check engine_domains.csv / the Domains pane.\n")
+                    .arg(editingLang, fallbackLang);
+        out->flush();
     }
     if (primaryDomain.isEmpty() && engine->rowCount() > 0) {
         primaryDomain = engine->data(
@@ -935,6 +973,20 @@ void LauncherGeneration::run(const QString & /*value*/)
     allExistingPermalinks.reserve(allExistingPages.size());
     for (const PageRecord &p : std::as_const(allExistingPages)) {
         allExistingPermalinks.insert(p.permalink);
+    }
+
+    // Policy-blocked pages: keyed by permalink → {page_id, comma-separated CLIs}.
+    // Pages blocked for the current CLI are permanently skipped.
+    // Pages blocked only by OTHER CLIs are re-queued so this CLI can try them.
+    const auto policyBlocked = schedRepo.findPolicyBlockedPages();
+    const QString currentCliName = cli ? cli->getName() : QString{};
+    // Build a set of permalinks that should be re-queued for the current CLI.
+    QHash<QString, int> policyRetryIds; // permalink → page_id for cross-CLI retries
+    for (auto it = policyBlocked.cbegin(); it != policyBlocked.cend(); ++it) {
+        const QStringList blockedClis = it.value().second.split(QLatin1Char(','), Qt::SkipEmptyParts);
+        if (!blockedClis.contains(currentCliName)) {
+            policyRetryIds.insert(it.key(), it.value().first);
+        }
     }
 
     // ---- Custom topic bypass (--topic, triggered by PaneGeneration UI only) -----
@@ -989,7 +1041,18 @@ void LauncherGeneration::run(const QString & /*value*/)
             const QString permalink = QLatin1Char('/') + slug;
 
             if (allExistingPermalinks.contains(permalink)) {
-                *out << QStringLiteral("SKIP (exists): \"%1\" → %2\n").arg(topic, permalink);
+                if (policyRetryIds.contains(permalink)) {
+                    PageRecord vp;
+                    vp.id        = policyRetryIds.value(permalink);
+                    vp.typeId    = info.pageTypeId;
+                    vp.permalink = permalink;
+                    vp.lang      = editingLang;
+                    virtualPages.append(vp);
+                    *out << QStringLiteral("RETRY (cross-CLI): \"%1\" → %2 (id=%3)\n")
+                                .arg(topic, permalink).arg(vp.id);
+                } else {
+                    *out << QStringLiteral("SKIP (exists): \"%1\" → %2\n").arg(topic, permalink);
+                }
                 out->flush();
                 continue;
             }
@@ -1154,7 +1217,17 @@ void LauncherGeneration::run(const QString & /*value*/)
                     const QString permalink = isSymptomHub
                         ? QStringLiteral("/symptoms/") + slug
                         : QLatin1Char('/') + slug;
-                    if (allExistingPermalinks.contains(permalink)) { continue; }
+                    if (allExistingPermalinks.contains(permalink)) {
+                        if (policyRetryIds.contains(permalink)) {
+                            PageRecord vp;
+                            vp.id        = policyRetryIds.value(permalink);
+                            vp.typeId    = info.pageTypeId;
+                            vp.permalink = permalink;
+                            vp.lang      = editingLang;
+                            virtualPages.append(vp);
+                        }
+                        continue;
+                    }
 
                     PageRecord vp;
                     vp.id        = 0;

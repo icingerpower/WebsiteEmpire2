@@ -70,8 +70,7 @@ static QCoro::Task<QString> runClaudePromptTest(QString prompt, AbstractCli *cli
     QProcess process;
     process.setWorkingDirectory(tempDir.path());
     process.setProgram(cli->getExecutable());
-    process.setArguments(cli->promptArgs());
-    process.setStandardInputFile(promptPath);
+    cli->configurePromptProcess(&process, cli->promptArgs(), prompt, promptPath);
 
     co_await qCoro(process).start();
     co_await qCoro(process).waitForFinished(-1);
