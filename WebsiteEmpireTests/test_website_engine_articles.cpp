@@ -1,9 +1,11 @@
 #include <QtTest>
 
 #include <QDir>
+#include <QFile>
 #include <QSet>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QTextStream>
 
 #include "website/AbstractEngine.h"
 #include "website/EngineArticles.h"
@@ -39,6 +41,22 @@ const PageBlocCategory *firstCategoryBloc(const EngineArticles &engine)
 PageBlocCategory *firstCategoryBlocMut(EngineArticles &engine)
 {
     return const_cast<PageBlocCategory *>(firstCategoryBloc(engine));
+}
+
+// Writes engine_domains.csv into dir. Each inner list must have exactly 7
+// fields: Enabled;LangCode;Language;Theme;Domain;HostId;HostFolder
+bool writeEngineCsv(const QDir &dir, const QList<QStringList> &rows)
+{
+    QFile file(dir.absoluteFilePath(QStringLiteral("engine_domains.csv")));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return false;
+    }
+    QTextStream out(&file);
+    out << "Enabled;LangCode;Language;Theme;Domain;HostId;HostFolder\n";
+    for (const auto &row : rows) {
+        out << row.join(';') << '\n';
+    }
+    return true;
 }
 
 } // namespace
@@ -111,6 +129,13 @@ private slots:
 
     // --- Generator link ---
     void test_enginearticles_get_generator_id_empty();
+
+    // --- Editing-language row reconciliation (bug: content generated in the
+    //     wrong language when engine_domains.csv has no row for the editing
+    //     language — see AbstractEngine::_reconcileRows()) ---
+    void test_enginearticles_missing_editing_lang_row_auto_created();
+    void test_enginearticles_missing_editing_lang_row_is_enabled();
+    void test_enginearticles_editing_lang_row_not_duplicated_when_present();
 };
 
 // =============================================================================
@@ -670,6 +695,87 @@ void Test_EngineArticles::test_enginearticles_get_generator_id_empty()
     // EngineArticles has no associated aspire generator — should return empty.
     EngineArticles engine;
     QVERIFY(engine.getGeneratorId().isEmpty());
+}
+
+// =============================================================================
+// Editing-language row reconciliation
+// =============================================================================
+
+void Test_EngineArticles::test_enginearticles_missing_editing_lang_row_auto_created()
+{
+    // Reproduces the Healybio bug: engine_domains.csv has rows for every
+    // target language but none for "en" (the default editing language, since
+    // no settings_global.csv exists in this fixture). Before the fix, no code
+    // path ever added the missing row, so LauncherGeneration's lookup for the
+    // editing language silently fell back to row 0 (the first target
+    // language) and content was generated in the wrong language.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QVERIFY(writeEngineCsv(QDir(dir.path()), {
+        {"1", "zh", "Chinese", "default", "example.com", "", "/zh"},
+        {"1", "es", "Spanish", "default", "example.com", "", "/es"},
+    }));
+    HostTable hostTable(QDir(dir.path()));
+    EngineArticles engine;
+    engine.init(QDir(dir.path()), hostTable);
+
+    bool foundEn = false;
+    for (int row = 0; row < engine.rowCount(); ++row) {
+        if (engine.getLangCode(row) == QStringLiteral("en")) {
+            foundEn = true;
+            break;
+        }
+    }
+    QVERIFY2(foundEn, "engine_domains.csv missing 'en' target row was not "
+                      "auto-repaired by AbstractEngine::_reconcileRows()");
+}
+
+void Test_EngineArticles::test_enginearticles_missing_editing_lang_row_is_enabled()
+{
+    // The editing-language row must always be enabled (Checked) — it is the
+    // language content is actually written in, never optional.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QVERIFY(writeEngineCsv(QDir(dir.path()), {
+        {"1", "zh", "Chinese", "default", "example.com", "", "/zh"},
+    }));
+    HostTable hostTable(QDir(dir.path()));
+    EngineArticles engine;
+    engine.init(QDir(dir.path()), hostTable);
+
+    int enRow = -1;
+    for (int row = 0; row < engine.rowCount(); ++row) {
+        if (engine.getLangCode(row) == QStringLiteral("en")) {
+            enRow = row;
+            break;
+        }
+    }
+    QVERIFY(enRow >= 0);
+    QCOMPARE(engine.data(engine.index(enRow, AbstractEngine::COL_LANG_CODE), Qt::CheckStateRole).toInt(),
+             static_cast<int>(Qt::Checked));
+}
+
+void Test_EngineArticles::test_enginearticles_editing_lang_row_not_duplicated_when_present()
+{
+    // When the CSV already has a row for the editing language, reconciliation
+    // must not add a second one.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QVERIFY(writeEngineCsv(QDir(dir.path()), {
+        {"1", "en", "English", "default", "example.com", "", "/en"},
+        {"1", "zh", "Chinese", "default", "example.com", "", "/zh"},
+    }));
+    HostTable hostTable(QDir(dir.path()));
+    EngineArticles engine;
+    engine.init(QDir(dir.path()), hostTable);
+
+    int enCount = 0;
+    for (int row = 0; row < engine.rowCount(); ++row) {
+        if (engine.getLangCode(row) == QStringLiteral("en")) {
+            ++enCount;
+        }
+    }
+    QCOMPARE(enCount, 1);
 }
 
 QTEST_MAIN(Test_EngineArticles)

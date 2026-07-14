@@ -15,7 +15,7 @@ QStringList CountryLangManager::defaultLangCodes() const
 {
     return {
         // Tier 1 — over 200 million total speakers
-        QStringLiteral("en"), QStringLiteral("zh"), QStringLiteral("es"), QStringLiteral("hi"),
+        QStringLiteral("zh"), QStringLiteral("es"), QStringLiteral("hi"),
         QStringLiteral("ar"), QStringLiteral("bn"), QStringLiteral("pt"),
         QStringLiteral("ru"), QStringLiteral("ur"), QStringLiteral("ms"),
         QStringLiteral("id"),
@@ -28,17 +28,10 @@ QStringList CountryLangManager::defaultLangCodes() const
         // Tier 3 — 20–60 million speakers
         QStringLiteral("pl"), QStringLiteral("uk"), QStringLiteral("nl"),
         QStringLiteral("ro"), QStringLiteral("el"), QStringLiteral("hu"),
-        // Commented out — fewer than 20 million native speakers or covered by a
-        // closely-related code already in the list above:
-        // QStringLiteral("su"),  // Sundanese  (~34 M, regional)
-        // QStringLiteral("ku"),  // Kurdish    (~25 M, fragmented dialects)
-        // QStringLiteral("hr"),  // Croatian   (~ 5 M)
-        // QStringLiteral("cs"),  // Czech      (~10 M)
-        // QStringLiteral("az"),  // Azerbaijani(~10 M)
-        // QStringLiteral("sv"),  // Swedish    (~10 M)
-        // QStringLiteral("fi"),  // Finnish    (~ 5 M)
-        // QStringLiteral("no"),  // Norwegian  (~ 5 M)
-        // QStringLiteral("da"),  // Danish     (~ 6 M)
-        // QStringLiteral("he"),  // Hebrew     (~ 5 M)
+        // Tier 4 — other languages
+        QStringLiteral("su"), QStringLiteral("ku"), QStringLiteral("hr"),
+        QStringLiteral("cs"), QStringLiteral("az"), QStringLiteral("sv"),
+        QStringLiteral("fi"), QStringLiteral("no"), QStringLiteral("da"),
+        QStringLiteral("he"),
     };
 }

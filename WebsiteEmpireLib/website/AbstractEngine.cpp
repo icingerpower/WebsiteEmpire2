@@ -1,6 +1,7 @@
 #include "AbstractEngine.h"
 #include "HostTable.h"
 #include "CountryLangManager.h"
+#include "website/WebsiteSettingsTable.h"
 #include "website/pages/PageTypeArticle.h"
 #include "website/pages/PageTypeLegal.h"
 #include "website/pages/attributes/CategoryTable.h"
@@ -405,7 +406,22 @@ bool AbstractEngine::_reconcileRows()
         return false;
     }
 
+    // CountryLangManager's list holds translation TARGET languages only — the
+    // editing/source language (e.g. "en") is deliberately excluded from it.
+    // Without adding it here explicitly, a working directory whose CSV never
+    // had that row (e.g. freshly created, or hand-edited) silently generates
+    // content in whatever language happens to occupy row 0 instead of the
+    // configured source language (see LauncherGeneration's editingLangIndex
+    // fallback). WebsiteSettingsTable defaults to "en" even when
+    // settings_global.csv does not exist yet, so this is always well-defined.
+    const WebsiteSettingsTable settingsTable(m_workingDir);
+    QString editingLang = settingsTable.editingLangCode();
+    if (editingLang.isEmpty()) {
+        editingLang = QStringLiteral("en");
+    }
+
     QSet<QString> validLangs(langCodes.cbegin(), langCodes.cend());
+    validLangs.insert(editingLang);
     QSet<QString> validThemes;
     for (const auto &v : variations) {
         validThemes.insert(v.id);
@@ -429,8 +445,16 @@ bool AbstractEngine::_reconcileRows()
         existing.insert(row.langCode + QLatin1Char('|') + row.theme);
     }
 
-    // Append missing (lang, theme) combinations
-    for (const auto &code : langCodes) {
+    // Append missing (lang, theme) combinations — target languages plus the
+    // editing/source language, so the row generation relies on always exists.
+    // editingLang is appended (not prepended) so it lands after the existing
+    // target-language block instead of shifting every other row's position
+    // for a fresh/empty CSV.
+    QStringList allLangCodes = langCodes;
+    if (!allLangCodes.contains(editingLang)) {
+        allLangCodes.append(editingLang);
+    }
+    for (const auto &code : allLangCodes) {
         const QLocale locale(code);
         const QString langName = QLocale::languageToString(locale.language());
         for (const auto &v : variations) {
@@ -440,7 +464,9 @@ bool AbstractEngine::_reconcileRows()
                 row.langCode = code;
                 row.language = langName;
                 row.theme    = v.id;
-                row.enabled  = (code != v.id);
+                // The editing/source language row must always be enabled — it is
+                // the language actual content is written in, never optional.
+                row.enabled  = (code == editingLang) || (code != v.id);
                 m_rows.append(row);
                 changed = true;
             }
