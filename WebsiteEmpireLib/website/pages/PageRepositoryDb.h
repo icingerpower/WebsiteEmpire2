@@ -73,6 +73,7 @@ public:
                                                         PageGenerationState state) override;
     QList<PageRecord>                findByGenerationState(const QString        &typeId,
                                                            PageGenerationState   state) const override;
+    QHash<QString, QPair<int, QString>> findPolicyBlockedPages() const override;
     PageGenerationState              translationImageState(int            pageId,
                                                            const QString &lang) const override;
     void                             setTranslationImageState(int                 pageId,

@@ -683,6 +683,26 @@ QList<PageRecord> PageRepositoryDb::findByGenerationState(const QString        &
     return result;
 }
 
+QHash<QString, QPair<int, QString>> PageRepositoryDb::findPolicyBlockedPages() const
+{
+    QHash<QString, QPair<int, QString>> result;
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "SELECT p.id, p.permalink, pd.value"
+        " FROM pages p"
+        " JOIN page_data pd ON pd.page_id = p.id"
+        " WHERE pd.key = 'policy_blocked_cli'"
+        " ORDER BY p.id ASC"));
+    q.exec();
+    while (q.next()) {
+        const int     id        = q.value(0).toInt();
+        const QString permalink = q.value(1).toString();
+        const QString clis      = q.value(2).toString();
+        result.insert(permalink, {id, clis});
+    }
+    return result;
+}
+
 // =============================================================================
 // Translation image state
 // =============================================================================

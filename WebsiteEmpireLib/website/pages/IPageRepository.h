@@ -291,6 +291,17 @@ public:
     virtual void setGenerationState(int id, PageGenerationState state) = 0;
 
     /**
+     * Returns all pages that have a "policy_blocked_cli" entry in page_data.
+     * Key   = permalink
+     * Value = {page_id, comma-separated list of CLI names that failed with a
+     *          Usage Policy error and must not be retried for this page}.
+     *
+     * Used by LauncherGeneration to skip policy-blocked pages for the current
+     * CLI while still allowing other CLIs to retry them.
+     */
+    virtual QHash<QString, QPair<int, QString>> findPolicyBlockedPages() const = 0;
+
+    /**
      * Returns all source pages (source_page_id IS NULL) of typeId whose
      * generation_state equals state, ordered by id ASC.
      * Used by LauncherGeneration to resume mid-pipeline work.
