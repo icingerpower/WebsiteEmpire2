@@ -5,6 +5,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/widgets/widgets.cmake)
 set(PAGES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/AbstractPageType.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractPageType.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/HubSeoTemplateDb.h
+    ${CMAKE_CURRENT_LIST_DIR}/HubSeoTemplateDb.cpp
     ${CMAKE_CURRENT_LIST_DIR}/AbstractLegalPageDef.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractLegalPageDef.cpp
     ${CMAKE_CURRENT_LIST_DIR}/LegalPageDefs.h
