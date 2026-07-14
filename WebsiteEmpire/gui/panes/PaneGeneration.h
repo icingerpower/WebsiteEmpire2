@@ -6,6 +6,9 @@
 #include <QWidget>
 
 class AbstractEngine;
+class AbstractCli;
+class AvailableCliList;
+class AvailableCliTable;
 class GenStrategyTable;
 class QProcess;
 class WebsiteSettingsTable;
@@ -86,6 +89,12 @@ private:
     // Returns "https://domain" for the editing language, or "" if not resolvable.
     QString _primaryDomain(AbstractEngine *engine, WebsiteSettingsTable *settingsTable) const;
 
+    /** Restores comboBoxCli's selection from the "generationCli" setting, if available. */
+    void _restoreGenerationCli();
+
+    /** Returns the AbstractCli currently selected in comboBoxCli, or nullptr if none. */
+    AbstractCli *_selectedCli() const;
+
     Ui::PaneGeneration *ui;
     QDir                m_workingDir;
     bool                m_isSetup          = false;
@@ -101,6 +110,8 @@ private:
     // Guard: true while _onStrategySelectionChanged is loading fields programmatically
     // so _onPromptEdited() / _onSvgEdited() do not write back a false save.
     bool                m_updatingFields   = false;
+    AvailableCliTable  *m_cliTable         = nullptr;
+    AvailableCliList   *m_cliList          = nullptr;
 };
 
 #endif // PANEGENERATION_H

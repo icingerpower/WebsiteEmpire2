@@ -198,6 +198,20 @@
            </property>
           </spacer>
          </item>
+         <item>
+          <widget class="QLabel" name="labelCli">
+           <property name="text">
+            <string>CLI:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="comboBoxCli">
+           <property name="toolTip">
+            <string>AI CLI to use for generation</string>
+           </property>
+          </widget>
+         </item>
         </layout>
        </item>
        <item>

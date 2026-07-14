@@ -2,6 +2,9 @@
 #include "ui_PaneGeneration.h"
 
 #include "GenStrategyTable.h"
+#include "aicli/AbstractCli.h"
+#include "aicli/AvailableCliList.h"
+#include "aicli/AvailableCliTable.h"
 #include "../dialogs/DialogAddGeneration.h"
 #include "../dialogs/DialogGeneratePhase2.h"
 #include "../dialogs/DialogShowCommand.h"
@@ -68,6 +71,27 @@ void PaneGeneration::setup(const QDir           &workingDir,
     m_editingLang = (settingsTable && !settingsTable->editingLangCode().isEmpty())
                         ? settingsTable->editingLangCode()
                         : QStringLiteral("en");
+
+    // Only list CLIs confirmed available (found in PATH) — see AvailableCliList.
+    // Populating from the raw AbstractCli::ALL_CLIS() registry would let the
+    // user select a CLI that isn't actually installed, failing later with a
+    // "not found in PATH" error instead of not being selectable at all.
+    m_cliTable = new AvailableCliTable(this);
+    m_cliList  = new AvailableCliList(m_cliTable, this);
+    ui->comboBoxCli->setModel(m_cliList);
+
+    // Restore saved selection now and again each time a new CLI becomes available
+    // (availability checks are async and may not have resolved yet).
+    connect(m_cliList, &QAbstractListModel::rowsInserted, this,
+            [this](const QModelIndex &, int, int) { _restoreGenerationCli(); });
+    _restoreGenerationCli();
+
+    connect(ui->comboBoxCli, &QComboBox::activated, this, [this](int) {
+        AbstractCli *cli = _selectedCli();
+        WorkingDirectoryManager::instance()->settings()
+            ->setValue(QStringLiteral("generationCli"), cli ? cli->getName() : QString{});
+    });
+
     m_isSetup = true;
     ui->buttonGeneratePhase2->setEnabled(true);
 }
@@ -246,8 +270,8 @@ void PaneGeneration::_startProcess(QStringList args)
         return; // already running
     }
 
-    const QString cliName = WorkingDirectoryManager::instance()->settings()
-                                ->value(QStringLiteral("defaultCli")).toString();
+    AbstractCli *selectedCli = _selectedCli();
+    const QString cliName = selectedCli ? selectedCli->getName() : QString{};
     if (!cliName.isEmpty()) {
         args << QStringLiteral("--") + AbstractLauncher::OPTION_CLI << cliName;
     }
@@ -335,8 +359,8 @@ void PaneGeneration::viewGenCommand()
                            strategyId,
                            LauncherGeneration::OPTION_LIMIT);
 
-    const QString cliName = WorkingDirectoryManager::instance()->settings()
-                                ->value(QStringLiteral("defaultCli")).toString();
+    AbstractCli *selectedCli = _selectedCli();
+    const QString cliName = selectedCli ? selectedCli->getName() : QString{};
     if (!cliName.isEmpty()) {
         cmd += QStringLiteral(" --") + AbstractLauncher::OPTION_CLI
                + QLatin1Char(' ') + cliName;
@@ -695,4 +719,27 @@ QString PaneGeneration::_primaryDomain(AbstractEngine       *engine,
         domain.chop(1);
     }
     return domain;
+}
+
+AbstractCli *PaneGeneration::_selectedCli() const
+{
+    return m_cliList ? m_cliList->cliAt(ui->comboBoxCli->currentIndex()) : nullptr;
+}
+
+void PaneGeneration::_restoreGenerationCli()
+{
+    const QString saved = WorkingDirectoryManager::instance()->settings()
+                              ->value(QStringLiteral("generationCli")).toString();
+    if (saved.isEmpty()) {
+        return;
+    }
+    for (int i = 0; i < m_cliList->rowCount(); ++i) {
+        const QString name =
+            m_cliList->data(m_cliList->index(i, 0), Qt::DisplayRole).toString();
+        if (name == saved) {
+            const QSignalBlocker blocker(ui->comboBoxCli);
+            ui->comboBoxCli->setCurrentIndex(i);
+            return;
+        }
+    }
 }
