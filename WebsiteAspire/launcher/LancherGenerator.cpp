@@ -30,7 +30,7 @@ void LancherGenerator::registerOptions(QCommandLineParser &parser)
         QStringLiteral("n")));
     parser.addOption(QCommandLineOption(
         QStringLiteral("recordjob"),
-        QCoreApplication::tr("Record Claude's filled JSON reply."),
+        QCoreApplication::tr("Record the AI CLI's filled JSON reply."),
         QStringLiteral("json")));
 }
 

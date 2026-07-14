@@ -188,7 +188,7 @@ void WidgetGenerator::getJobs()
     ui->plainTextEditJobs->setPlainText(
         QString::fromUtf8(QJsonDocument(jobs).toJson(QJsonDocument::Indented)));
     ui->labelLog->setText(
-        tr("Retrieved %1 job(s). Paste into Claude, then paste the reply below.")
+        tr("Retrieved %1 job(s). Paste into your AI CLI, then paste the reply below.")
             .arg(jobs.size()));
     _updateStats();
 }
@@ -221,7 +221,7 @@ void WidgetGenerator::recordReply()
     if (replyText.isEmpty()) {
         QMessageBox::warning(this,
                              tr("No Reply"),
-                             tr("Please paste Claude's reply before recording."));
+                             tr("Please paste the CLI's reply before recording."));
         return;
     }
 
@@ -317,13 +317,14 @@ void WidgetGenerator::copyCommand()
         this,
         tr("Command Line Usage"),
         tr("Get the next pending job(s):\n\n%1\n\n"
-           "Record Claude's filled reply:\n\n%2\n\n"
+           "Record %4's filled reply:\n\n%2\n\n"
            "Run jobs automatically (N sessions, Ctrl+C to stop gracefully):\n\n%3")
             .arg(base + QStringLiteral(" --getjob 10"),
                  base + QStringLiteral(" --recordjob '<filled-json>'"),
                  runBase + QStringLiteral(" --%1 %2")
                      .arg(LauncherRunJobs::OPTION_SESSIONS)
-                     .arg(ui->spinBoxSessions->value())));
+                     .arg(ui->spinBoxSessions->value()),
+                 cliName.isEmpty() ? tr("the AI CLI") : cliName));
 }
 
 // ---------------------------------------------------------------------------

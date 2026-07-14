@@ -49,7 +49,7 @@
      <item>
       <widget class="QPushButton" name="buttonCopyJobs">
        <property name="toolTip">
-        <string>Copy the job JSON to the clipboard to paste into Claude</string>
+        <string>Copy the job JSON to the clipboard to paste into your AI CLI</string>
        </property>
        <property name="text">
         <string>Copy Jobs</string>
@@ -59,7 +59,7 @@
      <item>
       <widget class="QPushButton" name="buttonRecordReply">
        <property name="toolTip">
-        <string>Record Claude's filled reply from the text area below</string>
+        <string>Record the CLI's filled reply from the text area below</string>
        </property>
        <property name="text">
         <string>Record Reply</string>
@@ -93,7 +93,7 @@
      <item>
       <widget class="QPushButton" name="buttonRun">
        <property name="toolTip">
-        <string>Automatically retrieve jobs and run them through the Claude CLI</string>
+        <string>Automatically retrieve jobs and run them through the AI CLI</string>
        </property>
        <property name="text">
         <string>Run</string>
@@ -113,7 +113,7 @@
      <item>
       <widget class="QSpinBox" name="spinBoxSessions">
        <property name="toolTip">
-        <string>Number of parallel Claude sessions</string>
+        <string>Number of parallel AI CLI sessions</string>
        </property>
        <property name="minimum">
         <number>1</number>
@@ -187,7 +187,7 @@
        <item>
         <widget class="QLabel" name="labelJobsCaption">
          <property name="text">
-          <string>Jobs (paste into Claude):</string>
+          <string>Jobs (paste into your AI CLI):</string>
          </property>
         </widget>
        </item>
@@ -208,14 +208,14 @@
        <item>
         <widget class="QLabel" name="labelReplyCaption">
          <property name="text">
-          <string>Claude's reply:</string>
+          <string>CLI's reply:</string>
          </property>
         </widget>
        </item>
        <item>
         <widget class="QPlainTextEdit" name="plainTextEditReply">
          <property name="placeholderText">
-          <string>Paste Claude's filled reply here (single JSON object or array of objects)</string>
+          <string>Paste the CLI's filled reply here (single JSON object or array of objects)</string>
          </property>
         </widget>
        </item>
