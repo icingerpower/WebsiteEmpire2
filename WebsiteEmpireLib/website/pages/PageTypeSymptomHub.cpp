@@ -1,56 +1,10 @@
 #include "PageTypeSymptomHub.h"
 
 #include "website/AbstractEngine.h"
-#include "website/pages/blocs/PageBlocSymptomLinks.h"   // for SymptomNav::slugify
 #include "website/social/AbstractSocialMedia.h"
 
-#include <QCoreApplication>
 #include <QDir>
-#include <QFile>
-#include <QSqlDatabase>
-#include <QSqlQuery>
-
-// =============================================================================
-// Helpers — symptom name from permalink
-// =============================================================================
-
-static QString symptomNameFromPermalink(const QString &permalink, const QDir &workingDir)
-{
-    const QString prefix = QStringLiteral("/symptoms/");
-    if (!permalink.startsWith(prefix)) {
-        return {};
-    }
-    const QString slug   = permalink.mid(prefix.length());
-    const QString dbPath = workingDir.filePath(
-        QStringLiteral("results_db/PageAttributesHealthSymptom.db"));
-    if (!QFile::exists(dbPath)) {
-        return {};
-    }
-
-    QString name;
-    {
-        static int s_seed = 0;
-        const QString connName = QStringLiteral("symhub_sn_") + QString::number(++s_seed);
-        {
-            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
-            db.setDatabaseName(dbPath);
-            db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
-            if (db.open()) {
-                QSqlQuery q(db);
-                q.exec(QStringLiteral("SELECT health_symptom_name FROM records"));
-                while (q.next()) {
-                    const QString n = q.value(0).toString().trimmed();
-                    if (SymptomNav::slugify(n) == slug) {
-                        name = n;
-                        break;
-                    }
-                }
-            }
-        }
-        QSqlDatabase::removeDatabase(connName);
-    }
-    return name;
-}
+#include <QMap>
 
 // =============================================================================
 // Constructor
@@ -80,10 +34,10 @@ const QList<const AbstractPageBloc *> &PageTypeSymptomHub::getPageBlocs() const
 // bindGenerationContext
 // =============================================================================
 
-void PageTypeSymptomHub::bindGenerationContext(IPageRepository & /*repo*/,
-                                               const QDir       &workingDir)
+void PageTypeSymptomHub::bindGenerationContext(IPageRepository &repo,
+                                               const QDir      &workingDir)
 {
-    m_workingDir = workingDir;
+    AbstractPageType::bindGenerationContext(repo, workingDir);
 }
 
 // =============================================================================
@@ -105,59 +59,72 @@ void PageTypeSymptomHub::addCode(QStringView     origContent,
 }
 
 // =============================================================================
+// seoTemplateStrings / autoSeoTitle / autoSeoDescription
+// =============================================================================
+
+QMap<QString, QString> PageTypeSymptomHub::seoTemplateStrings() const
+{
+    return {
+        { QStringLiteral("title"), QStringLiteral("What Causes %1? %2 Conditions To Know") },
+        { QStringLiteral("desc"),  QStringLiteral("Find out which %1 conditions cause %2 and what biomarkers help identify the root cause.") },
+    };
+}
+
+QString PageTypeSymptomHub::autoSeoTitle(const QString &langCode) const
+{
+    const QString &stored = m_metaBloc.seoTitle(langCode);
+    if (!stored.isEmpty()) {
+        return stored;
+    }
+    // m_conditionListBloc.lastRenderedDisplayName() is populated by addCode()
+    // before buildHeadMetaTags() is called — uses the same fallback chain as
+    // the h1 (aspire DB → TaxonomyDb → permalink title-case), so it works
+    // even when results_db/PageAttributesHealthSymptom.db is absent.
+    const QString symptomName = m_conditionListBloc.lastRenderedDisplayName();
+    if (symptomName.isEmpty()) {
+        return {};
+    }
+    const int n = m_conditionListBloc.countConditions();
+    if (n <= 0) {
+        return symptomName;
+    }
+    const QString tmpl = seoTemplate(QStringLiteral("title"), langCode);
+    if (tmpl.isEmpty()) {
+        return {};
+    }
+    return tmpl.arg(symptomName, QString::number(n));
+}
+
+QString PageTypeSymptomHub::autoSeoDescription(const QString &langCode) const
+{
+    const QString &stored = m_metaBloc.seoDescription(langCode);
+    if (!stored.isEmpty()) {
+        return stored;
+    }
+    const QString symptomName = m_conditionListBloc.lastRenderedDisplayName();
+    if (symptomName.isEmpty()) {
+        return {};
+    }
+    const int n = m_conditionListBloc.countConditions();
+    if (n <= 0) {
+        return {};
+    }
+    const QString tmpl = seoTemplate(QStringLiteral("desc"), langCode);
+    if (tmpl.isEmpty()) {
+        return {};
+    }
+    return tmpl.arg(QString::number(n), symptomName);
+}
+
+// =============================================================================
 // buildHeadMetaTags
 // =============================================================================
 
 QString PageTypeSymptomHub::buildHeadMetaTags(const QString &baseUrl,
                                                const QString &langCode) const
 {
-    QString result;
-
-    // ---- Compute the page title ----
-    const QString storedTitle = m_metaBloc.seoTitle(langCode);
-    QString title;
-    if (!storedTitle.isEmpty()) {
-        title = storedTitle;
-    } else {
-        const QString symptomName = symptomNameFromPermalink(m_permalink, m_workingDir);
-        if (!symptomName.isEmpty()) {
-            const int n = m_conditionListBloc.countConditions();
-            if (n > 0) {
-                title = symptomName + QStringLiteral(" — ")
-                        + QString::number(n) + QLatin1Char(' ')
-                        + (n == 1
-                           ? QCoreApplication::translate("PageTypeSymptomHub", "possible condition")
-                           : QCoreApplication::translate("PageTypeSymptomHub", "possible conditions"));
-            } else {
-                title = symptomName;
-            }
-        }
-    }
-
-    if (!title.isEmpty()) {
-        result += QStringLiteral("<title>");
-        result += title;
-        result += QStringLiteral("</title>");
-    }
-
-    const QString desc = m_metaBloc.seoDescription(langCode);
-    if (!desc.isEmpty()) {
-        result += QStringLiteral("<meta name=\"description\" content=\"");
-        result += desc;
-        result += QStringLiteral("\">");
-    }
-
-    if (!m_permalink.isEmpty() && !baseUrl.isEmpty()) {
-        result += QStringLiteral("<link rel=\"canonical\" href=\"");
-        result += baseUrl;
-        result += m_permalink;
-        result += QStringLiteral("\">");
-
-        result += QStringLiteral("<meta property=\"og:url\" content=\"");
-        result += baseUrl;
-        result += m_permalink;
-        result += QStringLiteral("\">");
-    }
+    // Base emits: <title>, <meta name="description">, canonical, og:url.
+    QString result = AbstractPageType::buildHeadMetaTags(baseUrl, langCode);
 
     result += QStringLiteral("<meta property=\"og:type\" content=\"website\">");
 
@@ -197,9 +164,10 @@ QString PageTypeSymptomHub::buildHeadMetaTags(const QString &baseUrl,
             result += m_permalink;
             result += QLatin1Char('"');
         }
-        if (!title.isEmpty()) {
+        const QString &jsonLdTitle = autoSeoTitle(langCode);
+        if (!jsonLdTitle.isEmpty()) {
             result += QStringLiteral(",\"name\":\"");
-            result += title;
+            result += jsonLdTitle.toHtmlEscaped();
             result += QLatin1Char('"');
         }
         result += QStringLiteral("}</script>\n");

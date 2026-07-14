@@ -153,6 +153,20 @@ void PageTypeArticle::prepareJsonLdImage(const QDir &workingDir, const QString &
 }
 
 // =============================================================================
+// autoSeoTitle / autoSeoDescription
+// =============================================================================
+
+QString PageTypeArticle::autoSeoTitle(const QString &langCode) const
+{
+    return m_metaBloc.seoTitle(langCode);
+}
+
+QString PageTypeArticle::autoSeoDescription(const QString &langCode) const
+{
+    return m_metaBloc.seoDescription(langCode);
+}
+
+// =============================================================================
 // buildHeadMetaTags
 // =============================================================================
 
@@ -247,37 +261,9 @@ QString resolveDateForLang(const QHash<QString, QString> &byLang,
 QString PageTypeArticle::buildHeadMetaTags(const QString &baseUrl,
                                             const QString &langCode) const
 {
-    QString result;
+    // Base emits: <title>, <meta name="description">, canonical, og:url.
+    QString result = AbstractPageType::buildHeadMetaTags(baseUrl, langCode);
 
-    // ---- <title> + <meta name="description"> from PageBlocMeta ---------------
-    const QString title = m_metaBloc.seoTitle(langCode);
-    if (!title.isEmpty()) {
-        result += QStringLiteral("<title>");
-        result += title.toHtmlEscaped();
-        result += QStringLiteral("</title>\n");
-    }
-    const QString desc = m_metaBloc.seoDescription(langCode);
-    if (!desc.isEmpty()) {
-        result += QStringLiteral("<meta name=\"description\" content=\"");
-        result += desc.toHtmlEscaped();
-        result += QStringLiteral("\"/>\n");
-    }
-
-    // ---- Canonical -----------------------------------------------------------
-    if (!m_permalink.isEmpty()) {
-        result += QStringLiteral("<link rel=\"canonical\" href=\"");
-        result += baseUrl;
-        result += m_permalink;
-        result += QStringLiteral("\"/>\n");
-    }
-
-    // ---- Open Graph auto-derived tags ----------------------------------------
-    if (!m_permalink.isEmpty()) {
-        result += QStringLiteral("<meta property=\"og:url\" content=\"");
-        result += baseUrl;
-        result += m_permalink;
-        result += QStringLiteral("\"/>\n");
-    }
     result += QStringLiteral("<meta property=\"og:type\" content=\"article\"/>\n");
     if (!langCode.isEmpty()) {
         result += QStringLiteral("<meta property=\"og:locale\" content=\"");
@@ -478,6 +464,8 @@ void PageTypeArticle::addInnerTopCode(AbstractEngine &engine,
                                           QSet<QString>  &cssDoneIds,
                                           QSet<QString>  &jsDoneIds) const
 {
+    AbstractPageType::addInnerTopCode(engine, websiteIndex, html, css, js, cssDoneIds, jsDoneIds);
+
     AbstractTheme *theme = engine.getActiveTheme();
     if (theme) {
         theme->addCodeArticle(engine, websiteIndex, html, css, js, cssDoneIds, jsDoneIds);

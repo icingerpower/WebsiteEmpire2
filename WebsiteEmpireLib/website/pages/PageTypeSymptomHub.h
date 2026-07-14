@@ -64,14 +64,33 @@ public:
                  QSet<QString>  &jsDoneIds) const override;
 
     /**
-     * Emits:
-     *   <title> — from PageBlocMeta when non-empty; otherwise computed as
-     *             "<SymptomName> — N possible conditions"
-     *   <meta name="description"> — from PageBlocMeta
-     *   Social and hreflang tags
-     *   WebPage JSON-LD with dateModified
+     * Adds social meta tags and WebPage JSON-LD on top of the base tags.
+     * <title> and <meta name="description"> come from the base via autoSeoTitle /
+     * autoSeoDescription.
      */
     QString buildHeadMetaTags(const QString &baseUrl, const QString &langCode) const override;
+
+    /**
+     * Returns the English SEO templates for symptom hub pages:
+     *   "title" → "What Causes %1? %2 Conditions To Know"
+     *   "desc"  → "Find out which %1 conditions cause %2 and what biomarkers
+     *              help identify the root cause."
+     */
+    QMap<QString, QString> seoTemplateStrings() const override;
+
+protected:
+
+    /**
+     * Returns the stored SEO title (PageBlocMeta) when set; otherwise uses
+     * the translated template from seoTemplate("title", langCode).
+     */
+    QString autoSeoTitle(const QString &langCode) const override;
+
+    /**
+     * Returns the stored meta description (PageBlocMeta) when set; otherwise
+     * uses the translated template from seoTemplate("desc", langCode).
+     */
+    QString autoSeoDescription(const QString &langCode) const override;
 
     /** Returns the social text bloc for the page generator. */
     const PageBlocSocial &socialTextBloc() const { return m_socialTextBloc; }
@@ -85,7 +104,6 @@ private:
     PageBlocSocial                   m_socialTextBloc;
     PageBlocMeta                     m_metaBloc;
     QList<const AbstractPageBloc *>  m_blocs;
-    QDir                             m_workingDir;
 };
 
 #endif // PAGETYPESYMPTOMHUB_H

@@ -87,6 +87,23 @@ void PageBlocHubGrid::save(QHash<QString, QString> &values) const
 }
 
 // =============================================================================
+// primaryCategoryName / lastRenderedCount
+// =============================================================================
+
+QString PageBlocHubGrid::primaryCategoryName(const QString &langCode) const
+{
+    if (m_selectedCategoryIds.isEmpty()) {
+        return {};
+    }
+    return m_categoryTable.translationFor(m_selectedCategoryIds.first(), langCode);
+}
+
+int PageBlocHubGrid::lastRenderedCount() const
+{
+    return m_lastRenderedCount;
+}
+
+// =============================================================================
 // _loadStats (private)
 // =============================================================================
 
@@ -153,6 +170,7 @@ void PageBlocHubGrid::addCode(QStringView     /*origContent*/,
                                QSet<QString>  &jsDoneIds) const
 {
     if (m_selectedCategoryIds.isEmpty() || !m_repo) {
+        m_lastRenderedCount = 0;
         return;
     }
 
@@ -218,6 +236,7 @@ void PageBlocHubGrid::addCode(QStringView     /*origContent*/,
     }
 
     if (entries.isEmpty()) {
+        m_lastRenderedCount = 0;
         return;
     }
 
@@ -240,6 +259,7 @@ void PageBlocHubGrid::addCode(QStringView     /*origContent*/,
     if (entries.size() > m_maxArticles) {
         entries = entries.mid(0, m_maxArticles);
     }
+    m_lastRenderedCount = entries.size();
 
     // ── CSS (once per page) ────────────────────────────────────────────
     {

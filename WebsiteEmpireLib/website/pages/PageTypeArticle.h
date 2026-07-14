@@ -130,17 +130,24 @@ public:
     bool hasSvg() const override;
 
 protected:
+    /** Returns the AI-generated SEO title from PageBlocMeta. */
+    QString autoSeoTitle(const QString &langCode) const override;
+
+    /** Returns the AI-generated meta description from PageBlocMeta. */
+    QString autoSeoDescription(const QString &langCode) const override;
+
     /**
-     * Renders article-specific bottom content (AI disclaimer) inside <main>
-     * before </main> by calling AbstractTheme::addCodeArticle().
+     * Renders article-specific top content (AI disclaimer, date line) inside
+     * <main> before the blocs by calling AbstractTheme::addCodeArticle().
+     * Always calls AbstractPageType::addInnerTopCode() first.
      */
     void addInnerTopCode(AbstractEngine &engine,
-                             int             websiteIndex,
-                             QString        &html,
-                             QString        &css,
-                             QString        &js,
-                             QSet<QString>  &cssDoneIds,
-                             QSet<QString>  &jsDoneIds) const override;
+                         int             websiteIndex,
+                         QString        &html,
+                         QString        &css,
+                         QString        &js,
+                         QSet<QString>  &cssDoneIds,
+                         QSet<QString>  &jsDoneIds) const override;
 
 private:
     QScopedPointer<PageBlocCategory> m_categoryBloc;

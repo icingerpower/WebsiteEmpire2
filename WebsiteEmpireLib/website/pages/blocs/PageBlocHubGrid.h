@@ -63,6 +63,22 @@ public:
 
     AbstractPageBlockWidget *createEditWidget() override;
 
+    /**
+     * Returns the translated display name of the first selected category for
+     * langCode, falling back to the English canonical name.
+     * Returns empty string when no categories are selected.
+     * Callable before addCode() (categories are loaded by load()).
+     */
+    QString primaryCategoryName(const QString &langCode) const;
+
+    /**
+     * Returns the number of articles rendered in the last addCode() call.
+     * Zero before any call or when no articles matched.
+     * Used by PageTypeCategory::autoSeoTitle/Description() which are called
+     * from buildHeadMetaTags() — always after addCode().
+     */
+    int lastRenderedCount() const;
+
 private:
     struct ArticleStats {
         double ctr   = 0.0;
@@ -82,6 +98,9 @@ private:
 
     QList<int> m_selectedCategoryIds;
     int        m_maxArticles = 12;
+
+    // Set at the end of addCode(); consumed by lastRenderedCount().
+    mutable int m_lastRenderedCount = 0;
 };
 
 #endif // PAGEBLOCHUBGRID_H

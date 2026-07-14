@@ -1,8 +1,11 @@
 #include "AbstractPageType.h"
 #include "website/AbstractEngine.h"
+#include "website/pages/HubSeoTemplateDb.h"
 #include "website/theme/AbstractTheme.h"
 
+#include <QDir>
 #include <QHash>
+#include <QMap>
 #include <QString>
 #include <QUrl>
 
@@ -134,10 +137,15 @@ bool AbstractPageType::isCountedInTranslationStats() const
 // =============================================================================
 
 void AbstractPageType::bindGenerationContext(IPageRepository & /*repo*/,
-                                              const QDir      & /*workingDir*/)
+                                              const QDir      &workingDir)
 {
-    // Default: no-op. Override in page types that need repo/stats access during
-    // addCode() (e.g. PageTypeCategory).
+    // Load translated SEO templates from hub_seo.db for this page type.
+    // Subclasses that override this method must call
+    // AbstractPageType::bindGenerationContext(repo, workingDir) first so the
+    // cache is populated before their own context setup.
+    m_workingDir = workingDir;
+    HubSeoTemplateDb db(workingDir);
+    m_seoTemplateCache = db.loadAll(getTypeId());
 }
 
 void AbstractPageType::bindWorkingDir(const QDir & /*workingDir*/)
@@ -257,13 +265,77 @@ QString AbstractPageType::_buildHreflangTags(AbstractEngine &engine, int /*websi
 }
 
 // =============================================================================
-// buildHeadMetaTags / hasSvg
+// seoTemplateStrings / seoTemplate
 // =============================================================================
 
-QString AbstractPageType::buildHeadMetaTags(const QString & /*baseUrl*/,
-                                             const QString & /*langCode*/) const
+QMap<QString, QString> AbstractPageType::seoTemplateStrings() const
 {
     return {};
+}
+
+QString AbstractPageType::seoTemplate(const QString &key, const QString &langCode) const
+{
+    const auto &keyMap = m_seoTemplateCache.value(key);
+    if (keyMap.contains(langCode)) {
+        return keyMap.value(langCode);
+    }
+    return seoTemplateStrings().value(key);
+}
+
+// =============================================================================
+// autoSeoTitle / autoSeoDescription / autoH1
+// =============================================================================
+
+QString AbstractPageType::autoSeoTitle(const QString & /*langCode*/) const
+{
+    return {};
+}
+
+QString AbstractPageType::autoSeoDescription(const QString & /*langCode*/) const
+{
+    return {};
+}
+
+QString AbstractPageType::autoH1(const QString & /*langCode*/) const
+{
+    return {};
+}
+
+// =============================================================================
+// buildHeadMetaTags / hasSvg / addInnerTopCode
+// =============================================================================
+
+QString AbstractPageType::buildHeadMetaTags(const QString &baseUrl,
+                                             const QString &langCode) const
+{
+    QString result;
+
+    const QString &title = autoSeoTitle(langCode);
+    if (!title.isEmpty()) {
+        result += QStringLiteral("<title>");
+        result += title.toHtmlEscaped();
+        result += QStringLiteral("</title>");
+    }
+
+    const QString &desc = autoSeoDescription(langCode);
+    if (!desc.isEmpty()) {
+        result += QStringLiteral("<meta name=\"description\" content=\"");
+        result += desc.toHtmlEscaped();
+        result += QStringLiteral("\">");
+    }
+
+    if (!m_permalink.isEmpty() && !baseUrl.isEmpty()) {
+        result += QStringLiteral("<link rel=\"canonical\" href=\"");
+        result += baseUrl;
+        result += m_permalink;
+        result += QStringLiteral("\">");
+        result += QStringLiteral("<meta property=\"og:url\" content=\"");
+        result += baseUrl;
+        result += m_permalink;
+        result += QStringLiteral("\">");
+    }
+
+    return result;
 }
 
 bool AbstractPageType::hasSvg() const
@@ -276,14 +348,20 @@ bool AbstractPageType::shouldIndex() const
     return true;
 }
 
-void AbstractPageType::addInnerTopCode(AbstractEngine & /*engine*/,
-                                        int              /*websiteIndex*/,
-                                        QString        & /*html*/,
+void AbstractPageType::addInnerTopCode(AbstractEngine &engine,
+                                        int             websiteIndex,
+                                        QString        &html,
                                         QString        & /*css*/,
                                         QString        & /*js*/,
                                         QSet<QString>  & /*cssDoneIds*/,
                                         QSet<QString>  & /*jsDoneIds*/) const
 {
+    const QString &h1 = autoH1(engine.getLangCode(websiteIndex));
+    if (!h1.isEmpty()) {
+        html += QStringLiteral("<h1>");
+        html += h1.toHtmlEscaped();
+        html += QStringLiteral("</h1>");
+    }
 }
 
 // =============================================================================

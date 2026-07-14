@@ -4,8 +4,10 @@
 #include "website/WebCodeAdder.h"
 #include "website/pages/blocs/AbstractPageBloc.h"
 
+#include <QDir>
 #include <QHash>
 #include <QList>
+#include <QMap>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -17,7 +19,6 @@ class AbstractEngine;
 class AbstractAttribute;
 class CategoryTable;
 class IPageRepository;
-class QDir;
 
 /**
  * Base class for a page type.
@@ -208,14 +209,18 @@ public:
                               const QHash<QString, QString> &updatedByLang);
 
     /**
-     * Returns <title>, canonical, Open Graph and hreflang <meta>/<link> tags
-     * to inject into the page <head>.  addCode() calls this between the <style>
-     * block and </head>.
+     * Returns <title>, canonical, og:url, and any other <head> tags for the page.
+     * addCode() calls this after the <style> block and before </head>.
      *
-     * baseUrl is "https://<domain>" (no trailing slash).
-     * langCode is the language being rendered (e.g. "fr").
+     * The base implementation emits:
+     *   - <title>          from autoSeoTitle(langCode)       — if non-empty
+     *   - <meta name="description"> from autoSeoDescription(langCode) — if non-empty
+     *   - <link rel="canonical">   from m_permalink + baseUrl
+     *   - <meta property="og:url"> from m_permalink + baseUrl
      *
-     * Default: returns an empty string.  PageTypeArticle overrides this.
+     * Overrides should call AbstractPageType::buildHeadMetaTags() as their first
+     * line to get these four tags for free, then append page-type-specific tags
+     * (og:type, article dates, JSON-LD, etc.).
      */
     virtual QString buildHeadMetaTags(const QString &baseUrl,
                                       const QString &langCode) const;
@@ -239,6 +244,18 @@ public:
      * addCode() emits <meta name="robots" content="noindex,follow"> when false.
      */
     virtual bool shouldIndex() const;
+
+    /**
+     * Returns the English SEO template strings keyed by short name (e.g. "title",
+     * "desc", "h1").  Values must use Qt %1/%2 placeholders for dynamic parts.
+     *
+     * Default: empty map (page types with no auto-SEO templates need not override).
+     * Override in hub page types (PageTypeSymptomHub, PageTypeCategory, etc.).
+     *
+     * Public so that LauncherTranslateCommon can collect all templates for translation
+     * without needing special friend or accessor boilerplate.
+     */
+    virtual QMap<QString, QString> seoTemplateStrings() const;
 
     /**
      * Aggregates each bloc's getAiKeyClues() into a single flat map, prefixing
@@ -309,25 +326,62 @@ protected:
     QString                m_websiteAuthor;
     // Set by prepareJsonLdImage(); used by buildHeadMetaTags() as image fallback.
     QString                m_jsonLdFallbackImage;
+    // Set by bindGenerationContext(); available to subclasses for DB access.
+    QDir                   m_workingDir;
 
     /**
-     * Hook called by addCode() inside <main>, after all page blocs and before
-     * </main>.  Default: no-op.  Override in page types that need extra content
-     * injected at the bottom of the content area (e.g. PageTypeArticle renders
-     * the AI disclaimer here via AbstractTheme::addCodeArticle()).
+     * Returns the best available SEO template for key+langCode:
+     *   1. Translated template from m_seoTemplateCache (loaded by bindGenerationContext).
+     *   2. English fallback from seoTemplateStrings() when no translation exists.
+     *   3. Empty string when the key is absent from seoTemplateStrings().
+     *
+     * The returned string contains %1/%2 placeholders — callers must call .arg() on it.
+     * bindGenerationContext() must have been called for the translation cache to be warm.
+     */
+    QString seoTemplate(const QString &key, const QString &langCode) const;
+
+    /**
+     * Returns the auto-generated SEO <title>.  Empty = no title tag emitted.
+     * Override in page types that can derive a title without stored AI data.
+     * buildHeadMetaTags() calls this automatically — do not emit <title> manually.
+     */
+    virtual QString autoSeoTitle(const QString &langCode) const;
+
+    /**
+     * Returns the auto-generated meta description.  Empty = no tag emitted.
+     * Same contract as autoSeoTitle().
+     */
+    virtual QString autoSeoDescription(const QString &langCode) const;
+
+    /**
+     * Returns the auto-generated page H1.  Empty = no H1 emitted.
+     * addInnerTopCode() emits <h1> automatically from this value, BEFORE blocs.
+     * Override only when the H1 is NOT produced by a bloc (e.g. category hub).
+     * Article and symptom hub pages generate their H1 inside their own blocs,
+     * so they must NOT override this.
+     */
+    virtual QString autoH1(const QString &langCode) const;
+
+    /**
+     * Hook called by addCode() at the top of <main>, before all blocs.
+     * The base implementation emits <h1> from autoH1() when non-empty.
+     * Overrides MUST call AbstractPageType::addInnerTopCode() as their first
+     * line so that autoH1() is always honoured.
      */
     virtual void addInnerTopCode(AbstractEngine &engine,
-                                     int             websiteIndex,
-                                     QString        &html,
-                                     QString        &css,
-                                     QString        &js,
-                                     QSet<QString>  &cssDoneIds,
-                                     QSet<QString>  &jsDoneIds) const;
+                                 int             websiteIndex,
+                                 QString        &html,
+                                 QString        &css,
+                                 QString        &js,
+                                 QSet<QString>  &cssDoneIds,
+                                 QSet<QString>  &jsDoneIds) const;
 
 private:
     QString m_authorLang;  ///< set by setAuthorLang(); compared in isTranslationComplete()
     mutable QList<const AbstractAttribute *> m_cachedAttributes;
     mutable bool m_attributesCached = false;
+    /// Loaded by bindGenerationContext() from hub_seo.db: key → langCode → template.
+    QHash<QString, QHash<QString, QString>> m_seoTemplateCache;
 
     /**
      * Builds <link rel="alternate" hreflang="…"> tags for every language row

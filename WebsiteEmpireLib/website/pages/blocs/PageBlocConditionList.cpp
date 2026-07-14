@@ -286,6 +286,15 @@ int PageBlocConditionList::countConditions() const
 }
 
 // =============================================================================
+// lastRenderedDisplayName
+// =============================================================================
+
+QString PageBlocConditionList::lastRenderedDisplayName() const
+{
+    return m_lastRenderedDisplayName;
+}
+
+// =============================================================================
 // getName
 // =============================================================================
 
@@ -316,6 +325,8 @@ void PageBlocConditionList::addCode(QStringView,
 {
     Q_UNUSED(js)
     Q_UNUSED(jsDoneIds)
+
+    m_lastRenderedDisplayName.clear();
 
     if (!m_contextBound) {
         return;
@@ -413,6 +424,7 @@ void PageBlocConditionList::addCode(QStringView,
                 QLatin1Char('/') + slug);
         }
     }
+    m_lastRenderedDisplayName = symptomDisplayName;
 
     // CSS — shared with PageBlocHubGrid (same CSS_ID, emitted once per page).
     {

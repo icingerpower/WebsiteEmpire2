@@ -45,6 +45,15 @@ public:
      */
     int countConditions() const;
 
+    /**
+     * Returns the symptom display name resolved during the last addCode() call
+     * (already translated to the current language via TaxonomyDb, falling back
+     * to title-casing the slug).  Empty when addCode() has not run yet.
+     * Used by PageTypeSymptomHub::autoSeoTitle/autoSeoDescription to avoid a
+     * second DB scan after the bloc has already done the work.
+     */
+    QString lastRenderedDisplayName() const;
+
     QString getName() const override;
 
     /** No-op: this bloc carries no stored page_data. */
@@ -111,6 +120,7 @@ private:
     mutable QString m_permalink;
     mutable QDir    m_workingDir;
     mutable bool    m_contextBound = false;
+    mutable QString m_lastRenderedDisplayName;
 };
 
 #endif // PAGEBLOCONDITIONLIST_H
