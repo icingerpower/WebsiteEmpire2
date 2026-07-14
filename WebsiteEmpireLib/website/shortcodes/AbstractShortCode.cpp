@@ -169,3 +169,41 @@ void AbstractShortCode::validate(const ParsedShortCode &parsed) const
         }
     }
 }
+
+// =============================================================================
+// tryValidate / validateAllInText  (public)
+// =============================================================================
+
+QString AbstractShortCode::tryValidate(QStringView text) const
+{
+    try {
+        parseAndValidate(text);
+        return {};
+    } catch (const ExceptionWithTitleText &e) {
+        return e.errorText();
+    }
+}
+
+QString AbstractShortCode::validateAllInText(const QString &text)
+{
+    // Same regex as PageBlocText::processText — matches [TAG args]content[/TAG].
+    static const QRegularExpression re(
+        QStringLiteral(R"(\[(\w+)([^\]]*)\](.*?)\[/\1\])"),
+        QRegularExpression::DotMatchesEverythingOption);
+
+    auto it = re.globalMatch(text);
+    while (it.hasNext()) {
+        const auto &m      = it.next();
+        const QString tag  = m.captured(1);
+        const AbstractShortCode *sc = forTag(QStringView{tag});
+        if (!sc) {
+            continue; // unknown tag — not our concern here
+        }
+        const QString fullBlock = m.captured(0);
+        const QString err = sc->tryValidate(QStringView{fullBlock});
+        if (!err.isEmpty()) {
+            return err;
+        }
+    }
+    return {};
+}

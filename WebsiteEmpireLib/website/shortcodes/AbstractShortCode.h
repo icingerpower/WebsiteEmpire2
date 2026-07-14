@@ -153,6 +153,23 @@ public:
     static const QHash<QString, const AbstractShortCode *> &ALL_SHORTCODES();
 
     /**
+     * Validates a raw shortcode block (e.g. "[TITLE level=\"1\"]…[/TITLE]") against
+     * this shortcode's argument definitions without throwing.
+     * Returns an empty string when the block is valid.
+     * Returns the first validation error message when invalid.
+     * Used by LauncherGeneration to reject AI-generated articles before saving.
+     */
+    QString tryValidate(QStringView text) const;
+
+    /**
+     * Scans text for every known shortcode and validates each one.
+     * Returns an empty string when all shortcodes are valid.
+     * Returns the first error message encountered otherwise.
+     * Unknown tags are silently skipped (they may be handled by other systems).
+     */
+    static QString validateAllInText(const QString &text);
+
+    /**
      * Self-registration helper — construct one via DECLARE_SHORTCODE at file scope.
      * Q_ASSERT fires if the tag is already registered.
      */
