@@ -160,12 +160,16 @@ QString GenPageQueue::buildStep2Prompt() const
         "    Otherwise remove the bracketed number entirely.\n\n"
         "Images — use IMGFIX for every image reference:\n"
         "  [IMGFIX id=\"unique-slug\" fileName=\"image.jpg\" alt=\"description\"][/IMGFIX]\n"
-        "  [IMGFIX id=\"unique-slug\" fileName=\"diagram.svg\" alt=\"description\"][/IMGFIX]\n"
+        "  [IMGFIX id=\"unique-slug\" fileName=\"diagram.svg\" alt=\"description\"\n"
+        "          caption=\"short visible caption\"][/IMGFIX]\n"
         "  RULES:\n"
         "  • Place images at the most relevant position in the content flow\n"
         "    (not all grouped at the top or bottom).\n"
         "  • Each image must have a unique id (use a short descriptive slug).\n"
-        "  • SVG images are fully supported; use the same IMGFIX syntax.\n"
+        "  • caption is optional — a short sentence displayed under the image.\n"
+        "  • SVG images are fully supported; use the same IMGFIX syntax. An article\n"
+        "    may contain more than one SVG when each covers a genuinely distinct,\n"
+        "    useful visual — do not pad the article with redundant diagrams.\n"
         "  • If your previous response contained inline SVG code (<svg>…</svg>),\n"
         "    replace it with an IMGFIX shortcode referencing a .svg file name.\n\n"
 
@@ -266,12 +270,16 @@ QString GenPageQueue::buildCombinedPrompt(const PageRecord &page,
         "    Otherwise remove the bracketed number entirely.\n\n"
         "Images — use IMGFIX for every image reference:\n"
         "  [IMGFIX id=\"unique-slug\" fileName=\"image.jpg\" alt=\"description\"][/IMGFIX]\n"
-        "  [IMGFIX id=\"unique-slug\" fileName=\"diagram.svg\" alt=\"description\"][/IMGFIX]\n"
+        "  [IMGFIX id=\"unique-slug\" fileName=\"diagram.svg\" alt=\"description\"\n"
+        "          caption=\"short visible caption\"][/IMGFIX]\n"
         "  RULES:\n"
         "  • Place images at the most relevant position in the content flow\n"
         "    (not all grouped at the top or bottom).\n"
         "  • Each image must have a unique id (use a short descriptive slug).\n"
-        "  • SVG images are fully supported; use the same IMGFIX syntax.\n"
+        "  • caption is optional — a short sentence displayed under the image.\n"
+        "  • SVG images are fully supported; use the same IMGFIX syntax. An article\n"
+        "    may contain more than one SVG when each covers a genuinely distinct,\n"
+        "    useful visual — do not pad the article with redundant diagrams.\n"
         "  • If you include inline SVG code (<svg>…</svg>), replace it with an\n"
         "    IMGFIX shortcode referencing a .svg file name instead.\n\n"
 
@@ -344,21 +352,34 @@ QString GenPageQueue::buildContentPrompt(const PageRecord &page,
         "    reference as plain text (e.g. \"According to the WHO report (2023)\").\n\n"
         "Images — use IMGFIX for every image reference:\n"
         "  [IMGFIX id=\"unique-slug\" fileName=\"image.jpg\" alt=\"description\"][/IMGFIX]\n"
+        "  [IMGFIX id=\"unique-slug\" fileName=\"diagram.svg\" alt=\"description\"\n"
+        "          caption=\"short visible caption\"][/IMGFIX]\n"
         "  RULES:\n"
         "  • Each image must have a unique id (use a short descriptive slug).\n"
         "  • Use fileName=\"name.svg\" for diagrams and charts; \"name.jpg\" for photos.\n"
+        "  • caption is optional — a short sentence displayed under the image.\n"
+        "    Omit it when the alt text already says enough.\n"
         "  • NEVER write raw SVG, HTML, or XML anywhere in the article body.\n"
         "  • Any diagram, chart, or illustration MUST be represented solely as an\n"
         "    [IMGFIX] shortcode — the SVG will be generated separately.\n\n"
         "ABSOLUTE RULES (violations will corrupt the output):\n"
         "  • The article body must contain NO raw HTML, SVG, or XML tags whatsoever.\n"
         "  • Only the shortcodes listed above are permitted.\n"
+        "  • NEVER write Markdown syntax of any kind — no pipe-delimited tables\n"
+        "    (\"| col | col |\"), no \"| --- | --- |\" separator rows, no \"**bold**\",\n"
+        "    no \"[NEWLINE]\" or similar placeholder tokens for line breaks. If content\n"
+        "    would naturally be a table, write it as plain sentences or as separate\n"
+        "    [TITLE level=\"3\"] items instead — there is no table shortcode.\n"
         "  • The article must begin with [TITLE level=\"1\"]…[/TITLE] — the very first\n"
         "    characters must be the opening bracket of this shortcode.\n"
         "  • If the additional instructions above contain an SVG image section, insert\n"
-        "    ONE [IMGFIX id=\"slug\" fileName=\"name.svg\" alt=\"...\"][/IMGFIX] shortcode\n"
-        "    at the right location. Do NOT write any <svg>…</svg> code here — the SVG\n"
-        "    image is generated in a separate step.\n\n"
+        "    the [IMGFIX id=\"slug\" fileName=\"name.svg\" alt=\"...\"][/IMGFIX] shortcode(s)\n"
+        "    it asks for — one required shortcode plus, when those instructions allow\n"
+        "    it, a small number of additional distinct SVG shortcodes for genuinely\n"
+        "    useful extra visuals. Give every shortcode a unique id and fileName, and\n"
+        "    write its alt text to clearly describe THAT SPECIFIC visual (this alt is\n"
+        "    the only brief the image will be generated from later). Do NOT write any\n"
+        "    <svg>…</svg> code here — every SVG image is generated in a separate step.\n\n"
         "Return ONLY the article content — no preamble, no meta-commentary about the task.");
 
     return prompt;
@@ -581,6 +602,77 @@ QString GenPageQueue::insertImgFix(const QString &articleText, const QString &im
     return articleText.left(lastPos)
            + imgFixCode + QStringLiteral("\n\n")
            + articleText.mid(lastPos);
+}
+
+QString GenPageQueue::fixSlugTitle(const QString &articleText,
+                                     const QString &permalink,
+                                     const QString &endPermalink)
+{
+    static const QRegularExpression reTitleBlock(
+        QStringLiteral(R"(\[TITLE level="1"\](.*?)\[/TITLE\])"),
+        QRegularExpression::DotMatchesEverythingOption);
+
+    const auto titleMatch = reTitleBlock.match(articleText);
+    if (!titleMatch.hasMatch()) {
+        return articleText;
+    }
+    const QString titleText = titleMatch.captured(1);
+
+    // Slug with and without the leading '/', so either form is matched.
+    const QString slugWithSlash = permalink;
+    const QString slugNoSlash   = permalink.startsWith(QLatin1Char('/'))
+                                     ? permalink.mid(1) : permalink;
+    if (slugNoSlash.isEmpty()) {
+        return articleText;
+    }
+
+    int prefixLen = -1;
+    if (titleText.startsWith(slugWithSlash, Qt::CaseInsensitive)) {
+        prefixLen = slugWithSlash.size();
+    } else if (titleText.startsWith(slugNoSlash, Qt::CaseInsensitive)) {
+        prefixLen = slugNoSlash.size();
+    }
+    if (prefixLen < 0) {
+        return articleText;
+    }
+
+    // Topic slug: the permalink without its leading '/' and, when endPermalink
+    // is configured and the slug ends with "-<endPermalink>", without that
+    // strategy-added suffix either — isolating the actual subject.
+    QString topicSlug = slugNoSlash;
+    if (!endPermalink.isEmpty()) {
+        const QString suffix = QLatin1Char('-') + endPermalink;
+        if (topicSlug.endsWith(suffix, Qt::CaseInsensitive)) {
+            topicSlug.chop(suffix.size());
+        }
+    }
+    if (topicSlug.isEmpty()) {
+        return articleText;
+    }
+
+    // Title-case the topic slug: hyphens → spaces, capitalize each word.
+    QStringList words = topicSlug.split(QLatin1Char('-'), Qt::SkipEmptyParts);
+    for (QString &word : words) {
+        if (!word.isEmpty()) {
+            word[0] = word[0].toUpper();
+        }
+    }
+    const QString humanizedTopic = words.join(QLatin1Char(' '));
+
+    // Drop only the whitespace immediately following the matched slug prefix.
+    // A dash or colon right after it (e.g. "- 4 Genes..." or ": Subtitle") is
+    // legitimate title punctuation the AI intended to keep, not slug noise.
+    static const QRegularExpression reLeadingSpace(QStringLiteral(R"(^\s+)"));
+    QString remainder = titleText.mid(prefixLen);
+    remainder.remove(reLeadingSpace);
+
+    const QString fixedTitle = remainder.isEmpty()
+        ? humanizedTopic
+        : humanizedTopic + QLatin1Char(' ') + remainder;
+
+    QString result = articleText;
+    result.replace(titleMatch.capturedStart(1), titleMatch.capturedLength(1), fixedTitle);
+    return result;
 }
 
 QList<GenPageQueue::ImgFixRef> GenPageQueue::parseImgFixRefs(const QString &articleText)

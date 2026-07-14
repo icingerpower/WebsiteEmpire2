@@ -212,6 +212,29 @@ public:
                                  const QString &imgFixCode);
 
     /**
+     * Fixes a known AI mistake where the first [TITLE level="1"]...[/TITLE]
+     * begins with the raw permalink slug instead of a human-readable topic
+     * name — e.g. "[TITLE level=\"1\"]/osteoarthritis-dos-and-dont Dos and
+     * Don'ts: ...[/TITLE]" instead of "[TITLE level=\"1\"]Osteoarthritis Dos
+     * and Don'ts: ...[/TITLE]".
+     *
+     * When the title text starts with permalink (with or without its leading
+     * '/', case-insensitive), the matched prefix and any following separator
+     * punctuation are replaced with a humanized topic name: permalink with
+     * the leading '/' and, when endPermalink is non-empty and the slug ends
+     * with "-<endPermalink>", that trailing suffix removed too, then title-
+     * cased with hyphens turned into spaces. Stripping the suffix isolates
+     * the actual subject from the strategy-added wording (e.g. "dos-and-
+     * dont", "genes-biomarkers"), which is unrelated to the topic itself.
+     *
+     * Returns articleText unchanged when the title does not start with the
+     * permalink slug, or when no [TITLE level="1"] shortcode is found.
+     */
+    static QString fixSlugTitle(const QString &articleText,
+                                 const QString &permalink,
+                                 const QString &endPermalink);
+
+    /**
      * Result of parseSvgDelimitedResponse().
      * svgCode is empty when no valid SVG was found in the response.
      * insertAfter is empty when no insertion hint was provided; callers should

@@ -433,6 +433,90 @@ private slots:
         QCOMPARE(pending, 0); // excluded by page_data check
         QCOMPARE(total - pending, 1); // the old (wrong) done count
     }
+
+    // ==== GenPageQueue::fixSlugTitle() =======================================
+
+    // Reproduces the Healybio osteoarthritis regression: Antigravity wrote the
+    // raw permalink slug (with the "-dos-and-dont" endPermalink suffix) as the
+    // start of the title instead of a human-readable topic name.
+    void test_genworkflow_fixslugtitle_healybio_regression()
+    {
+        const QString articleText = QStringLiteral(
+            "[TITLE level=\"1\"]/osteoarthritis-dos-and-dont Dos and Don'ts: "
+            "What to Eat, Avoid, Track, and Do Next[/TITLE]Body text.");
+        const QString fixed = GenPageQueue::fixSlugTitle(
+            articleText, QStringLiteral("/osteoarthritis-dos-and-dont"),
+            QStringLiteral("dos-and-dont"));
+        QVERIFY(fixed.contains(QStringLiteral(
+            "[TITLE level=\"1\"]Osteoarthritis Dos and Don'ts: "
+            "What to Eat, Avoid, Track, and Do Next[/TITLE]")));
+    }
+
+    // Reproduces the earlier-observed variant: slug prefix followed by a
+    // dash separator instead of a plain space.
+    void test_genworkflow_fixslugtitle_dash_separator_variant()
+    {
+        const QString articleText = QStringLiteral(
+            "[TITLE level=\"1\"]/tularemia-genes-biomarkers - 4 Genes And 5 "
+            "Biomarkers To Track[/TITLE]Body text.");
+        const QString fixed = GenPageQueue::fixSlugTitle(
+            articleText, QStringLiteral("/tularemia-genes-biomarkers"),
+            QStringLiteral("genes-biomarkers"));
+        QVERIFY(fixed.contains(QStringLiteral(
+            "[TITLE level=\"1\"]Tularemia - 4 Genes And 5 Biomarkers To Track[/TITLE]")));
+    }
+
+    void test_genworkflow_fixslugtitle_no_endpermalink_uses_whole_slug()
+    {
+        const QString articleText = QStringLiteral(
+            "[TITLE level=\"1\"]/osteoarthritis Everything You Need to Know[/TITLE]Body.");
+        const QString fixed = GenPageQueue::fixSlugTitle(
+            articleText, QStringLiteral("/osteoarthritis"), QString{});
+        QVERIFY(fixed.contains(QStringLiteral(
+            "[TITLE level=\"1\"]Osteoarthritis Everything You Need to Know[/TITLE]")));
+    }
+
+    void test_genworkflow_fixslugtitle_slug_without_leading_slash_matched()
+    {
+        const QString articleText = QStringLiteral(
+            "[TITLE level=\"1\"]osteoarthritis-dos-and-dont Dos and Don'ts[/TITLE]Body.");
+        const QString fixed = GenPageQueue::fixSlugTitle(
+            articleText, QStringLiteral("/osteoarthritis-dos-and-dont"),
+            QStringLiteral("dos-and-dont"));
+        QVERIFY(fixed.contains(QStringLiteral(
+            "[TITLE level=\"1\"]Osteoarthritis Dos and Don'ts[/TITLE]")));
+    }
+
+    void test_genworkflow_fixslugtitle_clean_title_unchanged()
+    {
+        const QString articleText = QStringLiteral(
+            "[TITLE level=\"1\"]Osteoarthritis Dos and Don'ts[/TITLE]Body text.");
+        const QString fixed = GenPageQueue::fixSlugTitle(
+            articleText, QStringLiteral("/osteoarthritis-dos-and-dont"),
+            QStringLiteral("dos-and-dont"));
+        QCOMPARE(fixed, articleText);
+    }
+
+    void test_genworkflow_fixslugtitle_no_title_shortcode_unchanged()
+    {
+        const QString articleText = QStringLiteral("No title shortcode here at all.");
+        const QString fixed = GenPageQueue::fixSlugTitle(
+            articleText, QStringLiteral("/osteoarthritis-dos-and-dont"),
+            QStringLiteral("dos-and-dont"));
+        QCOMPARE(fixed, articleText);
+    }
+
+    void test_genworkflow_fixslugtitle_preserves_rest_of_article()
+    {
+        const QString articleText = QStringLiteral(
+            "[TITLE level=\"1\"]/osteoarthritis-dos-and-dont Dos and Don'ts[/TITLE]"
+            "[TITLE level=\"2\"]Section[/TITLE]Body content unrelated to the title.");
+        const QString fixed = GenPageQueue::fixSlugTitle(
+            articleText, QStringLiteral("/osteoarthritis-dos-and-dont"),
+            QStringLiteral("dos-and-dont"));
+        QVERIFY(fixed.contains(QStringLiteral(
+            "[TITLE level=\"2\"]Section[/TITLE]Body content unrelated to the title.")));
+    }
 };
 
 QTEST_MAIN(Test_GenerationWorkflow)
