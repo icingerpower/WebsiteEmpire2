@@ -1,0 +1,203 @@
+{% load i18n %}
+{% comment %}
+AI sales-assistant chat widget (ADR-024 Decision 9, TICKET-038).
+
+Rendered via chat.slot_provider.ChatWidgetSlotProvider into {% render_slot "chat_launcher" %}
+(storefront/templates/storefront/base.html) — only when the store has opted in
+(is_enabled + subprocessor_terms_accepted_at) and the kill switch is off.
+
+Vanilla JS, plain CSS, no build step (ADR-024 Decision 9, T029-B). Uses fetch()
++ ReadableStream to consume the SSE reply from POST /chat/message/, falling
+back to a second request with ?stream=0 (buffered JSON, identical final text)
+if the stream read fails partway through.
+
+data-testid="chat-widget" — DOM contract for tests, matching the convention
+used by every other slot partial (ADR-012 D9).
+
+Permanent AI disclaimer (ADR-024 Decision 7 / AC-CHAT-05): rendered inside the
+panel header on every open, never removable by the conversation.
+{% endcomment %}
+<div class="chat-widget" data-testid="chat-widget">
+  <button type="button" class="chat-widget__toggle" data-testid="chat-widget-toggle" aria-expanded="false">
+    {% translate "Chat with us" %}
+  </button>
+
+  <div class="chat-widget__panel" data-testid="chat-widget-panel" hidden>
+    <div class="chat-widget__header">
+      <span>{% translate "Store assistant" %}</span>
+      <button type="button" class="chat-widget__close" data-testid="chat-widget-close" aria-label="{% translate 'Close' %}">&times;</button>
+    </div>
+    <p class="chat-widget__disclaimer" data-testid="chat-widget-disclaimer">
+      {% translate "This chat is answered by an AI assistant, not a person. It cannot access your order or account." %}
+    </p>
+    <div class="chat-widget__messages" data-testid="chat-widget-messages" aria-live="polite"></div>
+    <p class="chat-widget__unavailable" data-testid="chat-widget-unavailable" hidden>
+      {% translate "The assistant is temporarily unavailable. Please use the contact form instead." %}
+    </p>
+    <form class="chat-widget__form" data-testid="chat-widget-form">
+      <input type="text" name="message" maxlength="2000" data-testid="chat-widget-input"
+             placeholder="{% translate 'Ask a question…' %}" autocomplete="off">
+      <button type="submit" data-testid="chat-widget-send">{% translate "Send" %}</button>
+    </form>
+  </div>
+</div>
+
+<style>
+  .chat-widget { position: fixed; right: 16px; bottom: 16px; z-index: 9000; font-family: inherit; }
+  .chat-widget__toggle {
+    border-radius: 999px; padding: 10px 18px; border: none; cursor: pointer;
+    background: var(--p-primary, #1a1a1a); color: #fff; font-size: 14px;
+  }
+  .chat-widget__panel {
+    position: absolute; right: 0; bottom: 52px; width: 320px; max-height: 480px;
+    display: flex; flex-direction: column; background: #fff; border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18); overflow: hidden;
+  }
+  .chat-widget__header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 12px; background: var(--p-primary, #1a1a1a); color: #fff; font-size: 14px;
+  }
+  .chat-widget__close { background: none; border: none; color: #fff; font-size: 18px; cursor: pointer; }
+  .chat-widget__disclaimer { font-size: 11px; color: #666; padding: 6px 12px; margin: 0; }
+  .chat-widget__messages { flex: 1; overflow-y: auto; padding: 8px 12px; font-size: 13px; }
+  .chat-widget__messages .msg { margin-bottom: 8px; }
+  .chat-widget__messages .msg--user { text-align: right; color: #1a1a1a; }
+  .chat-widget__messages .msg--assistant { color: #333; }
+  .chat-widget__unavailable { font-size: 12px; color: #a33; padding: 6px 12px; margin: 0; }
+  .chat-widget__form { display: flex; border-top: 1px solid #eee; }
+  .chat-widget__form input { flex: 1; border: none; padding: 10px; font-size: 13px; }
+  .chat-widget__form button { border: none; background: var(--p-primary, #1a1a1a); color: #fff; padding: 0 14px; cursor: pointer; }
+</style>
+
+<script>
+(function () {
+  "use strict";
+  var root = document.querySelector('[data-testid="chat-widget"]');
+  if (!root) { return; }
+
+  var toggleBtn = root.querySelector('[data-testid="chat-widget-toggle"]');
+  var closeBtn = root.querySelector('[data-testid="chat-widget-close"]');
+  var panel = root.querySelector('[data-testid="chat-widget-panel"]');
+  var messagesEl = root.querySelector('[data-testid="chat-widget-messages"]');
+  var unavailableEl = root.querySelector('[data-testid="chat-widget-unavailable"]');
+  var form = root.querySelector('[data-testid="chat-widget-form"]');
+  var input = root.querySelector('[data-testid="chat-widget-input"]');
+
+  var sessionToken = null;
+
+  function csrfToken() {
+    var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : "";
+  }
+
+  function appendMessage(role, text) {
+    var el = document.createElement("div");
+    el.className = "msg msg--" + role;
+    el.textContent = text;
+    messagesEl.appendChild(el);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return el;
+  }
+
+  function showUnavailable() {
+    unavailableEl.hidden = false;
+    form.hidden = true;
+  }
+
+  function ensureSession() {
+    if (sessionToken) { return Promise.resolve(sessionToken); }
+    return fetch("{% url 'chat:session' %}", {
+      method: "POST",
+      headers: { "X-CSRFToken": csrfToken(), "Content-Type": "application/json" },
+      body: "{}"
+    }).then(function (resp) { return resp.json(); }).then(function (data) {
+      if (!data.ok) { showUnavailable(); return null; }
+      sessionToken = data.session_token;
+      return sessionToken;
+    }).catch(function () { showUnavailable(); return null; });
+  }
+
+  function sendBuffered(token, text, assistantEl) {
+    return fetch("{% url 'chat:message' %}?stream=0", {
+      method: "POST",
+      headers: { "X-CSRFToken": csrfToken(), "Content-Type": "application/json" },
+      body: JSON.stringify({ session_token: token, message: text })
+    }).then(function (resp) { return resp.json(); }).then(function (data) {
+      if (!data.ok) { assistantEl.textContent = "…"; showUnavailable(); return; }
+      assistantEl.textContent = data.message;
+    }).catch(function () { showUnavailable(); });
+  }
+
+  function sendStreaming(token, text, assistantEl) {
+    return fetch("{% url 'chat:message' %}", {
+      method: "POST",
+      headers: { "X-CSRFToken": csrfToken(), "Content-Type": "application/json" },
+      body: JSON.stringify({ session_token: token, message: text })
+    }).then(function (resp) {
+      if (!resp.ok || !resp.body || !resp.body.getReader) {
+        return sendBuffered(token, text, assistantEl);
+      }
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = "";
+      var accumulated = "";
+
+      function pump() {
+        return reader.read().then(function (result) {
+          if (result.done) { return; }
+          buffer += decoder.decode(result.value, { stream: true });
+          var frames = buffer.split("\n\n");
+          buffer = frames.pop();
+          frames.forEach(function (frame) {
+            var lines = frame.split("\n");
+            var eventType = "";
+            var dataLine = "";
+            lines.forEach(function (line) {
+              if (line.indexOf("event: ") === 0) { eventType = line.slice(7); }
+              if (line.indexOf("data: ") === 0) { dataLine = line.slice(6); }
+            });
+            if (!dataLine) { return; }
+            var payload;
+            try { payload = JSON.parse(dataLine); } catch (e) { return; }
+            if (eventType === "error") {
+              showUnavailable();
+            } else if (eventType !== "done") {
+              accumulated += (payload.text || "");
+              assistantEl.textContent = accumulated;
+            }
+          });
+          return pump();
+        });
+      }
+      return pump().catch(function () {
+        // Stream failed partway through — fall back to the buffered mode
+        // (ADR-024 Decision 9: automatic fallback to ?stream=0).
+        return sendBuffered(token, text, assistantEl);
+      });
+    }).catch(function () {
+      return sendBuffered(token, text, assistantEl);
+    });
+  }
+
+  toggleBtn.addEventListener("click", function () {
+    var isOpen = !panel.hidden;
+    panel.hidden = isOpen;
+    toggleBtn.setAttribute("aria-expanded", String(!isOpen));
+    if (!isOpen) { ensureSession(); }
+  });
+  closeBtn.addEventListener("click", function () { panel.hidden = true; toggleBtn.setAttribute("aria-expanded", "false"); });
+
+  form.addEventListener("submit", function (evt) {
+    evt.preventDefault();
+    var text = (input.value || "").trim();
+    if (!text) { return; }
+    input.value = "";
+    appendMessage("user", text);
+    var assistantEl = appendMessage("assistant", "…");
+    ensureSession().then(function (token) {
+      if (!token) { return; }
+      sendStreaming(token, text, assistantEl);
+    });
+  });
+})();
+</script>

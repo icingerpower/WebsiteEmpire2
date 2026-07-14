@@ -1,0 +1,67 @@
+{% extends "storefront/base_checkout.html" %}
+{% load i18n static %}
+
+{% block seo_head %}
+  {{ block.super }}
+  <title>{% trans "Payment" %} | {{ request.store.name|default:"Store" }}</title>
+  <meta name="robots" content="noindex, nofollow">
+{% endblock seo_head %}
+
+{% block breadcrumbs %}{% endblock breadcrumbs %}
+
+{% block main_content %}
+<div class="checkout-payment-page" data-testid="checkout-payment-page"
+     data-client-secret="{{ client_secret }}"
+     data-processor-type="{{ processor_type }}"
+     data-return-url="{{ payment_return_url }}">
+
+  <h1>{% trans "Complete your payment" %}</h1>
+
+  <p class="price-tax-note">{% trans "All taxes are included in the displayed prices." %}</p>
+
+  {# Stripe Elements mount point — wired by checkout.js on page load (non-AJAX pre-loaded path).
+     data-publishable-key is read by checkout.js to initialise Stripe (PY-003).
+     data-client-secret is on the parent container; checkout.js reads it from there. #}
+  <div id="payment-element"
+       data-testid="payment-element"
+       {% if publishable_key %}data-publishable-key="{{ publishable_key }}"{% endif %}></div>
+
+  {# Payment error / message display — populated by checkout.js on confirm failure #}
+  <div id="payment-message" role="alert" aria-live="polite"></div>
+  <div id="payment-errors" role="alert" aria-live="polite"></div>
+
+  {# EC-010: message when payment JS is blocked or unavailable #}
+  <noscript>
+    <p class="checkout-payment-page__noscript-notice" data-testid="payment-noscript-notice">
+      {% trans "Payment cannot be loaded without JavaScript. Please enable JavaScript in your browser to complete your purchase." %}
+    </p>
+  </noscript>
+
+  {# Pay button — wired by checkout.js for the pre-loaded client_secret path.
+     Only rendered when a publishable_key is available (Stripe store). #}
+  {% if publishable_key %}
+  <button id="payment-fallback-submit" type="button"
+          class="btn btn--primary btn--pay"
+          data-testid="payment-fallback-submit">
+    {% trans "Pay now" %}
+  </button>
+  {% endif %}
+
+  {% if order %}
+  <p class="checkout-payment-page__order-ref">
+    {% trans "Order" %}: {{ order.order_number }}
+  </p>
+  {% endif %}
+
+</div>
+{% endblock main_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+{% if publishable_key %}
+{# Stripe SDK — required for Elements initialization (PY-003) #}
+<script src="https://js.stripe.com/v3/"></script>
+{# Checkout JS — mounts Elements using the pre-loaded data-client-secret (non-AJAX fallback) #}
+<script src="{% static 'storefront/js/checkout.js' %}"></script>
+{% endif %}
+{% endblock extra_scripts %}

@@ -1,0 +1,42 @@
+{% extends "emails/base.html" %}
+
+{% block subject %}Your order #{{ order.order_number }} has shipped{% endblock %}
+
+{% block content %}
+<p>Hi {{ customer_name }},</p>
+<p>Great news — your order is on its way!</p>
+
+<div class="tracking-box">
+  <strong>Tracking information</strong><br><br>
+  {% if tracking.carrier %}<strong>Carrier:</strong> {{ tracking.carrier }}<br>{% endif %}
+  <strong>Tracking number:</strong> {{ tracking.number }}<br>
+  {% if tracking.url %}
+  <br><a href="{{ tracking.url }}" class="btn" style="display:inline-block;background-color:#2563eb;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;">Track your package</a>
+  {% endif %}
+</div>
+
+<h3 style="margin-top:24px;margin-bottom:8px;font-size:15px;color:#555;">Items in this shipment</h3>
+<table class="order-table">
+  <thead>
+    <tr>
+      <th>Item</th>
+      <th>Qty</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in order.items %}
+    <tr>
+      <td>
+        {{ item.title }}
+        {% if item.variant %}<br><small style="color:#888">{{ item.variant }}</small>{% endif %}
+      </td>
+      <td>{{ item.quantity }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<p style="margin-top:24px;color:#666;font-size:14px;">
+  If you have any questions about your shipment, reply to this email.
+</p>
+{% endblock %}

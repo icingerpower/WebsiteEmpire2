@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Resume Your Cart{% if store %} — {{ store.name }}{% endif %}</title>
+</head>
+<body>
+    <main>
+        <h1>Your Saved Cart</h1>
+
+        {% if has_stock_warning %}
+        <div class="stock-warning" role="alert">
+            One or more items in your cart are currently out of stock.
+            Please review your cart before proceeding.
+        </div>
+        {% endif %}
+
+        {% if coupon_valid and discount_code %}
+        <div class="coupon-notice">
+            Discount code <strong>{{ discount_code.code }}</strong> has been applied.
+        </div>
+        {% endif %}
+
+        <ul class="cart-items">
+            {% for entry in items %}
+            <li class="cart-item{% if not entry.in_stock %} out-of-stock{% endif %}">
+                <span class="item-name">{{ entry.item.variant }}</span>
+                <span class="item-price">{{ entry.current_price }}</span>
+                <span class="item-qty">× {{ entry.item.quantity }}</span>
+                {% if not entry.in_stock %}
+                <span class="stock-badge" role="alert">Out of stock</span>
+                {% endif %}
+            </li>
+            {% empty %}
+            <li>Your cart is empty.</li>
+            {% endfor %}
+        </ul>
+
+        {% if not has_stock_warning %}
+        <form method="POST" action=".">
+            {% csrf_token %}
+            <input type="hidden" name="token" value="{{ resume_token }}">
+            <button type="submit" class="btn-checkout">Proceed to Checkout</button>
+        </form>
+        {% else %}
+        <p>Please update your cart to remove out-of-stock items before proceeding.</p>
+        {% endif %}
+    </main>
+</body>
+</html>

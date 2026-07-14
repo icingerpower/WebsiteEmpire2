@@ -1,0 +1,24 @@
+{% extends "emails/base.html" %}
+
+{% block subject %}You're invited to join {{ store.name }}{% endblock %}
+
+{% block content %}
+<p>Hi {{ invited_name }},</p>
+{% if accept_url %}
+<p>
+  You've been invited to help manage <strong>{{ store.name }}</strong>.
+  Click the button below to set your password and get started.
+</p>
+<p>
+  <a href="{{ accept_url }}" class="btn">Set your password</a>
+</p>
+<p style="color:#888;font-size:13px;">
+  If you weren't expecting this invitation, you can ignore this email.
+</p>
+{% else %}
+<p>
+  You now have access to manage <strong>{{ store.name }}</strong> with your
+  existing account ({{ invited_name }}). Log in as usual to get started.
+</p>
+{% endif %}
+{% endblock %}

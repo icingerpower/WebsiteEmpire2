@@ -1,0 +1,20 @@
+{% comment %}
+Footer partial (ADR-012 D3, TICKET-029 Phase 1 skeleton; ADR-018 D6 nav links;
+ADR-025 D5 "Cookie preferences" manage control, TICKET-049).
+
+Phase 2 TODO still open: language switcher (data-testid="language-switcher"),
+newsletter sign-up (data-testid="newsletter-email").
+{% endcomment %}
+{% load i18n pages_tags consent_tags %}
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    {# Language switcher — Phase 2 #}
+    <nav class="site-footer__links" aria-label="{% trans 'Footer navigation' %}">
+      {% static_page_links "footer" %}
+    </nav>
+    {% consent_manage_button %}
+    <p class="site-footer__copy">
+      &copy; {{ request.store.name|default:"Store" }}
+    </p>
+  </div>
+</footer>

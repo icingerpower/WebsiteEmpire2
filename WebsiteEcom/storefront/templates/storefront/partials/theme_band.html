@@ -1,0 +1,13 @@
+{% comment %}
+Theme band partial — default shared fallback (ADR-012 D3, TICKET-029 Phase 2).
+
+Theme-specific overrides live at: <theme_key>/partials/theme_band.html
+  general/theme_band.html  → trust icons, security badges, social proof
+  b2b/theme_band.html      → trust icons, certifications, request-a-quote CTA
+  fashion/theme_band.html  → lookbook imagery, editorial content
+
+Phase 4 will populate per-theme override templates.
+{% endcomment %}
+<section class="theme-band" data-testid="theme-band">
+  {# Placeholder — overridden by per-theme template or left empty. #}
+</section>

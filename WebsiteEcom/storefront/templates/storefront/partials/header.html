@@ -1,0 +1,31 @@
+{% comment %}
+Header partial (ADR-012 D3, TICKET-029 Phase 2).
+
+Structural layout (left-logo vs centered-logo) is driven by the
+--p-header-layout CSS token from theme.css/customization, NOT by template forking.
+
+data-testid="cart-open" — DOM contract (ADR-012 D9), Phase 2.
+{% endcomment %}
+{% load i18n permalinks_tags storefront_tags pages_tags %}
+<header class="site-header{% if theme_ctx.structural.sticky_header %} site-header--sticky{% endif %}">
+  <div class="site-header__inner">
+    {# Logo — Phase 4 will render theme_ctx.customization.logo via T003 pipeline.
+       permalink_url '' builds the home path with the correct language prefix (/fr/ etc.). #}
+    <a href="{% permalink_url '' %}" class="site-header__logo" aria-label="{% trans 'Home' %}">
+      <span>{{ request.store.name|default:"Store" }}</span>
+    </a>
+
+    {# Navigation — static-page links driven by StaticPage.show_in_header (ADR-018 D6). #}
+    <nav class="site-header__nav" aria-label="{% trans 'Main navigation' %}">
+      {% static_page_links "header" %}
+    </nav>
+
+    {# Language switcher — only rendered when the store has 2+ enabled languages (TH-140). #}
+    {% language_switcher %}
+
+    {# Currency picker (ADR-023 §4) — only rendered when the store offers 2+
+       distinct display currencies. currency_tags is a template "builtin"
+       (webecom/settings/base.py TEMPLATES OPTIONS), so no {% load %} needed. #}
+    {% currency_picker %}
+  </div>
+</header>

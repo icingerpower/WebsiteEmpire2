@@ -1,0 +1,7 @@
+{% comment %}
+Wrapper for engagement.widgets.OverlayThemeSelect (admin-015-02/03 preview
+grid). Mirrors django/forms/widgets/multiple_input.html's optgroup loop but
+lays the options out as a CSS grid of cards instead of a <ul>/<li> list.
+Card styling lives in overlay_theme_option.html so this file only owns layout.
+{% endcomment %}
+{% with id=widget.attrs.id %}<div class="lc-theme-grid"{% if id %} id="{{ id }}"{% endif %}>{% for group, options, index in widget.optgroups %}{% for option in options %}{% include option.template_name with widget=option %}{% endfor %}{% endfor %}</div>{% endwith %}

@@ -1,0 +1,75 @@
+/*
+ * Fashion theme tokens (TICKET-029 Phase 4).
+ *
+ * Fashion & apparel theme: editorial, lookbook feel, centered logo.
+ * Card aspect ratio: 3:4 (tall portrait). Minimal borders. Gold accent.
+ * hover-second-image is on by default (structural toggle in customization_json).
+ */
+
+:root {
+  /* Colors */
+  --color-primary: #0a0a0a;
+  --color-primary-contrast: #ffffff;
+  --color-accent: #c9a96e;
+  --color-background: #ffffff;
+  --color-surface: #fafafa;
+  --color-text: #0a0a0a;
+  --color-text-muted: #888888;
+  --color-border: #e8e8e8;
+  --color-success: #2e7d32;
+  --color-error: #b71c1c;
+  --color-badge: #c9a96e;
+  --color-announcement: #0a0a0a;
+
+  /* Typography */
+  --font-heading: 'Playfair Display', 'Georgia', serif;
+  --font-body: 'Montserrat', system-ui, sans-serif;
+  --font-size-base: 15px;
+  --line-height-base: 1.7;
+
+  /* Spacing — generous for editorial breathing room */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 20px;
+  --spacing-lg: 40px;
+  --spacing-xl: 80px;
+
+  /* Product card — tall portrait, no border radius, no shadow */
+  --card-aspect-ratio: 3/4;
+  --card-radius: 0;
+  --card-shadow: none;
+
+  /* Header — centered logo variant */
+  --header-height: 72px;
+  --header-bg: #ffffff;
+  --header-logo-align: center;
+
+  /* Buttons — square (no radius) */
+  --btn-radius: 0;
+  --btn-primary-bg: var(--color-primary);
+  --btn-primary-text: var(--color-primary-contrast);
+  --btn-secondary-bg: transparent;
+  --btn-secondary-text: var(--color-primary);
+  --btn-secondary-border: var(--color-primary);
+
+  /* Forms */
+  --input-border: var(--color-border);
+  --input-radius: 0;
+  --input-bg: #ffffff;
+  --input-focus-border: var(--color-primary);
+
+  /* Pradize CSS custom-property aliases (--p-* whitelist from StoreThemeCustomization) */
+  --p-color-brand: var(--color-primary);
+  --p-color-accent: var(--color-accent);
+  --p-color-background: var(--color-background);
+  --p-color-surface: var(--color-surface);
+  --p-color-text: var(--color-text);
+  --p-color-muted-text: var(--color-text-muted);
+  --p-color-badge: var(--color-badge);
+  --p-color-announcement: var(--color-announcement);
+  --p-font-heading: var(--font-heading);
+  --p-font-body: var(--font-body);
+  --p-radius: var(--card-radius);
+  --p-header-layout: center;
+  --p-card-aspect-ratio: var(--card-aspect-ratio);
+}

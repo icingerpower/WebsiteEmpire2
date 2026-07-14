@@ -1,0 +1,35 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Uninstall Pixel" %} | {{ block.super }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans "Home" %}</a>
+  &rsaquo; <a href="{{ changelist_url }}">{% trans "Pixels" %}</a>
+  &rsaquo; {% trans "Uninstall" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>{% trans "Uninstall" %} {{ pixel.get_provider_display }}</h1>
+
+<div class="module" style="padding: 1em;">
+  <p>
+    {% blocktrans with name=pixel.get_provider_display %}
+    Are you sure you want to uninstall {{ name }}? The pixel will stop firing on
+    the storefront immediately. Its configuration is kept (not deleted) so you
+    can reinstall it later without re-entering the pixel ID.
+    {% endblocktrans %}
+  </p>
+
+  <form method="post" style="display: inline;">
+    {% csrf_token %}
+    <button type="submit" class="button" style="background: #c00; border-color: #c00; color: #fff; margin-right: 0.5em;">
+      {% trans "Uninstall" %}
+    </button>
+  </form>
+
+  <a href="{{ changelist_url }}" class="button">{% trans "Cancel" %}</a>
+</div>
+{% endblock %}

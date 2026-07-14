@@ -1,0 +1,33 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Regenerate Feed" %} | {{ block.super }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans "Home" %}</a>
+  &rsaquo; <a href="{{ changelist_url }}">{% trans "Catalog feeds" %}</a>
+  &rsaquo; {% trans "Regenerate" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>{% trans "Regenerate" %} {{ config.get_provider_display }}</h1>
+
+<div class="module" style="padding: 1em;">
+  <p>
+    {% blocktrans with name=config.get_provider_display %}
+    This marks every {{ name }} feed target dirty and queues an immediate
+    regeneration. Files are rebuilt in the background — this page does not
+    wait for generation to finish.
+    {% endblocktrans %}
+  </p>
+
+  <form method="post" style="display: inline;">
+    {% csrf_token %}
+    <button type="submit" class="button default">{% trans "Regenerate now" %}</button>
+  </form>
+
+  <a href="{{ changelist_url }}" class="button">{% trans "Cancel" %}</a>
+</div>
+{% endblock %}

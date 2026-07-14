@@ -1,0 +1,72 @@
+{% comment %}
+Product card partial (ADR-012 D3, TICKET-029 Phase 2, TH-081).
+
+Usage:
+  {% include "storefront/partials/product_card.html" with
+       product=item.product
+       translation=item.translation
+       slug=item.slug
+       image=item.image
+       default_variant=item.default_variant %}
+
+Variables expected:
+  product         — Product instance
+  translation     — ProductTranslation instance (or None)
+  slug            — URL path slug (without leading slash) for the product permalink
+  image           — ProductImage instance (or None) for the card thumbnail
+  default_variant — ProductVariant instance (or None) — preloaded by the view;
+                    NEVER use product.variants.first in the template (IsolationError).
+
+Fashion theme: data-second-image attribute carries the secondary image URL for
+JS-driven hover swap (progressive enhancement — works without JS too).
+{% endcomment %}
+{% load i18n permalinks_tags %}
+<article class="product-card" data-testid="product-card">
+  <a href="{% permalink_url slug %}" class="product-card__link" tabindex="-1" aria-hidden="true">
+    {% if image %}
+    <div class="product-card__image-wrapper"
+         style="aspect-ratio: var(--card-aspect-ratio, 4/5);">
+      <img src="{{ image.image.url }}"
+           alt="{{ image.alt_text|default:translation.title|default:product.title }}"
+           loading="lazy"
+           class="product-card__image"
+           {% if theme_ctx.key == "fashion" %}
+           data-second-image=""
+           {% endif %}>
+    </div>
+    {% else %}
+    <div class="product-card__image-placeholder"
+         style="aspect-ratio: var(--card-aspect-ratio, 4/5);"></div>
+    {% endif %}
+  </a>
+
+  <div class="product-card__body">
+    <h3 class="product-card__title">
+      <a href="{% permalink_url slug %}">
+        {{ translation.title|default:product.title }}
+      </a>
+    </h3>
+
+    {% comment %}
+    Price display — uses default_variant preloaded by the view (never a lazy DB call).
+    "All taxes included" note is mandatory adjacent to every price (extra-spec).
+    Converted to the shopper's resolved display currency (ADR-023 §4/§5) via the
+    display_price filter (currency_tags is a template "builtin" — no {% load %} needed).
+    {% endcomment %}
+    {% if default_variant %}
+    <div class="product-card__pricing" data-testid="card-pricing">
+      {% if default_variant.compare_at_price and default_variant.compare_at_price > default_variant.price %}
+      <s class="product-card__compare-at">{{ default_variant.compare_at_price|display_price:request }}</s>
+      {% endif %}
+      <span class="product-card__price">{{ default_variant.price|display_price:request }}</span>
+      <span class="product-card__taxes">{% trans "All taxes included" %}</span>
+      {% currency_conversion_note request %}
+    </div>
+    {% endif %}
+
+    {# Stars placeholder — T023 integration point. #}
+    <div class="product-card__stars" aria-label="No reviews yet" role="img">
+      <span class="product-card__stars-placeholder" aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9733;</span>
+    </div>
+  </div>
+</article>

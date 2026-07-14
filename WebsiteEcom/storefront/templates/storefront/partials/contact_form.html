@@ -1,0 +1,79 @@
+{% load i18n %}
+{#
+  Contact form partial (ADR-018 D3, T029-SP). Progressive enhancement: submits via
+  fetch() on JS-capable browsers with an inline success message; falls back to a
+  full-page POST + PRG redirect ('?sent=1') on browsers without JS.
+
+  Posts to the page's own URL (action="") — no new fixed route, no-JS friendly,
+  handled by storefront.views_pages.static_page_view's POST branch.
+#}
+<div class="contact-form" data-testid="contact-form">
+  <form method="post" action="" class="contact-form__form">
+    {% csrf_token %}
+
+    {# Honeypot (ADR-018 D3): hidden from humans, CSS-hidden + off-tab-order.
+       A bot that fills this in gets a silent success response — never a hint.
+       Field name is deliberately NOT "website"/"url"/"email2" (security audit
+       F7) — those are the well-known names spam bots explicitly skip. #}
+    <div class="contact-form__honeypot" style="position:absolute;left:-9999px;" aria-hidden="true">
+      <label for="contact-hp-company">Company</label>
+      <input type="text" id="contact-hp-company" name="hp_company" autocomplete="off" tabindex="-1">
+    </div>
+
+    <div class="contact-form__field">
+      <label class="contact-form__label" for="contact-name">{% trans "Your name" %}</label>
+      <input type="text" id="contact-name" name="name" class="contact-form__input"
+             placeholder="{% trans 'Full name' %}" data-testid="contact-name">
+    </div>
+
+    <div class="contact-form__field">
+      <label class="contact-form__label" for="contact-email">{% trans "Email address" %}</label>
+      <input type="email" id="contact-email" name="email" required class="contact-form__input"
+             placeholder="{% trans 'your@email.com' %}" data-testid="contact-email">
+    </div>
+
+    <div class="contact-form__field">
+      <label class="contact-form__label" for="contact-subject">{% trans "Subject" %}</label>
+      <input type="text" id="contact-subject" name="subject" class="contact-form__input"
+             data-testid="contact-subject">
+    </div>
+
+    <div class="contact-form__field">
+      <label class="contact-form__label" for="contact-message">{% trans "Message" %}</label>
+      <textarea id="contact-message" name="message" rows="5" required
+                class="contact-form__textarea" data-testid="contact-message"></textarea>
+    </div>
+
+    <button type="submit" class="contact-form__submit btn btn--primary" data-testid="contact-form-submit">
+      {% trans "Send message" %}
+    </button>
+  </form>
+  <p class="contact-form__success" hidden data-testid="contact-form-success">
+    {% trans "Thank you — your message has been sent." %}
+  </p>
+</div>
+<script>
+(function () {
+  var wrapper = document.querySelector('[data-testid="contact-form"]');
+  if (!wrapper) { return; }
+  var form = wrapper.querySelector('form');
+  if (!form) { return; }
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    fetch(form.action || window.location.pathname, {
+      method: 'POST',
+      body: new FormData(form),
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          form.hidden = true;
+          var success = wrapper.querySelector('[data-testid="contact-form-success"]');
+          if (success) { success.hidden = false; }
+        }
+      })
+      .catch(function () { form.submit(); }); /* fallback on network error */
+  });
+}());
+</script>

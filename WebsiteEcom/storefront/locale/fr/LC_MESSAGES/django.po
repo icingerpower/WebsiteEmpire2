@@ -1,0 +1,1052 @@
+# French translations for Pradize storefront (TH-044).
+# Translated via AiJob CLI pipeline (design-pattern §X: customer-visible content).
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Pradize storefront\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-11 09:47+0000\n"
+"PO-Revision-Date: 2026-07-10 06:34+0000\n"
+"Last-Translator: Pradize AiJob pipeline\n"
+"Language-Team: French\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: address_meta.py:249 forms_checkout.py:160 tests/test_i18n_fr.py:55
+msgid "State / Province"
+msgstr "État / Province"
+
+#: address_meta.py:250 address_meta.py:273 address_meta.py:327
+#: address_meta.py:363 address_meta.py:526 address_meta.py:535
+#: address_meta.py:547 address_meta.py:556 forms_checkout.py:166
+#: tests/test_i18n_fr.py:49
+msgid "Postal code"
+msgstr "Code postal"
+
+#: address_meta.py:263 address_meta.py:290 address_meta.py:299
+#: address_meta.py:344 address_meta.py:353 address_meta.py:393
+#: address_meta.py:421
+msgid "State"
+msgstr "État"
+
+#: address_meta.py:264
+msgid "ZIP code"
+msgstr "Code postal"
+
+#: address_meta.py:272 address_meta.py:317 address_meta.py:335
+#: address_meta.py:362 address_meta.py:402 address_meta.py:412
+#: address_meta.py:496 address_meta.py:534
+msgid "Province"
+msgstr "Province"
+
+#: address_meta.py:281
+msgid "State / Territory"
+msgstr "État / Territoire"
+
+#: address_meta.py:282 address_meta.py:354 address_meta.py:375
+#: address_meta.py:403 address_meta.py:413 address_meta.py:517
+msgid "Postcode"
+msgstr "Code postal"
+
+#: address_meta.py:291 address_meta.py:309 address_meta.py:336
+#: address_meta.py:450
+msgid "Código postal"
+msgstr "Código postal"
+
+#: address_meta.py:300
+msgid "CEP"
+msgstr "CEP"
+
+#: address_meta.py:308
+msgid "Autonomous community"
+msgstr "Communauté autonome"
+
+#: address_meta.py:318
+msgid "CAP"
+msgstr "CAP"
+
+#: address_meta.py:326
+msgid "Prefecture"
+msgstr "Préfecture"
+
+#: address_meta.py:345
+msgid "PIN code"
+msgstr "Code PIN"
+
+#: address_meta.py:374 address_meta.py:439 address_meta.py:459
+#: address_meta.py:478
+msgid "County"
+msgstr "Comté"
+
+#: address_meta.py:384 address_meta.py:469 address_meta.py:487
+#: address_meta.py:506 address_meta.py:516
+msgid "Region"
+msgstr "Région"
+
+#: address_meta.py:385
+msgid "Code postal"
+msgstr "Code postal"
+
+#: address_meta.py:394 address_meta.py:422 tests/test_i18n_fr.py:84
+msgid "Postleitzahl"
+msgstr "Postleitzahl"
+
+#: address_meta.py:430
+msgid "Canton"
+msgstr "Canton"
+
+#: address_meta.py:431
+msgid "NPA"
+msgstr "NPA"
+
+#: address_meta.py:440
+msgid "Eircode"
+msgstr "Eircode"
+
+#: address_meta.py:449 address_meta.py:546 address_meta.py:555
+msgid "District"
+msgstr "District"
+
+#: address_meta.py:460 address_meta.py:470 address_meta.py:479
+msgid "Postnummer"
+msgstr "Postnummer"
+
+#: address_meta.py:488
+msgid "Postinumero"
+msgstr "Postinumero"
+
+#: address_meta.py:497
+msgid "Kod pocztowy"
+msgstr "Kod pocztowy"
+
+#: address_meta.py:507
+msgid "PSČ"
+msgstr "PSČ"
+
+#: address_meta.py:525
+msgid "Province / City"
+msgstr "Province / Ville"
+
+#: forms_checkout.py:58
+msgid "Please enter your email address."
+msgstr "Veuillez saisir votre adresse e-mail."
+
+#: forms_checkout.py:59
+msgid "Please enter a valid email address."
+msgstr "Veuillez saisir une adresse e-mail valide."
+
+#: forms_checkout.py:66
+msgid "Optional. Used for delivery notifications."
+msgstr "Facultatif. Utilisé pour les notifications de livraison."
+
+#: forms_checkout.py:71
+msgid "Sign up for news and special offers"
+msgstr "S'inscrire pour recevoir nos actualités et offres spéciales"
+
+#: forms_checkout.py:85
+msgid "Please enter your phone number."
+msgstr "Veuillez saisir votre numéro de téléphone."
+
+#: forms_checkout.py:88
+msgid "Used for delivery notifications."
+msgstr "Utilisé pour les notifications de livraison."
+
+#: forms_checkout.py:130
+msgid "Please enter your first name."
+msgstr "Veuillez saisir votre prénom."
+
+#: forms_checkout.py:136
+msgid "Please enter your last name."
+msgstr "Veuillez saisir votre nom."
+
+#: forms_checkout.py:141 templates/storefront/pages/checkout.html:121
+#: views_checkout.py:144
+msgid "Address"
+msgstr "Adresse"
+
+#: forms_checkout.py:143
+msgid "Please enter your address."
+msgstr "Veuillez saisir votre adresse."
+
+#: forms_checkout.py:148 templates/storefront/pages/checkout.html:126
+msgid "Apartment, suite, etc."
+msgstr "Appartement, suite, etc."
+
+#: forms_checkout.py:155
+msgid "Please enter your city."
+msgstr "Veuillez saisir votre ville."
+
+#: forms_checkout.py:168
+msgid "Please enter your postal code."
+msgstr "Veuillez saisir votre code postal."
+
+#: forms_checkout.py:174
+msgid "Please select your country."
+msgstr "Veuillez sélectionner votre pays."
+
+#: forms_checkout.py:192 forms_checkout.py:194
+msgid "Select country"
+msgstr "Sélectionner un pays"
+
+#: forms_checkout.py:263
+#, python-format
+msgid "Enter a valid %(label)s (e.g. %(example)s)."
+msgstr "Saisissez un(e) %(label)s valide (par exemple : %(example)s)."
+
+#: forms_checkout.py:275
+#, python-format
+msgid "Please select your %(label)s."
+msgstr "Veuillez sélectionner votre %(label)s."
+
+#: forms_checkout.py:284
+#, python-format
+msgid "Please select a valid %(label)s."
+msgstr "Veuillez sélectionner un(e) %(label)s valide."
+
+#: forms_checkout.py:343
+msgid "Please select a shipping method."
+msgstr "Veuillez sélectionner un mode de livraison."
+
+#: templates/storefront/base_checkout.html:18
+#: templates/storefront/partials/header.html:14 views_pages.py:167
+msgid "Home"
+msgstr "Accueil"
+
+#: templates/storefront/pages/404.html:6 templates/storefront/pages/404.html:15
+msgid "Page not found"
+msgstr "Page introuvable"
+
+#: templates/storefront/pages/404.html:19
+msgid "The page you are looking for does not exist or has been moved."
+msgstr "La page que vous recherchez n'existe pas ou a été déplacée."
+
+#: templates/storefront/pages/404.html:26
+msgid "Search our store"
+msgstr "Rechercher dans notre boutique"
+
+#: templates/storefront/pages/404.html:30
+#: templates/storefront/pages/search.html:27
+msgid "Search products…"
+msgstr "Rechercher des produits…"
+
+#: templates/storefront/pages/404.html:33
+#: templates/storefront/pages/search.html:6
+#: templates/storefront/pages/search.html:16
+#: templates/storefront/pages/search.html:32
+msgid "Search"
+msgstr "Rechercher"
+
+#: templates/storefront/pages/404.html:40
+msgid "Browse collections"
+msgstr "Parcourir les collections"
+
+#: templates/storefront/pages/404.html:42
+msgid "Browse our collections"
+msgstr "Parcourir nos collections"
+
+#: templates/storefront/pages/404.html:58
+msgid "Back to home"
+msgstr "Retour à l'accueil"
+
+#: templates/storefront/pages/cart.html:6
+#: templates/storefront/pages/cart.html:14
+msgid "Your cart"
+msgstr "Votre panier"
+
+#: templates/storefront/pages/cart.html:51
+#: templates/storefront/pages/product.html:76
+#: templates/storefront/partials/checkout_sidebar.html:120
+#: templates/storefront/partials/product_card.html:63
+msgid "All taxes included"
+msgstr "Toutes taxes comprises"
+
+#: templates/storefront/pages/cart.html:65
+msgid "Update"
+msgstr "Mettre à jour"
+
+#: templates/storefront/pages/cart.html:91
+#: templates/storefront/pages/thank_you.html:50
+#: templates/storefront/partials/checkout_sidebar.html:99
+msgid "Subtotal"
+msgstr "Sous-total"
+
+#: templates/storefront/pages/cart.html:95
+msgid "All taxes included. Shipping calculated at checkout."
+msgstr "Toutes taxes comprises. Frais de livraison calculés lors du paiement."
+
+#: templates/storefront/pages/cart.html:101
+msgid "Proceed to checkout"
+msgstr "Passer à la caisse"
+
+#: templates/storefront/pages/cart.html:112
+#: templates/storefront/partials/mini_cart.html:39
+msgid "Your cart is empty."
+msgstr "Votre panier est vide."
+
+#: templates/storefront/pages/cart.html:113
+#: templates/storefront/pages/thank_you.html:143
+msgid "Continue shopping"
+msgstr "Continuer vos achats"
+
+#: templates/storefront/pages/checkout.html:6
+#: templates/storefront/pages/checkout.html:14
+#: templates/storefront/partials/mini_cart.html:36
+msgid "Checkout"
+msgstr "Commander"
+
+#: templates/storefront/pages/checkout.html:18
+#: templates/storefront/pages/checkout_retry_expired.html:20
+msgid "Return to cart"
+msgstr "Retour au panier"
+
+#: templates/storefront/pages/checkout.html:46 views_checkout.py:143
+msgid "Contact"
+msgstr "Coordonnées"
+
+#: templates/storefront/pages/checkout.html:54
+#: templates/storefront/pages/checkout.html:103
+#: templates/storefront/pages/checkout.html:181
+msgid "Edit"
+msgstr "Modifier"
+
+#: templates/storefront/pages/checkout.html:62
+msgid "Email"
+msgstr "E-mail"
+
+#: templates/storefront/pages/checkout.html:69
+msgid "Phone"
+msgstr "Téléphone"
+
+#: templates/storefront/pages/checkout.html:80
+msgid "Continue to shipping address"
+msgstr "Continuer vers l'adresse de livraison"
+
+#: templates/storefront/pages/checkout.html:93
+#: templates/storefront/pages/thank_you.html:96
+msgid "Shipping address"
+msgstr "Adresse de livraison"
+
+#: templates/storefront/pages/checkout.html:111
+msgid "First name"
+msgstr "Prénom"
+
+#: templates/storefront/pages/checkout.html:116
+msgid "Last name"
+msgstr "Nom"
+
+#: templates/storefront/pages/checkout.html:130
+msgid "City"
+msgstr "Ville"
+
+#: templates/storefront/pages/checkout.html:135
+msgid "Country"
+msgstr "Pays"
+
+#: templates/storefront/pages/checkout.html:159
+msgid "Continue to shipping method"
+msgstr "Continuer vers le mode de livraison"
+
+#: templates/storefront/pages/checkout.html:173
+msgid "Shipping method"
+msgstr "Mode de livraison"
+
+#: templates/storefront/pages/checkout.html:188
+msgid "No shipping methods are available for your address."
+msgstr "Aucun mode de livraison n'est disponible pour votre adresse."
+
+#: templates/storefront/pages/checkout.html:202
+#: templates/storefront/pages/checkout.html:204
+msgid "business days"
+msgstr "jours ouvrés"
+
+#: templates/storefront/pages/checkout.html:213
+msgid "Free"
+msgstr "Gratuit"
+
+#: templates/storefront/pages/checkout.html:217
+#: templates/storefront/pages/thank_you.html:40
+msgid "(all taxes included)"
+msgstr "(toutes taxes comprises)"
+
+#: templates/storefront/pages/checkout.html:226
+msgid "Continue to payment"
+msgstr "Continuer vers le paiement"
+
+#: templates/storefront/pages/checkout.html:237
+#: templates/storefront/pages/checkout_payment.html:6 tests/test_i18n_fr.py:61
+#: views_checkout.py:146
+msgid "Payment"
+msgstr "Paiement"
+
+#: templates/storefront/pages/checkout.html:252
+msgid "Payment could not be initialized. Please try again."
+msgstr "Le paiement n'a pas pu être initialisé. Veuillez réessayer."
+
+#: templates/storefront/pages/checkout.html:253
+msgid "Payment could not be processed. Please try again."
+msgstr "Le paiement n'a pas pu être traité. Veuillez réessayer."
+
+#: templates/storefront/pages/checkout.html:270
+#: templates/storefront/pages/checkout_payment.html:36
+msgid ""
+"Payment cannot be loaded without JavaScript. Please enable JavaScript in "
+"your browser to complete your purchase."
+msgstr ""
+"Le paiement ne peut pas être chargé sans JavaScript. Veuillez activer "
+"JavaScript dans votre navigateur pour finaliser votre achat."
+
+#: templates/storefront/pages/checkout.html:274
+#: templates/storefront/pages/checkout_payment.html:20
+#: templates/storefront/pages/checkout_retry.html:28
+#: templates/storefront/pages/thank_you.html:71
+msgid "All taxes are included in the displayed prices."
+msgstr "Toutes taxes sont comprises dans les prix affichés."
+
+#: templates/storefront/pages/checkout.html:278
+#: templates/storefront/pages/checkout_payment.html:46
+msgid "Pay now"
+msgstr "Payer maintenant"
+
+#: templates/storefront/pages/checkout_payment.html:18
+#: templates/storefront/pages/checkout_retry.html:18
+msgid "Complete your payment"
+msgstr "Finalisez votre paiement"
+
+#: templates/storefront/pages/checkout_payment.html:52
+#: templates/storefront/pages/checkout_retry.html:24
+msgid "Order"
+msgstr "Commande"
+
+#: templates/storefront/pages/checkout_retry.html:6
+msgid "Complete payment"
+msgstr "Finaliser le paiement"
+
+#: templates/storefront/pages/checkout_retry.html:20
+msgid "Your order was created but payment was not completed. Please try again."
+msgstr ""
+"Votre commande a été créée mais le paiement n'a pas été finalisé. Veuillez "
+"réessayer."
+
+#: templates/storefront/pages/checkout_retry.html:36
+#, fuzzy
+#| msgid "Continue to payment"
+msgid "Continue with PayPal"
+msgstr "Continuer vers le paiement"
+
+#: templates/storefront/pages/checkout_retry.html:44
+msgid "Payment cannot be loaded without JavaScript."
+msgstr "Le paiement ne peut pas être chargé sans JavaScript."
+
+#: templates/storefront/pages/checkout_retry_expired.html:6
+msgid "Checkout expired"
+msgstr "Session de paiement expirée"
+
+#: templates/storefront/pages/checkout_retry_expired.html:15
+msgid "This checkout has expired"
+msgstr "Cette session de paiement a expiré"
+
+#: templates/storefront/pages/checkout_retry_expired.html:17
+msgid "Your order reservation has expired. Please start a new checkout."
+msgstr ""
+"La réservation de votre commande a expiré. Veuillez recommencer une nouvelle "
+"commande."
+
+#: templates/storefront/pages/collection.html:34
+msgid "Sort by"
+msgstr "Trier par"
+
+#: templates/storefront/pages/collection.html:45
+#: templates/storefront/partials/checkout_sidebar.html:59
+#: templates/storefront/partials/checkout_sidebar.html:84
+#: templates/storefront/partials/currency_picker.html:32
+msgid "Apply"
+msgstr "Appliquer"
+
+#: templates/storefront/pages/collection.html:64
+msgid "No products available in this collection."
+msgstr "Aucun produit disponible dans cette collection."
+
+#: templates/storefront/pages/home.html:24
+msgid "Shop by collection"
+msgstr "Acheter par collection"
+
+#: templates/storefront/pages/home.html:54
+msgid "Featured products"
+msgstr "Produits à la une"
+
+#: templates/storefront/pages/product.html:122
+msgid "Quantity"
+msgstr "Quantité"
+
+#: templates/storefront/pages/product.html:130
+msgid "Add to cart"
+msgstr "Ajouter au panier"
+
+#: templates/storefront/pages/product.html:157
+msgid "0 reviews"
+msgstr "0 avis"
+
+#: templates/storefront/pages/search.html:14
+#, python-format
+msgid "Search results for &ldquo;%(q)s&rdquo;"
+msgstr "Résultats pour &laquo;&nbsp;%(q)s&nbsp;&raquo;"
+
+#: templates/storefront/pages/search.html:23
+msgid "Search products"
+msgstr "Rechercher des produits"
+
+#: templates/storefront/pages/search.html:40
+#, python-format
+msgid "%(total)s result for &ldquo;%(q)s&rdquo;"
+msgid_plural "%(total)s results for &ldquo;%(q)s&rdquo;"
+msgstr[0] "%(total)s résultat pour &laquo;&nbsp;%(q)s&nbsp;&raquo;"
+msgstr[1] "%(total)s résultats pour &laquo;&nbsp;%(q)s&nbsp;&raquo;"
+
+#: templates/storefront/pages/search.html:51
+#, python-format
+msgid "No products found for &ldquo;%(q)s&rdquo;. Try a different search term."
+msgstr ""
+"Aucun produit trouvé pour &laquo;&nbsp;%(q)s&nbsp;&raquo;. Essayez un autre "
+"terme."
+
+#: templates/storefront/pages/static_page.html:27
+#: templates/storefront/partials/contact_form.html:52
+msgid "Thank you — your message has been sent."
+msgstr "Merci — votre message a été envoyé."
+
+#: templates/storefront/pages/thank_you.html:6
+msgid "Order confirmed"
+msgstr "Commande confirmée"
+
+#: templates/storefront/pages/thank_you.html:15
+msgid "Thank you for your order!"
+msgstr "Merci pour votre commande !"
+
+#: templates/storefront/pages/thank_you.html:19
+msgid "Order number"
+msgstr "Numéro de commande"
+
+#: templates/storefront/pages/thank_you.html:23
+#, python-format
+msgid ""
+"\n"
+"    A confirmation has been sent to %(email)s.\n"
+"    "
+msgstr ""
+"\n"
+"    Une confirmation a été envoyée à %(email)s.\n"
+"    "
+
+#: templates/storefront/pages/thank_you.html:31
+msgid "Your items"
+msgstr "Vos articles"
+
+#: templates/storefront/pages/thank_you.html:55
+#: templates/storefront/pages/thank_you.html:59
+#: templates/storefront/partials/checkout_sidebar.html:104
+msgid "Discount"
+msgstr "Remise"
+
+#: templates/storefront/pages/thank_you.html:64
+#: templates/storefront/partials/checkout_sidebar.html:91 views_checkout.py:145
+msgid "Shipping"
+msgstr "Livraison"
+
+#: templates/storefront/pages/thank_you.html:68
+#: templates/storefront/partials/checkout_sidebar.html:117
+#: templates/storefront/partials/mini_cart.html:29
+msgid "Total"
+msgstr "Total"
+
+#: templates/storefront/pages/thank_you.html:77
+#, python-format
+msgid "Paid with %(summary)s"
+msgstr "Payé avec %(summary)s"
+
+#: templates/storefront/pages/thank_you.html:125
+msgid "A gift for your next order"
+msgstr "Un cadeau pour votre prochaine commande"
+
+#: templates/storefront/pages/thank_you.html:126
+#, python-format
+msgid "Enjoy %(pct)s%% off your next purchase with this code:"
+msgstr ""
+"Profitez de %(pct)s %% de réduction sur votre prochain achat avec ce code :"
+
+#: templates/storefront/pages/thank_you.html:128
+#, python-format
+msgid "Valid until %(date)s."
+msgstr "Valable jusqu'au %(date)s."
+
+#: templates/storefront/partials/chat_widget.html:22
+msgid "Chat with us"
+msgstr ""
+
+#: templates/storefront/partials/chat_widget.html:27
+msgid "Store assistant"
+msgstr ""
+
+#: templates/storefront/partials/chat_widget.html:28
+#: templates/storefront/partials/overlay_themes/_base.html:81
+#: templates/storefront/partials/social_proof_toast.html:42
+msgid "Close"
+msgstr "Fermer"
+
+#: templates/storefront/partials/chat_widget.html:31
+msgid ""
+"This chat is answered by an AI assistant, not a person. It cannot access "
+"your order or account."
+msgstr ""
+
+#: templates/storefront/partials/chat_widget.html:35
+msgid ""
+"The assistant is temporarily unavailable. Please use the contact form "
+"instead."
+msgstr ""
+
+#: templates/storefront/partials/chat_widget.html:39
+msgid "Ask a question…"
+msgstr ""
+
+#: templates/storefront/partials/chat_widget.html:40
+msgid "Send"
+msgstr ""
+
+#: templates/storefront/partials/checkout_sidebar.html:25
+msgid "Order summary"
+msgstr "Récapitulatif de la commande"
+
+#: templates/storefront/partials/checkout_sidebar.html:47
+msgid "Remove discount code"
+msgstr "Supprimer le code promo"
+
+#: templates/storefront/partials/checkout_sidebar.html:55
+msgid "Discount code"
+msgstr "Code promo"
+
+#: templates/storefront/partials/checkout_sidebar.html:57
+#: templates/storefront/partials/checkout_sidebar.html:82
+msgid "Enter code"
+msgstr "Saisir le code"
+
+#: templates/storefront/partials/checkout_sidebar.html:72
+msgid "Remove gift card"
+msgstr "Supprimer la carte cadeau"
+
+#: templates/storefront/partials/checkout_sidebar.html:80
+msgid "Gift card code"
+msgstr "Code de la carte cadeau"
+
+#: templates/storefront/partials/checkout_sidebar.html:110
+msgid "Gift card"
+msgstr "Carte cadeau"
+
+#: templates/storefront/partials/checkout_sidebar.html:123
+#: tests/test_i18n_fr.py:67
+#, python-format
+msgid "You will be charged in %(currency)s."
+msgstr "Vous serez débité(e) en %(currency)s."
+
+#: templates/storefront/partials/checkout_steps.html:13
+msgid "Checkout progress"
+msgstr "Progression de la commande"
+
+#: templates/storefront/partials/consent_banner.html:96
+msgid "Cookie consent"
+msgstr "Consentement aux cookies"
+
+#: templates/storefront/partials/consent_banner.html:98
+msgid "We value your privacy"
+msgstr "Nous respectons votre vie privée"
+
+#: templates/storefront/partials/consent_banner.html:100
+msgid ""
+"We use cookies and similar technologies to measure our audience and, with "
+"your consent, to measure advertising performance. You can accept, refuse, or "
+"customize."
+msgstr ""
+"Nous utilisons des cookies et technologies similaires pour mesurer notre "
+"audience et, avec votre consentement, mesurer la performance de nos "
+"publicités. Vous pouvez accepter, refuser ou personnaliser."
+
+#: templates/storefront/partials/consent_banner.html:102
+#, python-format
+msgid ""
+"See our <a href=\"%(policy_url)s\" class=\"consent-banner__policy-"
+"link\">privacy policy</a>."
+msgstr ""
+"Consultez notre <a href=\"%(policy_url)s\" class=\"consent-banner__policy-"
+"link\">politique de confidentialité</a>."
+
+#: templates/storefront/partials/consent_banner.html:107
+msgid "Accept all"
+msgstr "Tout accepter"
+
+#: templates/storefront/partials/consent_banner.html:108
+msgid "Refuse all"
+msgstr "Tout refuser"
+
+#: templates/storefront/partials/consent_banner.html:109
+msgid "Customize"
+msgstr "Personnaliser"
+
+#: templates/storefront/partials/consent_banner.html:115
+#: templates/storefront/partials/consent_banner.html:116
+#: templates/storefront/partials/consent_manage_button.html:4
+msgid "Cookie preferences"
+msgstr "Préférences cookies"
+
+#: templates/storefront/partials/consent_banner.html:119
+msgid "Strictly necessary"
+msgstr "Strictement nécessaires"
+
+#: templates/storefront/partials/consent_banner.html:120
+msgid "Always on"
+msgstr "Toujours actif"
+
+#: templates/storefront/partials/consent_banner.html:122
+msgid ""
+"Required for the cart, checkout, and your language/currency preferences. "
+"Cannot be switched off."
+msgstr ""
+"Nécessaires au panier, au paiement et à vos préférences de langue/devise. Ne "
+"peuvent pas être désactivés."
+
+#: templates/storefront/partials/consent_banner.html:129
+msgid "Third-party analytics"
+msgstr "Analyse tierce"
+
+#: templates/storefront/partials/consent_banner.html:132
+msgid ""
+"Helps us understand how shoppers use this store (e.g. Google Analytics)."
+msgstr ""
+"Nous aide à comprendre comment les visiteurs utilisent cette boutique (ex. "
+"Google Analytics)."
+
+#: templates/storefront/partials/consent_banner.html:139
+msgid "Marketing / advertising"
+msgstr "Marketing / publicité"
+
+#: templates/storefront/partials/consent_banner.html:142
+msgid "Used to measure and improve the performance of our advertising."
+msgstr "Utilisé pour mesurer et améliorer la performance de nos publicités."
+
+#: templates/storefront/partials/consent_banner.html:149
+msgid "Audience measurement (first-party, exempt)"
+msgstr "Mesure d'audience (première partie, exemptée)"
+
+#: templates/storefront/partials/consent_banner.html:152
+msgid ""
+"First-party, anonymous visit measurement for our own statistics only. Exempt "
+"from consent, but you can opt out here."
+msgstr ""
+"Mesure anonyme de fréquentation en première partie, uniquement pour nos "
+"propres statistiques. Exemptée de consentement, mais vous pouvez vous y "
+"opposer ici."
+
+#: templates/storefront/partials/consent_banner.html:157
+msgid "We couldn't save your choices. Please try again."
+msgstr "Nous n'avons pas pu enregistrer vos choix. Veuillez réessayer."
+
+#: templates/storefront/partials/consent_banner.html:161
+msgid "Save choices"
+msgstr "Enregistrer mes choix"
+
+#: templates/storefront/partials/contact_form.html:24
+#: templates/storefront/partials/quotation_form.html:18
+#: templates/storefront/partials/static_quotation_form.html:23
+msgid "Your name"
+msgstr "Votre nom"
+
+#: templates/storefront/partials/contact_form.html:26
+#: templates/storefront/partials/quotation_form.html:23
+#: templates/storefront/partials/static_quotation_form.html:25
+msgid "Full name"
+msgstr "Nom complet"
+
+#: templates/storefront/partials/contact_form.html:30
+#: templates/storefront/partials/notify_me_form.html:16
+#: templates/storefront/partials/quotation_form.html:28
+#: templates/storefront/partials/static_quotation_form.html:29
+msgid "Email address"
+msgstr "Adresse e-mail"
+
+#: templates/storefront/partials/contact_form.html:32
+#: templates/storefront/partials/notify_me_form.html:22
+#: templates/storefront/partials/quotation_form.html:34
+#: templates/storefront/partials/static_quotation_form.html:31
+msgid "your@email.com"
+msgstr "votre@email.com"
+
+#: templates/storefront/partials/contact_form.html:36
+msgid "Subject"
+msgstr "Sujet"
+
+#: templates/storefront/partials/contact_form.html:42
+#: templates/storefront/partials/static_quotation_form.html:35
+msgid "Message"
+msgstr "Message"
+
+#: templates/storefront/partials/contact_form.html:48
+msgid "Send message"
+msgstr "Envoyer le message"
+
+#: templates/storefront/partials/currency_picker.html:22
+msgid "Currency"
+msgstr ""
+
+#: templates/storefront/partials/footer.html:12
+msgid "Footer navigation"
+msgstr "Navigation du pied de page"
+
+#: templates/storefront/partials/header.html:19
+msgid "Main navigation"
+msgstr "Navigation principale"
+
+#: templates/storefront/partials/hero.html:15
+msgid "Welcome to our store"
+msgstr "Bienvenue dans notre boutique"
+
+#: templates/storefront/partials/hero.html:30
+msgid "Shop now"
+msgstr "Acheter maintenant"
+
+#: templates/storefront/partials/language_switcher.html:12
+msgid "Language"
+msgstr "Langue"
+
+#: templates/storefront/partials/mini_cart.html:9
+msgid "Shopping cart"
+msgstr "Panier"
+
+#: templates/storefront/partials/mini_cart.html:33
+msgid "View cart"
+msgstr "Voir le panier"
+
+#: templates/storefront/partials/notify_me_form.html:11
+msgid "This product is currently out of stock."
+msgstr "Ce produit est actuellement en rupture de stock."
+
+#: templates/storefront/partials/notify_me_form.html:28
+msgid "Notify me when back in stock"
+msgstr "Me prévenir quand le produit est de nouveau disponible"
+
+#: templates/storefront/partials/notify_me_form.html:33
+msgid "We'll notify you when this product is back in stock."
+msgstr "Nous vous préviendrons quand ce produit sera de nouveau disponible."
+
+#: templates/storefront/partials/overlay_themes/_base.html:88
+msgid "NAME"
+msgstr "NOM"
+
+#: templates/storefront/partials/overlay_themes/_base.html:90
+msgid "ENTER YOUR EMAIL"
+msgstr "SAISISSEZ VOTRE EMAIL"
+
+#: templates/storefront/partials/overlay_themes/_base.html:241
+#: views_pages.py:200 views_pages.py:203 views_pages.py:292 views_pages.py:295
+msgid "Too many requests. Please try again later."
+msgstr "Trop de requêtes. Veuillez réessayer plus tard."
+
+#: templates/storefront/partials/overlay_themes/_base.html:245
+#: templates/storefront/partials/overlay_themes/_base.html:252
+#: templates/storefront/partials/overlay_themes/_base.html:262
+msgid "Something went wrong. Please try again."
+msgstr "Une erreur est survenue. Veuillez réessayer."
+
+#: templates/storefront/partials/quotation_form.html:11
+msgid ""
+"This product is available on quotation only. Fill in the form below and "
+"we'll get back to you with a price."
+msgstr ""
+"Ce produit est disponible sur devis uniquement. Remplissez le formulaire ci-"
+"dessous et nous vous recontacterons avec un prix."
+
+#: templates/storefront/partials/quotation_form.html:39
+msgid "Message (optional)"
+msgstr "Message (facultatif)"
+
+#: templates/storefront/partials/quotation_form.html:44
+msgid "Any specific requirements or questions?"
+msgstr "Des exigences particulières ou des questions ?"
+
+#: templates/storefront/partials/quotation_form.html:51
+#: templates/storefront/partials/static_quotation_form.html:43
+#: tests/test_i18n_fr.py:73
+msgid "Request a quote"
+msgstr "Demander un devis"
+
+#: templates/storefront/partials/quotation_form.html:55
+msgid "Your quotation request has been sent. We'll get back to you shortly."
+msgstr ""
+"Votre demande de devis a été envoyée. Nous vous recontacterons rapidement."
+
+#: templates/storefront/partials/social_proof_sentence.html:16
+#, python-format
+msgid ""
+"%(first_name)s from %(city)s, %(country)s bought %(product_title)s — "
+"%(time_bucket)s"
+msgstr ""
+"%(first_name)s de %(city)s, %(country)s a acheté %(product_title)s — "
+"%(time_bucket)s"
+
+#: templates/storefront/partials/social_proof_sentence.html:16
+#, python-format
+msgid "%(first_name)s bought %(product_title)s — %(time_bucket)s"
+msgstr "%(first_name)s a acheté %(product_title)s — %(time_bucket)s"
+
+#: templates/storefront/partials/social_proof_sentence.html:16
+#, python-format
+msgid "Someone in %(country)s bought %(product_title)s — %(time_bucket)s"
+msgstr "Quelqu'un en %(country)s a acheté %(product_title)s — %(time_bucket)s"
+
+#: templates/storefront/partials/social_proof_sentence.html:16
+#, python-format
+msgid "Someone bought %(product_title)s — %(time_bucket)s"
+msgstr "Quelqu'un a acheté %(product_title)s — %(time_bucket)s"
+
+#: templates/storefront/partials/social_proof_time_bucket.html:9
+msgid "a few minutes ago"
+msgstr "il y a quelques minutes"
+
+#: templates/storefront/partials/social_proof_time_bucket.html:9
+#, python-format
+msgid "%(n)s minute ago"
+msgid_plural "%(n)s minutes ago"
+msgstr[0] "il y a %(n)s minute"
+msgstr[1] "il y a %(n)s minutes"
+
+#: templates/storefront/partials/social_proof_time_bucket.html:9
+#, python-format
+msgid "%(n)s hour ago"
+msgid_plural "%(n)s hours ago"
+msgstr[0] "il y a %(n)s heure"
+msgstr[1] "il y a %(n)s heures"
+
+#: templates/storefront/partials/social_proof_time_bucket.html:9
+#, python-format
+msgid "%(n)s day ago"
+msgid_plural "%(n)s days ago"
+msgstr[0] "il y a %(n)s jour"
+msgstr[1] "il y a %(n)s jours"
+
+#: templates/storefront/partials/static_quotation_form.html:38
+msgid "Tell us what you need a quote for."
+msgstr "Indiquez-nous pour quoi vous souhaitez un devis."
+
+#: templates/storefront/partials/static_quotation_form.html:47
+msgid "Thank you — your quotation request has been sent."
+msgstr "Merci — votre demande de devis a été envoyée."
+
+#: templates/storefront/partials/upsell_widget.html:27
+msgid "Special offer for you"
+msgstr "Offre spéciale pour vous"
+
+#: templates/storefront/partials/upsell_widget.html:45
+msgid "Yes, add to my order"
+msgstr "Oui, ajouter à ma commande"
+
+#: templates/storefront/partials/upsell_widget.html:57
+msgid "No thanks"
+msgstr "Non merci"
+
+#: views.py:63
+msgid "Price: low to high"
+msgstr "Prix : croissant"
+
+#: views.py:64
+msgid "Price: high to low"
+msgstr "Prix : décroissant"
+
+#: views.py:65
+msgid "Newest"
+msgstr "Plus récent"
+
+#: views.py:762
+msgid "Featured"
+msgstr "À la une"
+
+#: views_checkout.py:1010 views_checkout.py:1011
+msgid "Order not found. Please try again."
+msgstr "Commande introuvable. Veuillez réessayer."
+
+#: views_checkout.py:1138
+msgid "This checkout has expired. Please try again."
+msgstr "Cette session de paiement a expiré. Veuillez réessayer."
+
+#: views_checkout.py:1264
+msgid ""
+"Your PayPal payment was cancelled. You have not been charged — you can try "
+"again or choose another payment method."
+msgstr ""
+
+#: views_checkout.py:1326
+msgid "Your payment was not accepted. Please try a different card."
+msgstr "Votre paiement n'a pas été accepté. Veuillez essayer une autre carte."
+
+#: views_checkout.py:1327
+msgid "Your payment was declined. Please try a different card."
+msgstr "Votre paiement a été refusé. Veuillez essayer une autre carte."
+
+#: views_checkout.py:1328
+msgid "Your payment was cancelled."
+msgstr "Votre paiement a été annulé."
+
+#: views_checkout.py:1332
+msgid "Your payment could not be processed. Please try again."
+msgstr "Votre paiement n'a pas pu être traité. Veuillez réessayer."
+
+#: views_checkout.py:1355
+msgid "PayPal"
+msgstr "PayPal"
+
+#: views_checkout.py:1358
+#, python-format
+msgid "card ending in %(last4)s"
+msgstr "carte se terminant par %(last4)s"
+
+#: views_checkout.py:1359
+msgid "Stripe"
+msgstr "Stripe"
+
+#: views_checkout.py:1538
+msgid "Invalid discount code."
+msgstr "Code promo invalide."
+
+#: views_checkout.py:1542
+msgid "This discount code is no longer valid."
+msgstr "Ce code promo n'est plus valide."
+
+#: views_checkout.py:1553
+msgid "Only one gift card may be applied per order."
+msgstr "Une seule carte cadeau peut être appliquée par commande."
+
+#: views_pages.py:213 views_pages.py:300
+msgid "Email is required."
+msgstr "L'e-mail est obligatoire."
+
+#: views_pages.py:218 views_pages.py:310
+msgid "Invalid email address."
+msgstr "Adresse e-mail invalide."
+
+#: views_pages.py:220
+msgid "Message is required."
+msgstr "Le message est obligatoire."
+
+#: views_pages.py:232 views_pages.py:324
+#, python-format
+msgid "Name is too long (max %(max)d characters)."
+msgstr ""
+
+#: views_pages.py:234
+#, python-format
+msgid "Subject is too long (max %(max)d characters)."
+msgstr ""
+
+#: views_pages.py:237 views_pages.py:332
+#, python-format
+msgid "Message is too long (max %(max)d characters)."
+msgstr ""

@@ -1,0 +1,34 @@
+{% comment %}
+Hero section partial — default shared fallback (ADR-012 D3, TICKET-029 Phase 2).
+
+Theme-specific overrides live at: <theme_key>/partials/hero.html
+Phase 4 will wire this to StoreThemeCustomization.customization_json for
+headline, subheadline, CTA text, and background image.
+{% endcomment %}
+{% load i18n permalinks_tags %}
+<section class="hero" data-testid="hero">
+  <div class="hero__inner">
+    <h2 class="hero__headline">
+      {% if customization.hero_headline %}
+        {{ customization.hero_headline }}
+      {% else %}
+        {% trans "Welcome to our store" %}
+      {% endif %}
+    </h2>
+    {% if customization.hero_subheadline %}
+    <p class="hero__subheadline">{{ customization.hero_subheadline }}</p>
+    {% endif %}
+    {# CTA links to the store home page (permalink_url '' handles /fr/ prefixes).
+       Phase 5 will update this to a configurable collection once collection permalinks
+       are wired up from customization_json. #}
+    <a href="{% permalink_url '' %}"
+       class="btn btn--primary hero__cta"
+       data-testid="hero-cta">
+      {% if customization.hero_cta_text %}
+        {{ customization.hero_cta_text }}
+      {% else %}
+        {% trans "Shop now" %}
+      {% endif %}
+    </a>
+  </div>
+</section>

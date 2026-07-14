@@ -1,0 +1,16 @@
+{% load i18n %}{% comment %}
+Renders one fully-composed, translated social-proof sentence (ADR-027 D6/D7).
+Rendered via render_to_string from engagement/service.py's _compose_sentence —
+platform-owned string, lives here (not in Python gettext calls) so
+storefront's existing `makemessages` pass collects it (D9).
+
+Only anonymous mode ships (NAMED_SOCIAL_PROOF_MODES_ENABLED is False,
+engagement/models.py) — the first_name / first_name_city branches exist so the
+schema-level gating (D6) has a matching, already-translated template ready the
+moment the legal flag flips; they are unreachable via
+engagement.service.get_social_proof_entries today.
+
+Context: mode ("anonymous"|"first_name"|"first_name_city"), first_name, city,
+country (may be empty strings), product_title, time_bucket (already-rendered
+string from social_proof_time_bucket.html).
+{% endcomment %}{% if mode == "first_name_city" and city and country %}{% blocktrans %}{{ first_name }} from {{ city }}, {{ country }} bought {{ product_title }} — {{ time_bucket }}{% endblocktrans %}{% elif mode == "first_name" and first_name %}{% blocktrans %}{{ first_name }} bought {{ product_title }} — {{ time_bucket }}{% endblocktrans %}{% elif mode == "first_name_city" and first_name %}{% blocktrans %}{{ first_name }} bought {{ product_title }} — {{ time_bucket }}{% endblocktrans %}{% elif country %}{% blocktrans %}Someone in {{ country }} bought {{ product_title }} — {{ time_bucket }}{% endblocktrans %}{% else %}{% blocktrans %}Someone bought {{ product_title }} — {{ time_bucket }}{% endblocktrans %}{% endif %}

@@ -1,0 +1,8 @@
+{% extends "emails/base.html" %}
+{% block subject %}How was your {{ store.name }} order?{% endblock %}
+{% block content %}
+<h2>How was your order?</h2>
+<p>Hi,</p>
+<p>Your order #{{ order.order_number }} from {{ store.name }} has shipped. We'd love to hear your feedback!</p>
+<p>Please take a moment to leave a review for the products you received.</p>
+{% endblock %}

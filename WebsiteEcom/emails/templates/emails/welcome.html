@@ -1,0 +1,17 @@
+{% extends "emails/base.html" %}
+
+{% block subject %}Welcome to {{ store.name }}{% endblock %}
+
+{% block content %}
+<p>Hi {{ customer_name }},</p>
+<p>
+  Welcome to <strong>{{ store.name }}</strong>! Your account has been created
+  and you can now log in to track your orders and manage your preferences.
+</p>
+<p>
+  If you have any questions, just reply to this email — we are happy to help.
+</p>
+<p style="margin-top:32px;color:#888;font-size:13px;">
+  If you did not create an account at {{ store.name }}, you can ignore this email.
+</p>
+{% endblock %}

@@ -1,0 +1,25 @@
+Hi {{ customer_name }},
+
+Thank you for your order! Here is a summary of what you purchased.
+
+Order #{{ order.order_number }}
+{% for item in order.items %}
+- {{ item.title }}{% if item.variant %} ({{ item.variant }}){% endif %}: {{ item.quantity }} x {{ order.currency }} {{ item.unit_price }} = {{ order.currency }} {{ item.line_total }}
+{% endfor %}
+
+Subtotal:  {{ order.currency }} {{ order.subtotal }}
+{% if order.discount_amount != "0.00" %}Discount:  -{{ order.currency }} {{ order.discount_amount }}
+{% endif %}Shipping:  {{ order.currency }} {{ order.shipping_amount }}
+Total:     {{ order.currency }} {{ order.total }}
+
+{% if address.line1 %}Shipping address:
+{{ address.name }}
+{{ address.line1 }}
+{% if address.line2 %}{{ address.line2 }}
+{% endif %}{{ address.city }}{% if address.state %}, {{ address.state }}{% endif %} {{ address.postal_code }}
+{{ address.country }}
+{% endif %}
+
+We will notify you when your order ships.
+
+-- {{ store.name }}

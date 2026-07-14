@@ -1,0 +1,9 @@
+A new contact message was submitted on {{ store.name }}.
+
+From: {{ contact_message.name }} <{{ contact_message.email }}>
+Subject: {{ contact_message.subject }}
+Language: {{ contact_message.lang_code }}
+
+{{ contact_message.message }}
+
+Reply to this message from the store admin's contact message inbox.

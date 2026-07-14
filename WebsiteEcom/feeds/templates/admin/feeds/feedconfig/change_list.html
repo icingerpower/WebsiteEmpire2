@@ -1,0 +1,183 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+{# ADR-026 D8: card-per-registry-provider grid, mirrors
+   pixels/templates/admin/pixels/pixel/change_list.html.
+
+   provider_cards is built by FeedConfigAdmin.changelist_view() — one dict
+   per registered FeedProvider, in registration order, regardless of whether
+   a FeedConfig row exists yet for this store. #}
+
+{% block content %}
+<div id="content-main">
+
+  {% if launch_warnings %}
+  <ul class="messagelist">
+    {% for warning in launch_warnings %}
+    <li class="warning">{{ warning }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <p>
+    <a href="{{ rotate_token_url }}" class="button">{% trans "Rotate feed token" %}</a>
+  </p>
+
+  <div class="feeds-card-grid">
+    {% for card in provider_cards %}
+    <div class="feeds-card {% if card.enabled %}feeds-card--enabled{% endif %}">
+      <div class="feeds-card__header">
+        <span class="feeds-badge {% if card.enabled %}feeds-badge--on{% else %}feeds-badge--off{% endif %}">
+          {% if card.enabled %}{% trans "Enabled" %}{% else %}{% trans "Disabled" %}{% endif %}
+        </span>
+        <a href="{{ card.edit_url }}">{% trans "Edit" %}</a>
+      </div>
+
+      <div class="feeds-card__name">{{ card.name }}</div>
+      {% if card.scope %}
+      <div class="feeds-card__scope">{% trans "Scope:" %} {{ card.scope }}</div>
+      {% endif %}
+
+      {% if card.regenerate_url %}
+      <form method="post" action="{{ card.regenerate_url }}" style="display: inline;">
+        {% csrf_token %}
+        <button type="submit" class="button">{% trans "Regenerate now" %}</button>
+      </form>
+      {% endif %}
+
+      {% if card.targets %}
+      <table class="feeds-target-table">
+        <thead>
+          <tr>
+            <th>{% trans "Feed" %}</th>
+            <th>{% trans "Status" %}</th>
+            <th>{% trans "Items" %}</th>
+            <th>{% trans "Excluded" %}</th>
+            <th>{% trans "URL" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in card.targets %}
+          <tr>
+            <td>{{ row.label }}</td>
+            <td>
+              <span class="feeds-banner {{ row.banner_class }}">{{ row.banner_status }}</span>
+              {% if row.last_error %}<div class="feeds-target-error">{{ row.last_error }}</div>{% endif %}
+            </td>
+            <td>{{ row.item_count }}</td>
+            <td>
+              {{ row.excluded_count }}
+              {% if row.exclusions %}
+              <details>
+                <summary>{% trans "Reasons" %}</summary>
+                <ul>
+                  {% for excl in row.exclusions %}
+                  <li>{% trans "Product" %} {{ excl.product_id }}{% if excl.variant_id %} / {% trans "Variant" %} {{ excl.variant_id }}{% endif %}: {{ excl.reason }}</li>
+                  {% endfor %}
+                </ul>
+              </details>
+              {% endif %}
+            </td>
+            <td>
+              <code class="feeds-target-url">{{ row.url }}</code>
+              <button type="button"
+                      class="button feeds-copy-url-btn"
+                      data-feed-url="{{ row.url }}"
+                      data-testid="feed-url-copy-button"
+                      title="{% trans 'Copy feed URL' %}">{% trans "Copy" %}</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{# admin-013/ADR-026 D8: one-click copy of each feed target's public URL — #}
+{# vanilla JS, no dependencies (navigator.clipboard, with a legacy fallback #}
+{# for non-HTTPS/older-browser admin sessions). #}
+<script>
+(function () {
+  "use strict";
+
+  function fallbackCopy(text) {
+    var textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "absolute";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    try { document.execCommand("copy"); } catch (e) { /* best-effort only */ }
+    document.body.removeChild(textarea);
+  }
+
+  function flashCopied(button) {
+    var original = button.textContent;
+    button.textContent = "{% trans 'Copied!' %}";
+    window.setTimeout(function () { button.textContent = original; }, 2000);
+  }
+
+  var buttons = document.querySelectorAll('[data-testid="feed-url-copy-button"]');
+  for (var i = 0; i < buttons.length; i++) {
+    buttons[i].addEventListener("click", function (evt) {
+      var button = evt.currentTarget;
+      var url = button.getAttribute("data-feed-url");
+      if (window.navigator.clipboard && window.navigator.clipboard.writeText) {
+        window.navigator.clipboard.writeText(url).then(
+          function () { flashCopied(button); },
+          function () { fallbackCopy(url); flashCopied(button); }
+        );
+      } else {
+        fallbackCopy(url);
+        flashCopied(button);
+      }
+    });
+  }
+})();
+</script>
+
+<style>
+  .feeds-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 16px;
+    margin-top: 8px;
+  }
+  .feeds-card {
+    border: 1px solid var(--border-color, #ccc);
+    border-radius: 8px;
+    background: var(--body-bg, #fff);
+    padding: 16px;
+  }
+  .feeds-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .feeds-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .feeds-badge--on { background: #e6f4ea; color: #1e7e34; }
+  .feeds-badge--off { background: #f1f1f1; color: #666; }
+  .feeds-card__name { font-weight: 600; font-size: 1.05rem; }
+  .feeds-card__scope { color: #666; font-size: 0.85rem; margin-bottom: 8px; }
+  .feeds-target-table { width: 100%; margin-top: 10px; font-size: 0.85rem; border-collapse: collapse; }
+  .feeds-target-table th, .feeds-target-table td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
+  .feeds-target-url { word-break: break-all; font-size: 0.75rem; }
+  .feeds-copy-url-btn { margin-left: 6px; font-size: 0.7rem; padding: 1px 8px; }
+  .feeds-target-error { color: #c00; font-size: 0.75rem; }
+  .feeds-banner { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+  .feeds-banner--ok { background: #e6f4ea; color: #1e7e34; }
+  .feeds-banner--warn { background: #fff4e0; color: #a35a00; }
+  .feeds-banner--error { background: #fbe6e6; color: #c00; }
+</style>
+{% endblock %}

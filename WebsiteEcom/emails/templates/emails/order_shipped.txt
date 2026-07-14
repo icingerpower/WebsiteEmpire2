@@ -1,0 +1,17 @@
+Hi {{ customer_name }},
+
+Great news — your order #{{ order.order_number }} is on its way!
+
+Tracking information:
+{% if tracking.carrier %}Carrier:         {{ tracking.carrier }}
+{% endif %}Tracking number: {{ tracking.number }}
+{% if tracking.url %}Track online:    {{ tracking.url }}
+{% endif %}
+Items in this shipment:
+{% for item in order.items %}
+- {{ item.title }}{% if item.variant %} ({{ item.variant }}){% endif %}: {{ item.quantity }}
+{% endfor %}
+
+If you have any questions about your shipment, reply to this email.
+
+-- {{ store.name }}

@@ -1,0 +1,77 @@
+{% extends "storefront/base.html" %}
+{% load static storefront_tags permalinks_tags i18n %}
+
+{% block seo_head %}
+  {{ block.super }}
+  <title>{{ request.store.name|default:"Store" }}</title>
+{% endblock seo_head %}
+
+{% block breadcrumbs %}{# Home page has no breadcrumbs #}{% endblock breadcrumbs %}
+
+{% block main_content %}
+
+{# ── Hero ──────────────────────────────────────────────────────────────────── #}
+{% theme_partial "hero" %}
+
+{# ── Featured Collections ──────────────────────────────────────────────────── #}
+{% if featured_collections %}
+<section class="home-collections" data-testid="featured-collections">
+  <div class="home-collections__inner">
+    <h2 class="home-collections__heading">
+      {% if customization.homepage_collections_heading %}
+        {{ customization.homepage_collections_heading }}
+      {% else %}
+        {% trans "Shop by collection" %}
+      {% endif %}
+    </h2>
+    <ul class="home-collections__grid" role="list">
+      {% for item in featured_collections %}
+      <li class="home-collections__item">
+        <a href="{% permalink_url item.slug %}" class="home-collections__link" data-testid="collection-card">
+          {% if item.image %}
+          <img src="{{ item.image.url }}" alt="{{ item.translation.title|default:item.collection.title }}"
+               loading="lazy" class="home-collections__image">
+          {% endif %}
+          <span class="home-collections__title">
+            {{ item.translation.title|default:item.collection.title }}
+          </span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endif %}
+
+{# ── Featured Products ─────────────────────────────────────────────────────── #}
+{% if featured_products %}
+<section class="home-products" data-testid="featured-products">
+  <div class="home-products__inner">
+    <h2 class="home-products__heading">
+      {% if customization.homepage_products_heading %}
+        {{ customization.homepage_products_heading }}
+      {% else %}
+        {% trans "Featured products" %}
+      {% endif %}
+    </h2>
+    <ul class="home-products__grid product-grid" role="list">
+      {% for item in featured_products %}
+      <li>
+        {% include "storefront/partials/product_card.html" with product=item.product translation=item.translation slug=item.slug image=item.image %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endif %}
+
+{# ── Theme-specific band ────────────────────────────────────────────────────── #}
+{% theme_partial "theme_band" %}
+
+{# ── Newsletter placeholder ─────────────────────────────────────────────────── #}
+<section class="home-newsletter" data-testid="newsletter-placeholder">
+  {# T030 / T031 will inject the real newsletter form via a slot provider. #}
+  {% render_slot "announcement" %}
+</section>
+
+{% endblock main_content %}

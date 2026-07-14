@@ -1,0 +1,8 @@
+<script>
+ttq.track('{{ native_event|escapejs }}', {
+  content_id: '{% if payload.content_ids %}{{ payload.content_ids.0|escapejs }}{% endif %}',
+  value: '{{ payload.value|escapejs }}',
+  currency: '{{ payload.currency|escapejs }}'{% if event_id %},
+  event_id: '{{ event_id|escapejs }}'{% endif %}
+});
+</script>

@@ -1,0 +1,35 @@
+{% extends "storefront/base.html" %}
+{% load i18n %}
+
+{# CK-006 Distraction-free checkout base template.
+   Suppresses the full header, footer, navigation, announcement bar, mini cart,
+   breadcrumbs, overlay, social-proof and chat-launcher slots to minimise checkout
+   abandonment (chat widget suppression: human decision 2026-07-11, CK-006 wins
+   over the AI sales chat — ADR-024 addendum).
+   Replaces the header with a minimal logo-only bar for trust/branding.
+   Keeps: SEO head, seo_links, main_content, extra_scripts, analytics, pixels, consent.
+   Suppresses: announcement_bar, header (full), mini_cart, breadcrumbs, footer,
+   overlay, social_proof, chat_launcher. #}
+
+{% block announcement_bar %}{% endblock announcement_bar %}
+
+{% block header %}
+<header class="checkout-header" data-testid="checkout-header">
+  <a href="{% url 'storefront:home' %}" class="checkout-header__logo" aria-label="{% trans 'Home' %}">
+    {# Phase 4 (T003): replace with real logo img once StoreThemeCustomization.logo is wired. #}
+    <span class="checkout-header__logo-name">{{ request.store.name|default:"Store" }}</span>
+  </a>
+</header>
+{% endblock header %}
+
+{% block mini_cart %}{% endblock mini_cart %}
+
+{% block breadcrumbs %}{% endblock breadcrumbs %}
+
+{% block footer %}{% endblock footer %}
+
+{% block overlay %}{% endblock overlay %}
+
+{% block social_proof %}{% endblock social_proof %}
+
+{% block chat_launcher %}{% endblock chat_launcher %}

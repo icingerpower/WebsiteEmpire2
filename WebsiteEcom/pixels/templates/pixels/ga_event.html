@@ -1,0 +1,8 @@
+<script>
+gtag('event', '{{ native_event|escapejs }}', {
+  currency: '{{ payload.currency|escapejs }}',
+  value: '{{ payload.value|escapejs }}'{% if transaction_id %},
+  transaction_id: '{{ transaction_id|escapejs }}'{% endif %},
+  items: {{ content_ids_json }}.map(function (id) { return {item_id: id}; })
+});
+</script>

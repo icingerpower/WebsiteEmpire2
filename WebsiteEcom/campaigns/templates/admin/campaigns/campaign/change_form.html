@@ -1,0 +1,170 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block after_field_sets %}
+{{ block.super }}
+
+{% if funnel_tree %}
+<div class="module" style="padding: 1em; margin-top: 1em;">
+  <h2 style="margin-top:0">{% trans "Funnel Map" %}</h2>
+
+  {% if not original.entry_step %}
+  <p class="errornote">{% trans "No entry step set — funnel cannot be activated." %}</p>
+  {% endif %}
+
+  {% if funnel_tree.warnings %}
+  <ul class="messagelist" style="margin-left:0">
+    {% for w in funnel_tree.warnings %}
+    <li class="warning">{{ w }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if funnel_tree.entries %}
+  <div class="funnel-tree">
+    {% for entry in funnel_tree.entries %}
+    <div style="margin-left: {{ entry.depth }}em; padding: 0.4em 0.6em; border-left: 3px solid {% if entry.is_entry %}#417690{% elif entry.is_terminal %}#888{% else %}#ccc{% endif %}; margin-bottom: 0.3em; background: {% if entry.is_entry %}#e8f4fd{% elif entry.config_error %}#fff3cd{% else %}#f8f9fa{% endif %};">
+      {% if entry.is_cycle %}
+        <span style="color:#c00; font-weight:bold;">&#8635; CYCLE</span> &mdash;
+        {% if entry.step_url %}<a href="{{ entry.step_url }}">{{ entry.label }}</a>{% else %}{{ entry.label }}{% endif %}
+      {% elif entry.is_back_ref %}
+        &#8593; {% trans "see above" %} &mdash;
+        {% if entry.step_url %}<a href="{{ entry.step_url }}">{{ entry.label }}</a>{% else %}{{ entry.label }}{% endif %}
+      {% else %}
+        {% if entry.step_url %}<a href="{{ entry.step_url }}"><strong>{{ entry.label }}</strong></a>{% else %}<strong>{{ entry.label }}</strong>{% endif %}
+        {% if entry.is_entry %}&nbsp;<span style="background:#417690;color:#fff;padding:1px 5px;border-radius:3px;font-size:0.8em;">ENTRY</span>{% endif %}
+        {% if entry.is_terminal %}&nbsp;<span style="background:#888;color:#fff;padding:1px 5px;border-radius:3px;font-size:0.8em;">TERMINAL</span>{% endif %}
+        {% if entry.config_error %}&nbsp;<span style="background:#dc3545;color:#fff;padding:1px 5px;border-radius:3px;font-size:0.8em;" title="{{ entry.config_error }}">&#9888; CONFIG ERROR</span>{% endif %}
+        {% if not entry.is_entry and entry.set_entry_url %}
+        &nbsp;<form method="post" action="{{ entry.set_entry_url }}" style="display:inline;">{% csrf_token %}<button type="submit" class="button" style="padding:1px 6px;font-size:0.8em;background:#6c757d;border-color:#6c757d;" title="{% trans 'Make this the entry step' %}">&#9654; {% trans "Make entry" %}</button></form>
+        {% endif %}
+        {% if entry.accept_info is not None %}
+        <br>
+        <small style="color:#555;">
+          {% trans "Accept" %} &rarr;
+          {% if entry.accept_info.is_terminal %}
+            <span style="color:#28a745;">&#10003; {% trans "converted" %}</span>
+          {% else %}
+            {% if entry.accept_info.step_url %}<a href="{{ entry.accept_info.step_url }}">{{ entry.accept_info.label }}</a>{% else %}{{ entry.accept_info.label }}{% endif %}
+          {% endif %}
+          &nbsp;|&nbsp;
+          {% trans "Decline" %} &rarr;
+          {% if entry.decline_info.is_terminal %}
+            <span style="color:#dc3545;">&#10005; {% trans "dismissed" %}</span>
+          {% else %}
+            {% if entry.decline_info.step_url %}<a href="{{ entry.decline_info.step_url }}">{{ entry.decline_info.label }}</a>{% else %}{{ entry.decline_info.label }}{% endif %}
+          {% endif %}
+        </small>
+        {% endif %}
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:#888;">{% trans "No steps yet. Add steps below to build your funnel." %}</p>
+  {% endif %}
+
+  {% if funnel_tree.unreachable %}
+  <div style="margin-top:1em; padding:0.5em; background:#fff3cd; border:1px solid #ffc107;">
+    <strong>{% trans "Unreachable Steps" %}</strong>
+    <p style="margin:0.3em 0; font-size:0.9em; color:#555;">{% trans "These steps exist but are not reachable from the entry step. They will never be shown to shoppers." %}</p>
+    <ul style="margin:0.3em 0 0 1em; padding:0;">
+      {% for step_entry in funnel_tree.unreachable %}
+      <li>
+        {% if step_entry.step_url %}<a href="{{ step_entry.step_url }}">{{ step_entry.label }}</a>{% else %}{{ step_entry.label }}{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if chain_preview.has_entry %}
+<fieldset class="module aligned" style="margin-top:1em;">
+  <h2>{% trans "Offer Chain Preview" %}</h2>
+
+  <h3 style="margin-top:0.5em;">{% trans "All-Accepts Path" %}</h3>
+  {% if chain_preview.accept_chain %}
+  <table style="width:100%; border-collapse:collapse;">
+    <thead>
+      <tr style="background:#f8f9fa; text-align:left;">
+        <th style="padding:0.4em 0.6em; border-bottom:1px solid #ccc;">{% trans "Step" %}</th>
+        <th style="padding:0.4em 0.6em; border-bottom:1px solid #ccc;">{% trans "Offer type" %}</th>
+        <th style="padding:0.4em 0.6em; border-bottom:1px solid #ccc;">{% trans "Amount" %}</th>
+        <th style="padding:0.4em 0.6em; border-bottom:1px solid #ccc;">{% trans "Cumulative revenue" %}</th>
+        <th style="padding:0.4em 0.6em; border-bottom:1px solid #ccc;">{% trans "Terminal?" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in chain_preview.accept_chain %}
+    <tr style="border-bottom:1px solid #eee;">
+      <td style="padding:0.4em 0.6em;">{{ row.step.title|default:row.step.pk }}</td>
+      <td style="padding:0.4em 0.6em;">{{ row.offer_type }}</td>
+      <td style="padding:0.4em 0.6em;">{% if row.offer_type == "storewide_discount" %}{{ row.discount_pct }}% {% trans "off" %}{% else %}{{ row.amount_cents }} {% trans "cents" %}{% endif %}</td>
+      <td style="padding:0.4em 0.6em;">{{ row.cumulative_revenue_cents }} {% trans "cents" %}</td>
+      <td style="padding:0.4em 0.6em;">{% if row.is_terminal %}<span style="color:#28a745; font-weight:bold;">&#10003; {% trans "CONVERTED" %}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr style="background:#f8f9fa; font-weight:bold;">
+        <td colspan="3" style="padding:0.4em 0.6em; border-top:2px solid #ccc;">{% trans "Total revenue (all accepts)" %}</td>
+        <td style="padding:0.4em 0.6em; border-top:2px solid #ccc;">{{ chain_preview.total_accept_revenue_cents }} {% trans "cents" %}</td>
+        <td style="border-top:2px solid #ccc;"></td>
+      </tr>
+    </tfoot>
+  </table>
+  {% else %}
+  <p style="color:#888;">{% trans "No steps on the all-accepts path." %}</p>
+  {% endif %}
+
+  <h3 style="margin-top:1em;">{% trans "All-Declines Path" %}</h3>
+  {% if chain_preview.decline_chain %}
+  <table style="width:100%; border-collapse:collapse;">
+    <thead>
+      <tr style="background:#f8f9fa; text-align:left;">
+        <th style="padding:0.4em 0.6em; border-bottom:1px solid #ccc;">{% trans "Step" %}</th>
+        <th style="padding:0.4em 0.6em; border-bottom:1px solid #ccc;">{% trans "Offer type" %}</th>
+        <th style="padding:0.4em 0.6em; border-bottom:1px solid #ccc;">{% trans "Terminal?" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in chain_preview.decline_chain %}
+    <tr style="border-bottom:1px solid #eee;">
+      <td style="padding:0.4em 0.6em;">{{ row.step.title|default:row.step.pk }}</td>
+      <td style="padding:0.4em 0.6em;">{{ row.offer_type }}</td>
+      <td style="padding:0.4em 0.6em;">{% if row.is_terminal %}<span style="color:#dc3545; font-weight:bold;">&#10005; {% trans "DISMISSED" %}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#888;">{% trans "No steps on the all-declines path." %}</p>
+  {% endif %}
+</fieldset>
+{% endif %}
+
+{% if activation_errors %}
+<div class="errornote module" style="padding:1em; margin-top:1em;">
+  <h2 style="margin-top:0; color:#c00;">{% trans "Activation Failed" %}</h2>
+  <ul style="margin:0; padding-left:1.5em;">
+    {% for error in activation_errors %}
+    <li>{{ error }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if can_activate %}
+<div class="module" style="padding:1em; margin-top:1em;">
+  <form method="post" action="{{ activate_url }}">
+    {% csrf_token %}
+    <button type="submit" class="button default" style="background:#28a745; border-color:#28a745;">
+      &#9654; {% trans "Activate Campaign" %}
+    </button>
+    <span style="margin-left:0.5em; color:#555; font-size:0.9em;">{% trans "Validates the funnel before activation." %}</span>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

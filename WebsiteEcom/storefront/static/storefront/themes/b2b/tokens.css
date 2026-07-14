@@ -1,0 +1,75 @@
+/*
+ * B2B theme tokens (TICKET-029 Phase 4).
+ *
+ * B2B theme: professional, trust-first, catalog-dense.
+ * Card aspect ratio: 1:1 (square). Header: left-aligned logo. Font: sans-serif, smaller base.
+ * Quotation-form CTA is prominent; dense product grids (more products visible).
+ */
+
+:root {
+  /* Colors */
+  --color-primary: #003087;
+  --color-primary-contrast: #ffffff;
+  --color-accent: #f5a623;
+  --color-background: #f5f7fa;
+  --color-surface: #ffffff;
+  --color-text: #1c2b4a;
+  --color-text-muted: #5a6a8a;
+  --color-border: #d0d8e4;
+  --color-success: #0d7d4a;
+  --color-error: #c0392b;
+  --color-badge: #f5a623;
+  --color-announcement: #003087;
+
+  /* Typography */
+  --font-heading: 'Roboto', 'Arial', sans-serif;
+  --font-body: 'Roboto', 'Arial', sans-serif;
+  --font-size-base: 14px;
+  --line-height-base: 1.5;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 40px;
+
+  /* Product card */
+  --card-aspect-ratio: 1/1;
+  --card-radius: 2px;
+  --card-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+
+  /* Header */
+  --header-height: 56px;
+  --header-bg: var(--color-primary);
+  --header-logo-align: left;
+
+  /* Buttons */
+  --btn-radius: 2px;
+  --btn-primary-bg: var(--color-primary);
+  --btn-primary-text: #ffffff;
+  --btn-secondary-bg: transparent;
+  --btn-secondary-text: var(--color-primary);
+  --btn-secondary-border: var(--color-primary);
+
+  /* Forms */
+  --input-border: var(--color-border);
+  --input-radius: 2px;
+  --input-bg: #ffffff;
+  --input-focus-border: var(--color-primary);
+
+  /* Pradize CSS custom-property aliases (--p-* whitelist from StoreThemeCustomization) */
+  --p-color-brand: var(--color-primary);
+  --p-color-accent: var(--color-accent);
+  --p-color-background: var(--color-background);
+  --p-color-surface: var(--color-surface);
+  --p-color-text: var(--color-text);
+  --p-color-muted-text: var(--color-text-muted);
+  --p-color-badge: var(--color-badge);
+  --p-color-announcement: var(--color-announcement);
+  --p-font-heading: var(--font-heading);
+  --p-font-body: var(--font-body);
+  --p-radius: var(--card-radius);
+  --p-header-layout: left;
+  --p-card-aspect-ratio: var(--card-aspect-ratio);
+}

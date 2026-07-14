@@ -1,0 +1,7 @@
+{% comment %}
+Wrapper for badges.widgets.BadgePresetSelect (ADR-030 D5 preview grid).
+Mirrors engagement/templates/engagement/widgets/overlay_theme_select.html —
+lays the options out as a CSS grid of cards instead of a <ul>/<li> list.
+Card styling lives in badge_preset_option.html so this file only owns layout.
+{% endcomment %}
+{% with id=widget.attrs.id %}<div class="bp-preset-grid"{% if id %} id="{{ id }}"{% endif %}>{% for group, options, index in widget.optgroups %}{% for option in options %}{% include option.template_name with widget=option %}{% endfor %}{% endfor %}</div>{% endwith %}

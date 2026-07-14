@@ -1,0 +1,18 @@
+{% comment %}
+ADR-030 D2/D4 — preset_key="custom": the store's own uploaded image (its own
+asset, its own attestation — the platform is not asserting anything about an
+uploaded image, it is hosting it, per §1.4). This is the one exception to the
+"every built-in icon is inline SVG" zero-CLS rule (D4): a real <img>, so a
+fixed aspect-ratio reserves the layout before the byte arrives (mirrors the
+platform's existing product-image zero-CLS convention — CSS aspect-ratio,
+e.g. storefront/templates/storefront/partials/product_card.html — rather
+than reading the uploaded file's real pixel dimensions on every render).
+ASSUMPTION (low risk): a fixed 3/1 banner aspect-ratio, since the model does
+not persist per-upload width/height.
+{% endcomment %}
+<div class="security-badge security-badge--custom" data-testid="security-badge" data-badge-id="{{ row.pk }}" style="width: {{ width_px }}px;{% if row.border_enabled %} border: {{ row.border_width_px }}px solid {{ row.border_color }}; padding: 8px;{% endif %} text-align: center;">
+  {% include "storefront/partials/security_badges/_heading.html" %}
+  {% if row.custom_image %}
+  <img class="security-badge__custom-image" src="{{ row.custom_image.url }}" alt="{{ row.name }}" width="{{ width_px }}" style="width: 100%; height: auto; aspect-ratio: 3 / 1; object-fit: contain; display: block; margin: 0 auto;">
+  {% endif %}
+</div>

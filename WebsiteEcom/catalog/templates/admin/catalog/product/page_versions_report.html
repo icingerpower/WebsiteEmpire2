@@ -1,0 +1,55 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {{ block.super }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans "Home" %}</a>
+  &rsaquo; <a href="{{ changelist_url }}">{% trans "Products" %}</a>
+  &rsaquo; {{ product.title }}
+  &rsaquo; {% trans "A/B page versions report" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>{% trans "A/B page versions" %} — {{ product.title }}</h1>
+
+<p>
+  {% blocktrans %}
+  Raw counts for the last {{ days }} day(s). Behavioral counts (views,
+  add-to-carts) come from aggregated analytics; orders, units and revenue
+  come from the order snapshot (never from beacon events). No
+  statistical-significance testing in v1 — counts and conversion rate only.
+  {% endblocktrans %}
+</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>{% trans "Version" %}</th>
+      <th>{% trans "Views" %}</th>
+      <th>{% trans "Add to carts" %}</th>
+      <th>{% trans "Orders" %}</th>
+      <th>{% trans "Units" %}</th>
+      <th>{% trans "Revenue" %}</th>
+      <th>{% trans "Conversion rate" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr data-testid="page-version-report-row" data-page-version-id="{{ row.page_version_id }}">
+      <td>{{ row.label }}</td>
+      <td>{{ row.views }}</td>
+      <td>{{ row.add_to_carts }}</td>
+      <td>{{ row.orders }}</td>
+      <td>{{ row.units }}</td>
+      <td>{{ row.revenue }}</td>
+      <td>{{ row.conversion_rate|floatformat:2 }}%</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<p><a href="{{ changelist_url }}" class="button">{% trans "Back to products" %}</a></p>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "storefront/base.html" %}
+{% load static i18n storefront_tags permalinks_tags %}
+
+{% block seo_head %}
+  {{ block.super }}
+  <title>{% trans "Page not found" %} | {{ request.store.name|default:"Store" }}</title>
+  <meta name="robots" content="noindex, nofollow">
+{% endblock seo_head %}
+
+{% block breadcrumbs %}{# No breadcrumbs on 404 #}{% endblock breadcrumbs %}
+
+{% block main_content %}
+<div class="error-404" data-testid="404-page">
+  <h1 class="error-404__heading">
+    {% trans "Page not found" %}
+  </h1>
+
+  <p class="error-404__body">
+    {% trans "The page you are looking for does not exist or has been moved." %}
+  </p>
+
+  {# Search bar — lets buyers recover by finding what they wanted. #}
+  <form method="get" action="/search/" class="error-404__search" data-testid="404-search"
+        role="search">
+    <label for="q-404" class="error-404__search-label">
+      {% trans "Search our store" %}
+    </label>
+    <div class="error-404__search-group">
+      <input type="search" id="q-404" name="q"
+             placeholder="{% trans 'Search products…' %}"
+             class="error-404__search-input">
+      <button type="submit" class="btn btn--primary">
+        {% trans "Search" %}
+      </button>
+    </div>
+  </form>
+
+  {# Featured collections — helps buyers navigate without knowing the correct URL. #}
+  {% if featured_collections %}
+  <nav class="error-404__collections" aria-label="{% trans 'Browse collections' %}">
+    <h2 class="error-404__collections-heading">
+      {% trans "Browse our collections" %}
+    </h2>
+    <ul class="error-404__collections-list" role="list">
+      {% for item in featured_collections %}
+      <li>
+        <a href="{% permalink_url item.slug %}" class="error-404__collection-link">
+          {{ item.translation.title|default:item.collection.title }}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </nav>
+  {% endif %}
+
+  <a href="{% permalink_url '' %}" class="btn btn--secondary error-404__home-link"
+     data-testid="404-home-link">
+    {% trans "Back to home" %}
+  </a>
+</div>{# end .error-404 #}
+{% endblock main_content %}

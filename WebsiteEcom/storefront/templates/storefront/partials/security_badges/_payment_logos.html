@@ -1,0 +1,24 @@
+{% comment %}
+Shared payment-logo composition for every badge preset (ADR-030 §3, D3).
+Every preset {% include %}s this partial instead of hardcoding its own logo
+list — icons render strictly from `accepted_families`, computed once per
+render from the store's actually-enabled PaymentMethod rows
+(badges.badge_presets.accepted_families()). Never a fixed list independent
+of configuration: a preset must never show a network the store does not
+actually accept.
+
+"card" bundles all four network icons as one unit because the platform's
+only card-family connector today (Stripe) accepts all four networks — see
+ADR-030 §3 for the PENDING follow-up note if a narrower-network card
+processor is ever added. "crypto" has no icon in v1 (no crypto processor
+ships yet).
+{% endcomment %}
+{% if "card" in accepted_families %}
+{% include "storefront/partials/security_badges/icons/visa.svg" %}
+{% include "storefront/partials/security_badges/icons/mastercard.svg" %}
+{% include "storefront/partials/security_badges/icons/amex.svg" %}
+{% include "storefront/partials/security_badges/icons/discover.svg" %}
+{% endif %}
+{% if "paypal" in accepted_families %}
+{% include "storefront/partials/security_badges/icons/paypal.svg" %}
+{% endif %}

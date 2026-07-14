@@ -1,0 +1,22 @@
+{% extends "emails/base.html" %}
+
+{% block subject %}Here is your gift card code{% endblock %}
+
+{% block content %}
+<p>Hello,</p>
+<p>
+  Thank you for your order at <strong>{{ store.name }}</strong>! Here is your
+  <strong>{{ gift_value }}</strong> gift card code:
+</p>
+<p style="margin:24px 0;">
+  <span style="display:inline-block;padding:12px 24px;background:#f4f4f4;border:1px dashed #999;border-radius:4px;font-size:20px;letter-spacing:2px;">
+    {{ gift_code }}
+  </span>
+</p>
+{% if expires_at %}
+<p style="color:#888;font-size:13px;">This code expires on {{ expires_at }}.</p>
+{% endif %}
+<p style="margin-top:32px;color:#888;font-size:13px;">
+  Use this code at checkout on your next order at {{ store.name }}.
+</p>
+{% endblock %}

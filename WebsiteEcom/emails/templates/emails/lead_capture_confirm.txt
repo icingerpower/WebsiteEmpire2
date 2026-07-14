@@ -1,0 +1,11 @@
+Thanks for signing up for {{ campaign_name }} at {{ store.name }}!
+
+Please confirm your subscription by visiting the link below — we need this
+extra step to comply with German marketing-consent requirements (double opt-in).
+
+{{ confirm_url }}
+
+If you did not request this, you can safely ignore this email — no subscription
+will be created without confirmation.
+
+-- {{ store.name }}

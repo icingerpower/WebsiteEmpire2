@@ -1,0 +1,60 @@
+{% load i18n %}
+{#
+  Notify-me partial — shown when the default variant is out of stock
+  (inventory_status.class == "sold-out" or "ask-available").
+
+  Progressive enhancement: submits via fetch() on JS-capable browsers and
+  shows an inline success message; falls back to a full-page POST redirect
+  on browsers without JS.
+#}
+<div class="notify-me" data-testid="notify-me-form">
+  <p class="notify-me__message">{% trans "This product is currently out of stock." %}</p>
+  <form method="post"
+        action="{% url 'storefront:product-notify-me' product_slug=product.slug %}"
+        class="notify-me__form">
+    {% csrf_token %}
+    <label class="notify-me__label" for="notify-email">{% trans "Email address" %}</label>
+    <div class="notify-me__row">
+      <input type="email"
+             id="notify-email"
+             name="email"
+             required
+             placeholder="{% trans 'your@email.com' %}"
+             class="notify-me__input"
+             data-testid="notify-me-email">
+      <button type="submit"
+              class="notify-me__submit btn btn--secondary"
+              data-testid="notify-me-submit">
+        {% trans "Notify me when back in stock" %}
+      </button>
+    </div>
+  </form>
+  <p class="notify-me__success" hidden data-testid="notify-me-success">
+    {% trans "We'll notify you when this product is back in stock." %}
+  </p>
+</div>
+<script>
+(function () {
+  var wrapper = document.querySelector('[data-testid="notify-me-form"]');
+  if (!wrapper) { return; }
+  var form = wrapper.querySelector('form');
+  if (!form) { return; }
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    fetch(form.action, {
+      method: 'POST',
+      body: new FormData(form),
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          form.hidden = true;
+          var success = wrapper.querySelector('[data-testid="notify-me-success"]');
+          if (success) { success.hidden = false; }
+        }
+      })
+      .catch(function () { form.submit(); }); /* fallback on network error */
+  });
+}());
+</script>

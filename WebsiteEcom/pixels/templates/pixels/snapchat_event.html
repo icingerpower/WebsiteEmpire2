@@ -1,0 +1,8 @@
+<script>
+snaptr('track', '{{ native_event|escapejs }}', {
+  item_ids: {{ content_ids_json }},
+  price: '{{ payload.value|escapejs }}',
+  currency: '{{ payload.currency|escapejs }}'{% if event_id %},
+  client_dedup_id: '{{ event_id|escapejs }}'{% endif %}
+});
+</script>

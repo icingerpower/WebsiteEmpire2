@@ -1,0 +1,8 @@
+<script>
+pintrk('track', '{{ native_event|escapejs }}', {
+  value: '{{ payload.value|escapejs }}',
+  currency: '{{ payload.currency|escapejs }}',
+  line_items: {{ content_ids_json }}.map(function (id) { return {product_id: id}; }){% if event_id %},
+  event_id: '{{ event_id|escapejs }}'{% endif %}
+});
+</script>

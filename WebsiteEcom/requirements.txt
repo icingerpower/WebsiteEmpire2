@@ -1,0 +1,18 @@
+Django==6.0.4
+Pillow
+cryptography
+stripe>=15.0
+celery>=5.3
+# Production cache backend (webecom/settings/production.py requires CACHE_URL) —
+# the anti-spam rate limiter's atomicity depends on a shared Redis cache.
+# Approved 2026-07-10 (release checklist item).
+redis>=7.0
+# PostgreSQL driver for production (approved 2026-07-10, release checklist item).
+psycopg2-binary>=2.9
+# Anthropic Python SDK for the AI sales-assistant chat (ADR-024, TICKET-038).
+# Approved 2026-07-10 (ADR-024).
+anthropic>=0.40
+# DNS TXT lookups for per-store sender-domain SPF/DKIM verification
+# (ADR-034, TICKET-040). Pure Python, actively maintained, no C extension.
+# Approved 2026-07-11 (ADR-034).
+dnspython>=2.6

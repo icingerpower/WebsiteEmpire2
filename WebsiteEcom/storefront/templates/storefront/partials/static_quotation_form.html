@@ -1,0 +1,74 @@
+{% load i18n %}
+{#
+  Store-level (general, non-product) quotation form partial (ADR-018 D4, T029-SP).
+  Creates a QuotationRequest with product=NULL. Distinct from
+  storefront/partials/quotation_form.html, which is per-product and posts to
+  /products/<slug>/quotation/.
+
+  Posts to the page's own URL (action="") — handled by
+  storefront.views_pages.static_page_view's POST branch.
+#}
+<div class="static-quotation-form" data-testid="static-quotation-form">
+  <form method="post" action="" class="static-quotation-form__form">
+    {% csrf_token %}
+
+    {# Honeypot (ADR-018 D3) — see contact_form.html for the same pattern and the
+       security-audit-F7 rationale for the field name. #}
+    <div class="static-quotation-form__honeypot" style="position:absolute;left:-9999px;" aria-hidden="true">
+      <label for="quote-hp-company">Company</label>
+      <input type="text" id="quote-hp-company" name="hp_company" autocomplete="off" tabindex="-1">
+    </div>
+
+    <div class="static-quotation-form__field">
+      <label class="static-quotation-form__label" for="quote-name">{% trans "Your name" %}</label>
+      <input type="text" id="quote-name" name="customer_name" class="static-quotation-form__input"
+             placeholder="{% trans 'Full name' %}" data-testid="quote-name">
+    </div>
+
+    <div class="static-quotation-form__field">
+      <label class="static-quotation-form__label" for="quote-email">{% trans "Email address" %}</label>
+      <input type="email" id="quote-email" name="email" required class="static-quotation-form__input"
+             placeholder="{% trans 'your@email.com' %}" data-testid="quote-email">
+    </div>
+
+    <div class="static-quotation-form__field">
+      <label class="static-quotation-form__label" for="quote-message">{% trans "Message" %}</label>
+      <textarea id="quote-message" name="message" rows="4"
+                class="static-quotation-form__textarea"
+                placeholder="{% trans 'Tell us what you need a quote for.' %}"
+                data-testid="quote-message"></textarea>
+    </div>
+
+    <button type="submit" class="static-quotation-form__submit btn btn--primary" data-testid="quote-form-submit">
+      {% trans "Request a quote" %}
+    </button>
+  </form>
+  <p class="static-quotation-form__success" hidden data-testid="static-quotation-form-success">
+    {% trans "Thank you — your quotation request has been sent." %}
+  </p>
+</div>
+<script>
+(function () {
+  var wrapper = document.querySelector('[data-testid="static-quotation-form"]');
+  if (!wrapper) { return; }
+  var form = wrapper.querySelector('form');
+  if (!form) { return; }
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    fetch(form.action || window.location.pathname, {
+      method: 'POST',
+      body: new FormData(form),
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          form.hidden = true;
+          var success = wrapper.querySelector('[data-testid="static-quotation-form-success"]');
+          if (success) { success.hidden = false; }
+        }
+      })
+      .catch(function () { form.submit(); }); /* fallback on network error */
+  });
+}());
+</script>

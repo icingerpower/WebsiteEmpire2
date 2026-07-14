@@ -1,0 +1,147 @@
+{% extends "storefront/base.html" %}
+{% load i18n storefront_tags %}
+
+{% block seo_head %}
+  {{ block.super }}
+  <title>{% trans "Order confirmed" %} | {{ request.store.name|default:"Store" }}</title>
+  <meta name="robots" content="noindex, nofollow">
+{% endblock seo_head %}
+
+{% block breadcrumbs %}{% endblock breadcrumbs %}
+
+{% block main_content %}
+<div class="thank-you-page" data-testid="thank-you-page">
+
+  <h1 class="thank-you-page__heading">{% trans "Thank you for your order!" %}</h1>
+
+  {% if order %}
+  <p class="thank-you-page__order-number" data-testid="order-number">
+    {% trans "Order number" %}: <strong>{{ order.order_number }}</strong>
+  </p>
+
+  <p class="thank-you-page__confirmation-email">
+    {% blocktrans with email=order.customer_email %}
+    A confirmation has been sent to {{ email }}.
+    {% endblocktrans %}
+  </p>
+
+  {# ── Order items ─────────────────────────────────────────────────────────── #}
+  {% if items %}
+  <section class="thank-you-page__items" data-testid="order-items">
+    <h2>{% trans "Your items" %}</h2>
+    <ul>
+      {% for item in items %}
+      <li class="thank-you-page__item" data-testid="order-item">
+        {{ item.quantity }}&times;
+        {{ item.product_name }}
+        {% if item.variant_title %} — {{ item.variant_title }}{% endif %}
+        &mdash;
+        <span class="item-price">{{ item.line_total }} {{ order.currency }}</span>
+        <em class="price-note">{% trans "(all taxes included)" %}</em>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {# ── Order totals ─────────────────────────────────────────────────────────── #}
+  <section class="thank-you-page__totals" data-testid="order-totals">
+    <dl>
+      <dt>{% trans "Subtotal" %}</dt>
+      <dd>{{ order.subtotal }} {{ order.currency }}</dd>
+
+      {% if discount_lines %}
+        {% for dl in discount_lines %}
+        <dt>{% trans "Discount" %} ({{ dl.code }})</dt>
+        <dd>-{{ dl.amount }} {{ order.currency }}</dd>
+        {% endfor %}
+      {% elif order.discount_amount %}
+      <dt>{% trans "Discount" %}</dt>
+      <dd>-{{ order.discount_amount }} {{ order.currency }}</dd>
+      {% endif %}
+
+      {% if order.shipping_amount %}
+      <dt>{% trans "Shipping" %} {% if order.shipping_method_name %}({{ order.shipping_method_name }}){% endif %}</dt>
+      <dd>{{ order.shipping_amount }} {{ order.currency }}</dd>
+      {% endif %}
+
+      <dt><strong>{% trans "Total" %}</strong></dt>
+      <dd><strong>{{ order.total }} {{ order.currency }}</strong></dd>
+    </dl>
+    <p class="price-tax-note">{% trans "All taxes are included in the displayed prices." %}</p>
+  </section>
+
+  {# ── Payment method (TH-002) ─────────────────────────────────────────────── #}
+  {% if payment_summary %}
+  <div class="thank-you__payment-method" data-testid="payment-method">
+    {% blocktrans with summary=payment_summary %}Paid with {{ summary }}{% endblocktrans %}
+  </div>
+  {% endif %}
+
+  {# ── Per-code discount lines (TH-002) ─────────────────────────────────────── #}
+  {% if discount_lines %}
+  <div class="thank-you__discounts">
+    {% for dl in discount_lines %}
+    <div class="thank-you__discount" data-testid="discount-line-{{ forloop.counter }}">
+      <span class="thank-you__discount-code">{{ dl.code }}</span>
+      <span class="thank-you__discount-amount">-{{ dl.amount }} {{ order.currency }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# ── Shipping address ─────────────────────────────────────────────────────── #}
+  {% if order.shipping_address %}
+  <section class="thank-you-page__address" data-testid="shipping-address">
+    <h2>{% trans "Shipping address" %}</h2>
+    <address>
+      {{ order.shipping_address.name }}<br>
+      {{ order.shipping_address.line1 }}<br>
+      {% if order.shipping_address.line2 %}{{ order.shipping_address.line2 }}<br>{% endif %}
+      {{ order.shipping_address.city }}{% if order.shipping_address.state %}, {{ order.shipping_address.state }}{% endif %}
+      {% if order.shipping_address.postal_code %} {{ order.shipping_address.postal_code }}{% endif %}<br>
+      {{ order.shipping_address.country }}
+    </address>
+  </section>
+  {% endif %}
+
+  {% endif %}{# /if order #}
+
+  {# ── Upsell widget ────────────────────────────────────────────────────────── #}
+  {# Rendered only when a CampaignSession in INTERACTION state with a valid raw
+     token is available.  As of Phase 3, the raw token cannot be retrieved from the
+     DB (only the SHA-256 hash is stored), so upsell_session is always None here.
+     See the TODO comment in views_checkout.order_thank_you for the resolution plan. #}
+  {% if upsell_session %}
+  {% include "storefront/partials/upsell_widget.html" with session=upsell_session step=upsell_step token=upsell_token %}
+  {% endif %}
+
+  {# ── Post-purchase funnel slot (T029 §6 thankyou_funnel) ─────────────────── #}
+  {% render_slot "thankyou_funnel" %}
+
+  {# ── Storewide next-order discount offer (TH-006 / TICKET-027 item 3) ────── #}
+  {% if next_order_offer %}
+  <section class="next-order-offer" data-testid="next-order-offer">
+    <h2>{% trans "A gift for your next order" %}</h2>
+    <p>{% blocktrans with pct=next_order_offer.discount_pct %}Enjoy {{ pct }}% off your next purchase with this code:{% endblocktrans %}</p>
+    <div class="next-order-offer__code" data-testid="next-order-code">{{ next_order_offer.code }}</div>
+    <p class="next-order-offer__expiry">{% blocktrans with date=next_order_offer.expires_at|date %}Valid until {{ date }}.{% endblocktrans %}</p>
+  </section>
+  {% endif %}
+
+  {# Account CTA placeholder — hidden until accounts feature ships (ADR-015 §8 Phase 4).
+     Showing a dead-end link to anonymous users is worse than no CTA at all.
+     Uncomment and wire up the real account-create URL when registration is implemented. #}
+  {# {% if not request.user.is_authenticated %} #}
+  {#   <div class="thank-you-page__account-cta" data-testid="account-creation-cta"> #}
+  {#     <p>{% trans "Save your details for faster checkout next time." %}</p> #}
+  {#     <a href="{% url 'storefront:home' %}">{% trans "Create an account" %}</a> #}
+  {#   </div> #}
+  {# {% endif %} #}
+
+  <a href="{% url 'storefront:home' %}" class="thank-you-page__continue-link">
+    {% trans "Continue shopping" %}
+  </a>
+
+</div>
+{% endblock main_content %}

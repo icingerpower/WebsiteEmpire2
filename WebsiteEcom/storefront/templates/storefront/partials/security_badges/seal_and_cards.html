@@ -1,0 +1,13 @@
+{% comment %}
+ADR-030 D3 preset "seal_and_cards" — SSL seal icon (gated on
+request.is_secure()) + truthful payment-network logos (gated on
+accepted_families). Registered in badges.badge_presets.BADGE_PRESETS;
+context built by badges.slot_provider._render_one().
+{% endcomment %}
+<div class="security-badge security-badge--seal-and-cards" data-testid="security-badge" data-badge-id="{{ row.pk }}" style="width: {{ width_px }}px;{% if row.border_enabled %} border: {{ row.border_width_px }}px solid {{ row.border_color }}; padding: 8px;{% endif %} text-align: center;">
+  {% include "storefront/partials/security_badges/_heading.html" %}
+  <div class="security-badge__icons" style="display:flex; align-items:center; justify-content:center; gap:6px; flex-wrap:wrap;">
+    {% if is_secure %}{% include "storefront/partials/security_badges/icons/ssl_seal.svg" %}{% endif %}
+    {% include "storefront/partials/security_badges/_payment_logos.html" %}
+  </div>
+</div>

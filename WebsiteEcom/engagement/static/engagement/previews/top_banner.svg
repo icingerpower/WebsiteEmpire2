@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 140" role="img" aria-label="Top banner theme preview">
+  <!-- Schematic wireframe only (no photo, no real copy) — ADR-027 D10 preview asset. -->
+  <rect x="0" y="0" width="220" height="140" fill="#d9d9d9"/>
+  <rect x="0" y="10" width="220" height="30" fill="#ffffff" stroke="#cccccc" stroke-width="1.5"/>
+  <rect x="14" y="19" width="90" height="8" rx="2" fill="#222222"/>
+  <rect x="14" y="31" width="60" height="5" rx="2" fill="#999999"/>
+  <rect x="160" y="18" width="48" height="12" rx="2" fill="#222222"/>
+  <rect x="20" y="60" width="180" height="8" rx="2" fill="#eeeeee"/>
+  <rect x="20" y="78" width="140" height="8" rx="2" fill="#eeeeee"/>
+  <rect x="20" y="96" width="160" height="8" rx="2" fill="#eeeeee"/>
+  <rect x="20" y="114" width="100" height="8" rx="2" fill="#eeeeee"/>
+</svg>

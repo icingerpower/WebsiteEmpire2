@@ -1,0 +1,78 @@
+/* engagement.widgets.OverlayThemeSelect — "SELECT A THEME" preview grid
+ * (admin-015-02/03: a visual card grid, not a plain <select>).
+ *
+ * Uses the same django.contrib.admin CSS custom properties (--border-color,
+ * --body-bg, --body-fg, --primary, --selected-bg) as the rest of admin chrome
+ * so cards stay correct in both light and dark admin themes without any
+ * hardcoded color duplicating base.css, matching the pixels card grid
+ * convention (pixels/templates/admin/pixels/pixel/change_list.html).
+ */
+
+.lc-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+  max-width: 900px;
+}
+
+.lc-theme-card {
+  display: block;
+  cursor: pointer;
+}
+
+/* Visually hidden but still focusable/keyboard-operable — never display:none,
+ * which would drop the input from the tab order entirely. */
+.lc-theme-card__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.lc-theme-card__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 2px solid var(--border-color, #ccc);
+  border-radius: 8px;
+  background: var(--body-bg, #fff);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.lc-theme-card:hover .lc-theme-card__content {
+  border-color: var(--primary, #79aec8);
+}
+
+.lc-theme-card__input:focus-visible ~ .lc-theme-card__content {
+  outline: 2px solid var(--primary, #79aec8);
+  outline-offset: 2px;
+}
+
+.lc-theme-card__input:checked ~ .lc-theme-card__content {
+  border-color: var(--primary, #79aec8);
+  background: var(--selected-bg, #e4e4e4);
+  box-shadow: 0 0 0 3px rgba(121, 174, 200, 0.35);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary, #79aec8) 35%, transparent);
+}
+
+.lc-theme-card__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.lc-theme-card__name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--body-fg, #333);
+}
