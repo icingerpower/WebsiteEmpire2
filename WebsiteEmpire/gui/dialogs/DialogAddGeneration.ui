@@ -96,7 +96,7 @@
      <item row="6" column="1">
       <widget class="QPlainTextEdit" name="plainTextEditInstructions">
        <property name="placeholderText">
-        <string>Optional: describe what Claude should write, the page structure, tone, SEO rules, etc. Leave empty to use the default prompt.</string>
+        <string>Optional: describe what the AI CLI should write, the page structure, tone, SEO rules, etc. Leave empty to use the default prompt.</string>
        </property>
       </widget>
      </item>

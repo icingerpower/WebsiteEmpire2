@@ -104,8 +104,7 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt, AbstractCli *cli)
     QProcess process;
     process.setWorkingDirectory(tempDir.path());
     process.setProgram(cli->getExecutable());
-    process.setArguments(cli->promptArgs());
-    process.setStandardInputFile(promptPath);
+    cli->configurePromptProcess(&process, cli->promptArgs(), prompt, promptPath);
     process.setStandardOutputFile(outputPath);
     // Raise the output token cap so large SVG tables are never truncated.
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();

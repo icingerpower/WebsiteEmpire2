@@ -186,13 +186,13 @@ void PaneTranslations::_viewCommands()
     for (const AbstractCli *c : AbstractCli::ALL_CLIS()) {
         cliNames.append(c->getName());
     }
-    const QString cliList = cliNames.isEmpty() ? QStringLiteral("Claude") : cliNames.join(QStringLiteral(", "));
+    const QString cliList = cliNames.isEmpty() ? QStringLiteral("<cli>") : cliNames.join(QStringLiteral(", "));
 
     const QString configuredCli = WorkingDirectoryManager::instance()->settings()
                                       ->value(QStringLiteral("defaultCli")).toString();
     const QString exampleCli = !configuredCli.isEmpty()
                                ? configuredCli
-                               : (cliNames.isEmpty() ? QStringLiteral("Claude") : cliNames.first());
+                               : (cliNames.isEmpty() ? QStringLiteral("<cli>") : cliNames.first());
 
     const QString cliSuffix = QStringLiteral(" --") + AbstractLauncher::OPTION_CLI
                               + QLatin1Char(' ') + exampleCli;

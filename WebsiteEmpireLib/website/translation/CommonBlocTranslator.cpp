@@ -205,13 +205,13 @@ void CommonBlocTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus
     bool hasError = false;
 
     if (m_process->error() == QProcess::FailedToStart) {
-        _log(QStringLiteral("  claude executable not found in PATH for bloc '%1' → %2")
-                 .arg(m_currentJob.blocId, m_currentJob.targetLang), true);
+        _log(QStringLiteral("  %1 executable not found in PATH for bloc '%2' → %3")
+                 .arg(m_cli->getExecutable(), m_currentJob.blocId, m_currentJob.targetLang), true);
         hasError = true;
     } else if (exitCode != 0) {
         const QString err = QString::fromUtf8(m_process->readAllStandardError()).trimmed();
-        _log(QStringLiteral("  claude error for bloc '%1' → %2: %3")
-                 .arg(m_currentJob.blocId, m_currentJob.targetLang,
+        _log(QStringLiteral("  %1 error for bloc '%2' → %3: %4")
+                 .arg(m_cli->getExecutable(), m_currentJob.blocId, m_currentJob.targetLang,
                       err.isEmpty() ? QStringLiteral("exit code %1").arg(exitCode) : err),
              true);
         hasError = true;

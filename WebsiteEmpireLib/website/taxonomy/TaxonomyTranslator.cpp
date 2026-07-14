@@ -149,8 +149,8 @@ void TaxonomyTranslator::_processNextJob()
 
     m_process = new QProcess(this);
     m_process->setProgram(m_cli->getExecutable());
-    m_process->setArguments(m_cli->translationPromptArgs());
-    m_process->setStandardInputFile(promptPath);
+    m_cli->configurePromptProcess(m_process, m_cli->translationPromptArgs(),
+                                  prompt, promptPath);
     m_process->setWorkingDirectory(m_tempDir->path());
 
     connect(m_process, &QProcess::readyReadStandardOutput,
