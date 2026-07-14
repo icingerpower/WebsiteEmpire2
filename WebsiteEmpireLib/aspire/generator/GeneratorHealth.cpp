@@ -2,6 +2,7 @@
 
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QRegularExpression>
 #include <QSet>
 #include <QSqlQuery>
 
@@ -93,6 +94,19 @@ QString cleanPercentage(const QString &raw)
         }
     }
     return result.isEmpty() ? QStringLiteral("0") : result;
+}
+
+// Detects the "Chronic Bilateral/Unilateral <organism> induced/associated <symptom>"
+// combinatorial fabrication some models fall back to when pressured to fill a
+// maxResults quota for a symptom that has few genuine distinct causes. Prompt
+// wording alone (see buildCondForSymptomPayload's instructions) doesn't reliably
+// stop it, so this rejects the pattern at insertion time regardless of source.
+bool isFabricatedCombinatorialName(const QString &name)
+{
+    static const QRegularExpression re(
+        QStringLiteral(R"(^Chronic (Bilateral|Unilateral) .+ (induced|associated) .+$)"),
+        QRegularExpression::CaseInsensitiveOption);
+    return re.match(name).hasMatch();
 }
 
 } // namespace
@@ -488,6 +502,37 @@ QStringList GeneratorHealth::loadGoals() const
                            PageAttributesHealthGoal::ID_NAME);
 }
 
+QStringList GeneratorHealth::loadConditionsForSymptom(const QString &symptomName, bool isMental) const
+{
+    const QString attrId  = isMental
+        ? QStringLiteral("PageAttributesHealthMentalCondition")
+        : QStringLiteral("PageAttributesHealthCondition");
+    const QString &nameCol = isMental
+        ? PageAttributesHealthMentalCondition::ID_NAME
+        : PageAttributesHealthCondition::ID_NAME;
+    const QString &symCol  = isMental
+        ? PageAttributesHealthMentalCondition::ID_SYMPTOMS
+        : PageAttributesHealthCondition::ID_SYMPTOMS;
+    const DownloadedPagesTable *table = resultsTable(attrId);
+    if (!table) {
+        return {};
+    }
+    QSqlQuery q(table->database());
+    q.prepare(QStringLiteral("SELECT \"%1\" FROM records WHERE \"%2\" LIKE :pattern")
+                  .arg(nameCol, symCol));
+    q.bindValue(QStringLiteral(":pattern"), QLatin1Char('%') + symptomName + QLatin1Char('%'));
+    QStringList names;
+    if (q.exec()) {
+        while (q.next()) {
+            const QString v = q.value(0).toString().trimmed();
+            if (!v.isEmpty()) {
+                names << v;
+            }
+        }
+    }
+    return names;
+}
+
 QStringList GeneratorHealth::loadUnscoredConditionNames(bool isMental) const
 {
     const QString attrId  = isMental
@@ -780,7 +825,9 @@ static QJsonObject conditionEntrySchema()
 QJsonObject GeneratorHealth::buildCondForSymptomPayload(const QString &symptomSlug) const
 {
     const QString name             = resolveSymptomName(symptomSlug);
-    const QStringList existing     = loadConditions();
+    // Deduped against conditions already linked to THIS symptom, not the entire
+    // (unboundedly growing) conditions table — see loadConditionsForSymptom().
+    const QStringList existing     = loadConditionsForSymptom(name, /*isMental=*/false);
     const QStringList bodyParts    = loadAllBodyParts();
     const QStringList organs       = loadOrgans();
     const QStringList injuries     = loadInjuries();
@@ -801,6 +848,12 @@ QJsonObject GeneratorHealth::buildCondForSymptomPayload(const QString &symptomSl
         "no prose, no markdown, no text outside the JSON.\n\n"
         "List up to %1 distinct NON-MENTAL health conditions where '%2' is a known symptom. "
         "Do NOT include any condition already in 'existingConditions'. "
+        "Only include conditions that are genuine, independently recognized medical diagnoses. "
+        "Do NOT invent combinatorial variants by combining a body side, pathogen/organism, or "
+        "other modifier with the symptom name (e.g. never generate something like "
+        "'Chronic Bilateral <Organism> Induced %2'). "
+        "If fewer than %1 genuine distinct conditions exist for '%2', return only those — "
+        "return an empty array if none remain. Never pad the list with fabricated names.\n"
         "For each condition provide:\n"
         "  • name — condition name\n"
         "  • populationPercentage — estimated %% of global population affected (0–100)\n"
@@ -851,6 +904,10 @@ QJsonObject GeneratorHealth::buildMentalForBpPayload(const QString &brainSlug) c
         "List up to %1 distinct MENTAL health conditions that involve or are primarily "
         "associated with the brain structure '%2'. "
         "Do NOT include any condition already in 'existingMentalConditions'. "
+        "Only include conditions that are genuine, independently recognized diagnoses — "
+        "do NOT invent combinatorial variants (e.g. combining a body side or organism name "
+        "with a symptom). If fewer than %1 genuine distinct conditions remain, return only "
+        "those, or an empty array — never pad the list with fabricated names.\n"
         "For each condition provide:\n"
         "  • name — condition name\n"
         "  • populationPercentage — estimated %% of global population affected (0–100)\n"
@@ -899,6 +956,10 @@ QJsonObject GeneratorHealth::buildMentalCompPayload(int page) const
         "This is a completion sweep. List up to %1 significant MENTAL health conditions "
         "NOT already in 'existingMentalConditions'. Include any well-known condition "
         "that may not have been captured through brain-part-specific jobs. "
+        "Only include conditions that are genuine, independently recognized diagnoses — "
+        "do NOT invent combinatorial variants (e.g. combining a body side or organism name "
+        "with a symptom). If fewer than %1 genuine distinct conditions remain, return only "
+        "those, or an empty array — never pad the list with fabricated names.\n"
         "For each condition provide:\n"
         "  • name — condition name\n"
         "  • populationPercentage — estimated %% of global population affected (0–100)\n"
@@ -951,6 +1012,10 @@ QJsonObject GeneratorHealth::buildRecentPayload(int page) const
         "recognised, or significantly reclassified in the last 3 years (2023–2026). "
         "Exclude any condition already in 'existingConditions' or "
         "'existingMentalConditions'. "
+        "Only include conditions that are genuine, independently recognized diagnoses — "
+        "do NOT invent combinatorial variants (e.g. combining a body side or organism name "
+        "with a symptom). If fewer than %1 genuine distinct conditions qualify, return only "
+        "those, or an empty array — never pad the list with fabricated names.\n"
         "For each condition provide:\n"
         "  • name — condition name\n"
         "  • isMental — true if mental health condition, false otherwise\n"
@@ -1164,6 +1229,10 @@ void GeneratorHealth::recordConditions(const QJsonArray &conditions, bool isMent
             continue;
         }
         seen.insert(name);
+        if (isFabricatedCombinatorialName(name)) {
+            qDebug() << "GeneratorHealth: rejected fabricated combinatorial condition name:" << name;
+            continue;
+        }
 
         const QString pct  = cleanPercentage(
             obj.value(QStringLiteral("populationPercentage")).toVariant().toString());

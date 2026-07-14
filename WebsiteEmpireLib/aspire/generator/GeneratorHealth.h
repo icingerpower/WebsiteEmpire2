@@ -133,6 +133,12 @@ private:
     QStringList loadConditions()       const;
     QStringList loadMentalConditions() const;
 
+    // Returns condition names (physical or mental) already recorded as having
+    // symptomName among their symptoms — used to dedupe per-symptom generation
+    // jobs against a relevant subset instead of the entire (unboundedly growing)
+    // conditions table. See buildCondForSymptomPayload().
+    QStringList loadConditionsForSymptom(const QString &symptomName, bool isMental) const;
+
     // Resolves a slug back to the original name by scanning the body-part or
     // symptom table.  Falls back to the slug itself if not found.
     QString resolveBodyPartName(const QString &slug) const;
