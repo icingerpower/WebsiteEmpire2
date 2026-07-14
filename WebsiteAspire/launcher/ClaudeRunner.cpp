@@ -72,7 +72,13 @@ QCoro::Task<ClaudeJobResult> runClaudeJob(const QString &jobJson, AbstractCli *c
         QStringLiteral("Use the Write tool to save ONLY the filled replyFormat "
                        "JSON object to the file 'reply.json' in the current directory. "
                        "The file must contain valid JSON only — no other text.");
-    const QByteArray promptBytes = QJsonDocument(obj).toJson(QJsonDocument::Compact);
+    // preparePrompt() lets each CLI inject its own preamble (e.g. Antigravity's
+    // "don't explore the filesystem, respond immediately" guard) — required
+    // here since this function builds its own QProcess instead of going
+    // through AbstractCli::runPrompt(), which already calls preparePrompt().
+    const QString promptText = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+    const QString prepared = cli->preparePrompt(promptText);
+    const QByteArray promptBytes = prepared.toUtf8();
 
     // Write prompt to a file and feed it via stdin to avoid Linux's 128 KB
     // per-argument limit (MAX_ARG_STRLEN), which causes FailedToStart when the
@@ -91,8 +97,7 @@ QCoro::Task<ClaudeJobResult> runClaudeJob(const QString &jobJson, AbstractCli *c
     QProcess process;
     process.setWorkingDirectory(tempDir.path());
     process.setProgram(cli->getExecutable());
-    process.setArguments(cli->promptArgs());
-    process.setStandardInputFile(promptPath);
+    cli->configurePromptProcess(&process, cli->promptArgs(), prepared, promptPath);
 
     co_await qCoro(process).start();
     co_await qCoro(process).waitForFinished(-1);
