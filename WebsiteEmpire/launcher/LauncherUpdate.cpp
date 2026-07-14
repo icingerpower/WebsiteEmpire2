@@ -2,6 +2,7 @@
 
 #include "gui/panes/UpdateStrategyTree.h"
 #include "website/pages/AbstractPageType.h"
+#include "website/pages/GenPageQueue.h"
 #include "website/pages/PageDb.h"
 #include "website/pages/PageGenerationState.h"
 #include "website/pages/PageRepositoryDb.h"
@@ -23,6 +24,7 @@
 #include <QTextStream>
 
 #include "aicli/AbstractCli.h"
+#include "website/ArticleContentValidator.h"
 
 const QString LauncherUpdate::OPTION_NAME     = QStringLiteral("update");
 const QString LauncherUpdate::OPTION_STRATEGY = QStringLiteral("strategy");
@@ -44,33 +46,13 @@ static void handleUpdateSignal(int)
 }
 
 // ---------------------------------------------------------------------------
-// Validation — same rules as generation
+// Validation — delegates to ArticleContentValidator, shared with
+// LauncherGeneration so both launchers reject the same malformed content.
 // ---------------------------------------------------------------------------
 
 static bool isUpdatedArticleValid(const QString &text)
 {
-    static const QRegularExpression reSvg(
-        QStringLiteral("<svg\\b[^>]*>.*?</svg>"),
-        QRegularExpression::DotMatchesEverythingOption
-        | QRegularExpression::CaseInsensitiveOption);
-    // Require a properly formed first TITLE shortcode: [TITLE level="1"]…[/TITLE]
-    // with at least one character between the tags that is not '['.
-    // This rejects cases where Claude writes `[TITLE level="1"]` shortcode. as
-    // a preamble before the actual article starts.
-    static const QRegularExpression reTitleFirst(
-        QStringLiteral("^\\[TITLE level=\"1\"\\][^\\[]+\\[/TITLE\\]"),
-        QRegularExpression::DotMatchesEverythingOption);
-
-    QString clean = text.trimmed();
-    clean.remove(reSvg);
-    clean = clean.trimmed();
-    if (!clean.startsWith(QLatin1Char('['))) {
-        const int pos = clean.indexOf(QStringLiteral("[TITLE level=\"1\"]"));
-        if (pos > 0) {
-            clean = clean.mid(pos);
-        }
-    }
-    return reTitleFirst.match(clean).hasMatch() && clean.size() >= 2000;
+    return ArticleContentValidator::isValid(text);
 }
 
 static bool isCommaSeparatedIntsValid(const QString &text)
@@ -108,13 +90,18 @@ static QString runUpdateClaudePrompt(const QString &prompt,
 
     const QString promptSubdir = tempDir.path() + QStringLiteral("/prompt");
     QDir().mkdir(promptSubdir);
+    // preparePrompt() injects CLI-specific preambles (e.g. Antigravity's
+    // "answer immediately, no filesystem exploration" guard) — required here
+    // because this function builds its own QProcess instead of going through
+    // AbstractCli::runPrompt(), which already calls it.
+    const QString prepared = cli->preparePrompt(prompt);
     const QString promptPath = promptSubdir + QStringLiteral("/prompt.txt");
     {
         QFile f(promptPath);
         if (!f.open(QIODevice::WriteOnly)) {
             return {};
         }
-        f.write(prompt.toUtf8());
+        f.write(prepared.toUtf8());
     }
 
     const QString outputPath = tempDir.path() + QStringLiteral("/output.txt");
@@ -122,8 +109,7 @@ static QString runUpdateClaudePrompt(const QString &prompt,
     QProcess process;
     process.setWorkingDirectory(tempDir.path());
     process.setProgram(cli->getExecutable());
-    process.setArguments(cli->promptArgs());
-    process.setStandardInputFile(promptPath);
+    cli->configurePromptProcess(&process, cli->promptArgs(), prepared, promptPath);
     process.setStandardOutputFile(outputPath);
     process.start();
     process.waitForStarted(-1);
@@ -136,8 +122,8 @@ static QString runUpdateClaudePrompt(const QString &prompt,
             break;
         }
         elapsedMs += kClaudeHeartbeatMs;
-        *out << QStringLiteral("  Still waiting for Claude... (%1 min elapsed)\n")
-                    .arg(elapsedMs / 60000);
+        *out << QStringLiteral("  Still waiting for %1... (%2 min elapsed)\n")
+                    .arg(cli->getName()).arg(elapsedMs / 60000);
         out->flush();
     }
 
@@ -190,8 +176,9 @@ static QString runSvgClaudePrompt(const QString &prompt,
     QProcess process;
     process.setWorkingDirectory(tempDir.path());
     process.setProgram(cli->getExecutable());
-    process.setArguments({QStringLiteral("-p"), QStringLiteral("-")});
-    process.setStandardInputFile(promptPath);
+    cli->configurePromptProcess(&process,
+                                {QStringLiteral("-p"), QStringLiteral("-")},
+                                prompt, promptPath);
     process.setStandardOutputFile(outputPath);
     process.start();
     process.waitForStarted(-1);
@@ -202,8 +189,8 @@ static QString runSvgClaudePrompt(const QString &prompt,
             break;
         }
         elapsedMs += kClaudeHeartbeatMs;
-        *out << QStringLiteral("  Still waiting for Claude... (%1 min elapsed)\n")
-                    .arg(elapsedMs / 60000);
+        *out << QStringLiteral("  Still waiting for %1... (%2 min elapsed)\n")
+                    .arg(cli->getName()).arg(elapsedMs / 60000);
         out->flush();
     }
 
@@ -866,7 +853,12 @@ static void runUpdateSession(const QString                          &pageTypeId,
                     "Output ONLY the complete updated article, starting with "
                     "[TITLE level=\"1\"] on the very first line. "
                     "Do not include any explanation, preamble, or commentary — "
-                    "only the article itself.");
+                    "only the article itself. "
+                    "Keep using the existing shortcode format — never write raw "
+                    "HTML, Markdown tables (\"| col | col |\", \"| --- | --- |\"), "
+                    "\"**bold**\", or \"[NEWLINE]\"/similar placeholder tokens; "
+                    "there is no table shortcode, so any tabular content must be "
+                    "written as plain sentences instead.");
 
             *(state->out) << QStringLiteral("  Prompt ready (%1 chars) — calling %2...\n")
                                  .arg(singlePrompt.size()).arg(cli->getName());
@@ -899,6 +891,10 @@ static void runUpdateSession(const QString                          &pageTypeId,
 
                 result = raw;
                 if (isUpdatedArticleValid(result)) {
+                    // Fix a known AI mistake: title starting with the raw
+                    // permalink slug instead of a human-readable topic name.
+                    // No-op when the title is clean.
+                    result = GenPageQueue::fixSlugTitle(result, page.permalink, page.endPermalink);
                     valid = true;
                     break;
                 }
