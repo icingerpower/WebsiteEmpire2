@@ -70,6 +70,7 @@ public:
     void clearAllTranslationData(int) override {}
     void setGenerationState(int, PageGenerationState) override {}
     QList<PageRecord> findByGenerationState(const QString &, PageGenerationState) const override { return {}; }
+    QHash<QString, QPair<int, QString>> findPolicyBlockedPages() const override { return {}; }
     PageGenerationState translationImageState(int, const QString &) const override { return PageGenerationState::Pending; }
     void setTranslationImageState(int, const QString &, PageGenerationState) override {}
     void invalidateTranslationImages(int) override {}
