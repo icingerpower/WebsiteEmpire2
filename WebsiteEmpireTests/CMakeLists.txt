@@ -112,3 +112,12 @@ target_link_libraries(Test_Website_ShortCodes PRIVATE
     QCoro::Core
     -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
 target_include_directories(Test_Website_ShortCodes PRIVATE ../WebsiteEmpireLib)
+
+# ArticleContentValidator test does not need Sql or Widgets.
+add_executable(Test_Website_ArticleContentValidator test_website_article_content_validator.cpp)
+add_test(NAME Test_Website_ArticleContentValidator COMMAND Test_Website_ArticleContentValidator)
+target_link_libraries(Test_Website_ArticleContentValidator PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    QCoro::Core
+    -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+target_include_directories(Test_Website_ArticleContentValidator PRIVATE ../WebsiteEmpireLib)

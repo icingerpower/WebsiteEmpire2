@@ -23,6 +23,8 @@ set(WEBSITE_FILES
     ${CMAKE_CURRENT_LIST_DIR}/EngineArticles.cpp
     ${CMAKE_CURRENT_LIST_DIR}/WebsiteSettingsTable.h
     ${CMAKE_CURRENT_LIST_DIR}/WebsiteSettingsTable.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ArticleContentValidator.h
+    ${CMAKE_CURRENT_LIST_DIR}/ArticleContentValidator.cpp
     ${SHORTCODES_FILES}
     ${PAGES_FILES}
     ${SOCIAL_FILES}
