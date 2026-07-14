@@ -18,6 +18,10 @@
  *   alt      (mandatory, Translatable::Yes)  — HTML alt attribute; always translated
  *   width    (optional,  Translatable::No)   — HTML width attribute; positive integer
  *   height   (optional,  Translatable::No)   — HTML height attribute; positive integer
+ *   caption  (optional,  Translatable::Yes)  — short visible caption rendered in a
+ *                                              <figcaption> below the image; when
+ *                                              absent, a plain <img> is emitted
+ *                                              instead of a <figure>
  *
  * Subclasses differ only in the translatability of id and fileName:
  *   - ShortCodeImageFix: id Translatable::No,       fileName Translatable::Optional
@@ -36,8 +40,9 @@ public:
     static constexpr const char *ID_ALT      = "alt";
     static constexpr const char *ID_WIDTH    = "width";
     static constexpr const char *ID_HEIGHT   = "height";
+    static constexpr const char *ID_CAPTION  = "caption";
 
-    /** Returns {id, fileName, alt, width, height} with subclass-specific translatabilities. */
+    /** Returns {id, fileName, alt, width, height, caption} with subclass-specific translatabilities. */
     QList<ArgumentDef> availableArguments() const override;
 
     /**
@@ -51,6 +56,8 @@ public:
     /**
      * Parses origContent and appends:
      *   <img src="/fileName" alt="alt" [width="w"] [height="h"] />
+     * or, when the caption argument is present:
+     *   <figure><img .../><figcaption>caption</figcaption></figure>
      *
      * The src is built from the fileName argument, which is the bare URL
      * filename (e.g. "hero.webp") stored in image_names.filename.

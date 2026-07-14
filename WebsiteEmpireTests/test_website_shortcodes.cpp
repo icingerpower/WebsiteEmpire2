@@ -196,6 +196,9 @@ private slots:
     void test_imgfix_alt_argument_translatable_yes();
     void test_imgfix_width_argument_not_mandatory();
     void test_imgfix_height_argument_not_mandatory();
+    void test_imgfix_caption_argument_id();
+    void test_imgfix_caption_argument_not_mandatory();
+    void test_imgfix_caption_argument_translatable_yes();
 
     // --- ShortCodeImageFix: registry & factory ---
     void test_imgfix_registered_in_all_shortcodes();
@@ -212,6 +215,9 @@ private slots:
     void test_imgfix_add_code_does_not_touch_css();
     void test_imgfix_add_code_does_not_touch_js();
     void test_imgfix_add_code_via_for_tag();
+    void test_imgfix_add_code_caption_in_figcaption();
+    void test_imgfix_add_code_caption_wraps_in_figure();
+    void test_imgfix_add_code_caption_absent_no_figure();
 
     // --- ShortCodeImageFix: error cases ---
     void test_imgfix_add_code_missing_id_throws();
@@ -231,6 +237,7 @@ private slots:
     void test_imgtr_alt_argument_translatable_yes();
     void test_imgtr_width_argument_not_mandatory();
     void test_imgtr_height_argument_not_mandatory();
+    void test_imgtr_caption_argument_not_mandatory();
 
     // --- ShortCodeImageTr: registry & factory ---
     void test_imgtr_registered_in_all_shortcodes();
@@ -245,6 +252,7 @@ private slots:
     void test_imgtr_add_code_does_not_touch_css();
     void test_imgtr_add_code_does_not_touch_js();
     void test_imgtr_add_code_via_for_tag();
+    void test_imgtr_add_code_caption_in_figcaption();
 
     // --- ShortCodeImageTr: error cases ---
     void test_imgtr_add_code_missing_id_throws();
@@ -964,7 +972,7 @@ void Test_Website_ShortCodes::test_imgfix_tag_name()
 void Test_Website_ShortCodes::test_imgfix_available_arguments_count()
 {
     ShortCodeImageFix sc;
-    QCOMPARE(sc.availableArguments().size(), 5);
+    QCOMPARE(sc.availableArguments().size(), 6);
 }
 
 void Test_Website_ShortCodes::test_imgfix_id_argument_id()
@@ -1053,6 +1061,30 @@ void Test_Website_ShortCodes::test_imgfix_height_argument_not_mandatory()
     const auto &args = sc.availableArguments();
     QVERIFY(args.size() >= 5);
     QVERIFY(!args.at(4).mandatory);
+}
+
+void Test_Website_ShortCodes::test_imgfix_caption_argument_id()
+{
+    ShortCodeImageFix sc;
+    const auto &args = sc.availableArguments();
+    QVERIFY(args.size() >= 6);
+    QCOMPARE(args.at(5).id, QStringLiteral("caption"));
+}
+
+void Test_Website_ShortCodes::test_imgfix_caption_argument_not_mandatory()
+{
+    ShortCodeImageFix sc;
+    const auto &args = sc.availableArguments();
+    QVERIFY(args.size() >= 6);
+    QVERIFY(!args.at(5).mandatory);
+}
+
+void Test_Website_ShortCodes::test_imgfix_caption_argument_translatable_yes()
+{
+    ShortCodeImageFix sc;
+    const auto &args = sc.availableArguments();
+    QVERIFY(args.size() >= 6);
+    QVERIFY(args.at(5).translatable == AbstractShortCode::Translatable::Yes);
 }
 
 // =============================================================================
@@ -1179,6 +1211,38 @@ void Test_Website_ShortCodes::test_imgfix_add_code_via_for_tag()
     QVERIFY(html.contains(QStringLiteral("src=\"/hero.jpg\"")));
 }
 
+void Test_Website_ShortCodes::test_imgfix_add_code_caption_in_figcaption()
+{
+    ShortCodeImageFix sc;
+    const QString input = QStringLiteral(
+        "[IMGFIX id=\"plan\" fileName=\"plan.svg\" alt=\"Plan\" "
+        "caption=\"Your 60-second action plan\"][/IMGFIX]");
+    const QString html = htmlFrom(sc, input);
+    QVERIFY(html.contains(QStringLiteral(
+        "<figcaption>Your 60-second action plan</figcaption>")));
+}
+
+void Test_Website_ShortCodes::test_imgfix_add_code_caption_wraps_in_figure()
+{
+    ShortCodeImageFix sc;
+    const QString input = QStringLiteral(
+        "[IMGFIX id=\"plan\" fileName=\"plan.svg\" alt=\"Plan\" "
+        "caption=\"Caption text\"][/IMGFIX]");
+    const QString html = htmlFrom(sc, input);
+    QVERIFY(html.contains(QStringLiteral("<figure>")));
+    QVERIFY(html.contains(QStringLiteral("</figure>")));
+}
+
+void Test_Website_ShortCodes::test_imgfix_add_code_caption_absent_no_figure()
+{
+    ShortCodeImageFix sc;
+    const QString input = QStringLiteral(
+        "[IMGFIX id=\"i\" fileName=\"f.jpg\" alt=\"A\"][/IMGFIX]");
+    const QString html = htmlFrom(sc, input);
+    QVERIFY(!html.contains(QStringLiteral("<figure>")));
+    QVERIFY(!html.contains(QStringLiteral("<figcaption>")));
+}
+
 // =============================================================================
 // ShortCodeImageFix — error cases
 // =============================================================================
@@ -1284,7 +1348,7 @@ void Test_Website_ShortCodes::test_imgtr_tag_name()
 void Test_Website_ShortCodes::test_imgtr_available_arguments_count()
 {
     ShortCodeImageTr sc;
-    QCOMPARE(sc.availableArguments().size(), 5);
+    QCOMPARE(sc.availableArguments().size(), 6);
 }
 
 void Test_Website_ShortCodes::test_imgtr_id_argument_translatable_yes()
@@ -1327,6 +1391,14 @@ void Test_Website_ShortCodes::test_imgtr_height_argument_not_mandatory()
     const auto &args = sc.availableArguments();
     QVERIFY(args.size() >= 5);
     QVERIFY(!args.at(4).mandatory);
+}
+
+void Test_Website_ShortCodes::test_imgtr_caption_argument_not_mandatory()
+{
+    ShortCodeImageTr sc;
+    const auto &args = sc.availableArguments();
+    QVERIFY(args.size() >= 6);
+    QVERIFY(!args.at(5).mandatory);
 }
 
 // =============================================================================
@@ -1434,6 +1506,17 @@ void Test_Website_ShortCodes::test_imgtr_add_code_via_for_tag()
     const QString html = htmlFrom(*sc, input);
     QVERIFY(html.contains(QStringLiteral("Via registry")));
     QVERIFY(html.contains(QStringLiteral("src=\"/hero_fr.jpg\"")));
+}
+
+void Test_Website_ShortCodes::test_imgtr_add_code_caption_in_figcaption()
+{
+    ShortCodeImageTr sc;
+    const QString input = QStringLiteral(
+        "[IMGTR id=\"plan-fr\" fileName=\"plan_fr.svg\" alt=\"Plan\" "
+        "caption=\"Votre plan d'action\"][/IMGTR]");
+    const QString html = htmlFrom(sc, input);
+    QVERIFY(html.contains(QStringLiteral(
+        "<figcaption>Votre plan d'action</figcaption>")));
 }
 
 // =============================================================================

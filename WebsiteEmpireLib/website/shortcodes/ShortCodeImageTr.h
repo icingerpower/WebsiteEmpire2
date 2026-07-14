@@ -16,6 +16,9 @@
  *   alt      (mandatory, Translatable::Yes) — HTML alt text
  *   width    (optional,  Translatable::No)  — HTML width (positive integer)
  *   height   (optional,  Translatable::No)  — HTML height (positive integer)
+ *   caption  (optional,  Translatable::Yes) — short visible caption; renders the
+ *                                             image inside a <figure> with a
+ *                                             <figcaption> when present
  *
  * Example:
  *   [IMGTR id="hero-fr" fileName="hero_fr.jpg" alt="Bannière principale" width="1200" height="400"][/IMGTR]

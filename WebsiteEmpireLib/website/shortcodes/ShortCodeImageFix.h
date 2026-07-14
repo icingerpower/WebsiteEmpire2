@@ -17,9 +17,14 @@
  *   alt      (mandatory, Translatable::Yes)      — HTML alt text
  *   width    (optional,  Translatable::No)       — HTML width (positive integer)
  *   height   (optional,  Translatable::No)       — HTML height (positive integer)
+ *   caption  (optional,  Translatable::Yes)      — short visible caption; renders
+ *                                                  the image inside a <figure> with
+ *                                                  a <figcaption> when present
  *
  * Example:
  *   [IMGFIX id="hero" fileName="hero.jpg" alt="Hero banner" width="1200" height="400"][/IMGFIX]
+ *   [IMGFIX id="plan" fileName="plan.svg" alt="60-second action plan"
+ *           caption="Your 60-second action plan"][/IMGFIX]
  */
 class ShortCodeImageFix : public AbstractShortCodeImage
 {

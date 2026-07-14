@@ -12,6 +12,7 @@ QList<AbstractShortCode::ArgumentDef> AbstractShortCodeImage::availableArguments
         { ID_ALT,      /*mandatory=*/true,  /*allowedValues=*/{}, Translatable::Yes       },
         { ID_WIDTH,    /*mandatory=*/false, /*allowedValues=*/{}, Translatable::No        },
         { ID_HEIGHT,   /*mandatory=*/false, /*allowedValues=*/{}, Translatable::No        },
+        { ID_CAPTION,  /*mandatory=*/false, /*allowedValues=*/{}, Translatable::Yes       },
     };
 }
 
@@ -43,6 +44,12 @@ void AbstractShortCodeImage::addCode(QStringView     origContent,
     const QString         &alt      = parsed.arguments.value(QLatin1String(ID_ALT));
     const QString         &width    = parsed.arguments.value(QLatin1String(ID_WIDTH));
     const QString         &height   = parsed.arguments.value(QLatin1String(ID_HEIGHT));
+    const QString         &caption  = parsed.arguments.value(QLatin1String(ID_CAPTION));
+
+    const bool hasCaption = !caption.trimmed().isEmpty();
+    if (hasCaption) {
+        html += QStringLiteral("<figure>");
+    }
 
     // Plain <img> — the page-level lightbox (AbstractPageType) handles zoom for
     // all .page-content img[src] elements automatically.
@@ -62,6 +69,12 @@ void AbstractShortCodeImage::addCode(QStringView     origContent,
         html += QStringLiteral("\"");
     }
     html += QStringLiteral(" loading=\"lazy\">");
+
+    if (hasCaption) {
+        html += QStringLiteral("<figcaption>");
+        html += caption;
+        html += QStringLiteral("</figcaption></figure>");
+    }
     Q_UNUSED(engine)
     Q_UNUSED(websiteIndex)
     Q_UNUSED(css)
