@@ -1,5 +1,9 @@
 data/
-tests
+# NOTE: a bare `tests` pattern (removed 2026-07-16) swallowed every Django app's
+# tests/ package under WebsiteEcom. Its only other matches were sqlitecpp dependency
+# dirs already covered by the `*build*` rule below, so removing it is safe for the
+# C++ side. Do not reintroduce a bare `tests` pattern.
+WebsiteEcom/
 *.user
 *.code-workspace
 *build*

@@ -1,9 +1,0 @@
-{% load i18n %}{% comment %}
-Renders a single localized relative time bucket (ADR-027 D7): "a few minutes
-ago", "2 hours ago", etc. Rendered via render_to_string from
-engagement/service.py's _relative_time_bucket — platform-owned string, lives
-here (not in Python gettext calls) so storefront's existing `makemessages`
-pass collects it (D9, same reasoning as consent_banner.html's docstring).
-
-Context: kind ("few"|"minutes"|"hours"|"days"), n (int or None, unused for "few").
-{% endcomment %}{% if kind == "few" %}{% trans "a few minutes ago" %}{% elif kind == "minutes" %}{% blocktrans count n=n %}{{ n }} minute ago{% plural %}{{ n }} minutes ago{% endblocktrans %}{% elif kind == "hours" %}{% blocktrans count n=n %}{{ n }} hour ago{% plural %}{{ n }} hours ago{% endblocktrans %}{% else %}{% blocktrans count n=n %}{{ n }} day ago{% plural %}{{ n }} days ago{% endblocktrans %}{% endif %}

@@ -1,9 +1,0 @@
-<script>
-fbq('track', '{{ native_event|escapejs }}', {
-  content_ids: {{ content_ids_json }},
-  content_type: 'product',
-  value: '{{ payload.value|escapejs }}',
-  currency: '{{ payload.currency|escapejs }}'{% if payload.content_name %},
-  content_name: '{{ payload.content_name|escapejs }}'{% endif %}
-}{% if event_id %}, {eventID: '{{ event_id|escapejs }}'}{% endif %});
-</script>

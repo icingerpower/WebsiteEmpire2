@@ -1,4 +1,0 @@
-Hi,
-
-Your order #{{ order.order_number }} from {{ store.name }} has shipped.
-We'd love your feedback — please leave a review!

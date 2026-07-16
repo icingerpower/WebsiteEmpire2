@@ -1,7 +1,0 @@
-{% comment %}
-static_page_links inclusion template (ADR-018 D6). Rendered by pages_tags.static_page_links —
-all filtering/ordering/label/href logic happens in the tag; this template only prints.
-{% endcomment %}
-{% for link in links %}
-<a href="{{ link.href }}" class="static-page-link" data-testid="static-page-link">{{ link.label }}</a>
-{% endfor %}

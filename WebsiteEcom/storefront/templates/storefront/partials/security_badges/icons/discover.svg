@@ -1,9 +1,0 @@
-{% comment %}
-Schematic Discover network mark. See visa.svg for the pending-legal-check
-note (ADR-030 Risk #1) shared by every payment-network icon in this folder.
-{% endcomment %}
-<svg class="security-badge__icon security-badge__icon--discover" width="38" height="24" viewBox="0 0 38 24" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Discover">
-  <rect width="38" height="24" rx="3" fill="#f7f7f7" stroke="#dddddd"/>
-  <text x="16" y="16" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="700" fill="#333333">DISC</text>
-  <circle cx="31" cy="12" r="5" fill="#ff6000"/>
-</svg>

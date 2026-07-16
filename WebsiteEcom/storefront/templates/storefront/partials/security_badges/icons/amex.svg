@@ -1,9 +1,0 @@
-{% comment %}
-Schematic American Express network mark. See visa.svg for the
-pending-legal-check note (ADR-030 Risk #1) shared by every payment-network
-icon in this folder.
-{% endcomment %}
-<svg class="security-badge__icon security-badge__icon--amex" width="38" height="24" viewBox="0 0 38 24" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="American Express">
-  <rect width="38" height="24" rx="3" fill="#2e77bb"/>
-  <text x="19" y="16" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="700" fill="#ffffff">AMEX</text>
-</svg>
