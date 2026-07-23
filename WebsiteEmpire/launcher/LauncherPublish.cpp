@@ -324,6 +324,18 @@ void LauncherPublish::run(const QString & /*value*/)
 
     int totalPages = 0;
 
+    // The language served at the domain root (no URL prefix) is whatever
+    // WebsiteSettingsTable says is the editing/source language — NOT
+    // engine->getLangCode(0). Row 0 is just whichever target language happens
+    // to sort first in the table (AbstractEngine::_reconcileRows() always
+    // appends the editing language rather than prepending it), so comparing
+    // against row 0 silently prefixes the root language's own sitemap/page
+    // URLs with its own lang code, breaking every URL in it.
+    QString primaryLang = WebsiteSettingsTable(workingDir).editingLangCode();
+    if (primaryLang.isEmpty()) {
+        primaryLang = QStringLiteral("en");
+    }
+
     for (const LangToDeploy &t : std::as_const(targets)) {
         const QString destDir = QDir(deployBase).filePath(t.lang);
 
@@ -344,7 +356,6 @@ void LauncherPublish::run(const QString & /*value*/)
         out.flush();
         // Non-primary languages are served behind a /<lang>/ nginx path prefix,
         // so their sitemap URLs must include that prefix (e.g. https://example.com/fr).
-        const QString primaryLang = engine->getLangCode(0);
         const QString sitemapBase = QStringLiteral("https://") + t.domain
             + (t.lang == primaryLang ? QString{} : QStringLiteral("/") + t.lang);
         const int n = generator.generateAll(workingDir, ddir, t.domain, *engine, t.engineIndex, sitemapBase);

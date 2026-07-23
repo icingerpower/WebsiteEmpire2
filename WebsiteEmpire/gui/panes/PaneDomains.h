@@ -50,6 +50,7 @@ public slots:
 
     void browseLocalDeployFolder();
     void deployLocally();
+    void viewSitemaps();
 
 private:
     struct HostInfo {
@@ -149,6 +150,26 @@ private:
      */
     bool _verifyRemoteDbIntegrity(const HostInfo &host, const QString &remotePath,
                                   QString &errorOutput) const;
+
+    /**
+     * Derives a site slug from a per-language HostFolder so that two engines
+     * deployed to the same VPS under different deploy roots don't collide on
+     * systemd unit names or process matching. The slug is the folder name two
+     * levels above the language folder, e.g.:
+     *   /opt/websiteempire/deploy/en            -> "websiteempire" -> "" (legacy, no slug)
+     *   /opt/websiteempire/healybio/deploy/en   -> "healybio"      -> "healybio"
+     * The legacy grandparent name "websiteempire" maps to an empty slug so
+     * existing single-site deployments keep their exact current unit names
+     * with no VPS-side migration required.
+     */
+    QString _siteSlug(const QString &hostFolder) const;
+
+    /**
+     * Returns the systemd unit name to restart for this host/language, e.g.
+     * "website-en" (legacy layout) or "website-healybio-en" (a second site
+     * sharing the VPS). See _siteSlug() for how the slug is derived.
+     */
+    QString _siteServiceName(const HostInfo &host, const QString &lang) const;
 
     Ui::PaneDomains  *ui;
     QDir              m_workingDir;

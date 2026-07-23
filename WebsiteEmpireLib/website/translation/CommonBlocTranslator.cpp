@@ -9,8 +9,6 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QMetaObject>
 #include <QProcess>
 #include <QTemporaryDir>
@@ -172,19 +170,15 @@ void CommonBlocTranslator::_processNextJob()
             _processNextJob();
             return;
         }
-        f.write(prompt.toUtf8());
+        f.write(m_cli->preparePrompt(prompt).toUtf8());
     }
 
     m_processOutput.clear();
 
     m_process = new QProcess(this);
     m_process->setProgram(m_cli->getExecutable());
-    m_process->setArguments({QStringLiteral("-p"), QStringLiteral("-"),
-                              QStringLiteral("--dangerously-skip-permissions"),
-                              QStringLiteral("--tools"), QStringLiteral(""),
-                              QStringLiteral("--output-format"), QStringLiteral("stream-json"),
-                              QStringLiteral("--verbose")});
-    m_process->setStandardInputFile(promptPath);
+    m_cli->configurePromptProcess(m_process, m_cli->promptArgs(),
+                                  m_cli->preparePrompt(prompt), promptPath);
 
     connect(m_process, &QProcess::readyReadStandardOutput,
             this, &CommonBlocTranslator::_onProcessReadyRead);
@@ -217,22 +211,7 @@ void CommonBlocTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus
         hasError = true;
     } else {
         m_processOutput += m_process->readAllStandardOutput();
-
-        for (const QByteArray &line : m_processOutput.split('\n')) {
-            const QByteArray trimmed = line.trimmed();
-            if (trimmed.isEmpty()) {
-                continue;
-            }
-            const QJsonDocument doc = QJsonDocument::fromJson(trimmed);
-            if (!doc.isObject()) {
-                continue;
-            }
-            const QJsonObject obj = doc.object();
-            if (obj.value(QStringLiteral("type")).toString() == QStringLiteral("result")) {
-                translatedJson = obj.value(QStringLiteral("result")).toString().trimmed();
-                break;
-            }
-        }
+        translatedJson = m_cli->extractTextFromOutput(m_processOutput).trimmed();
     }
 
     m_process->deleteLater();

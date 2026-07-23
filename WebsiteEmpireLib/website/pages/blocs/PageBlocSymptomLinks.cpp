@@ -131,6 +131,9 @@ void PageBlocSymptomLinks::addCode(QStringView,
         return;
     }
 
+    const QString langCode = engine.getLangCode(websiteIndex);
+    TaxonomyDb taxDb(m_workingDir);
+
     struct SymLink { QString name; QString href; };
     QList<SymLink> links;
     for (const QString &name : std::as_const(m_selectedSymptoms)) {
@@ -143,7 +146,9 @@ void PageBlocSymptomLinks::addCode(QStringView,
         if (resolved.isEmpty()) {
             continue;
         }
-        links.append({name, resolved});
+        const QString displayName = taxDb.translationFor(
+            QStringLiteral("symptoms"), name, langCode);
+        links.append({displayName, resolved});
     }
 
     if (links.isEmpty()) {

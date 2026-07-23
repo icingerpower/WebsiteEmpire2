@@ -106,8 +106,11 @@ private slots:
 
     // --- Link type resolution ---
     void test_imagelinks_category_link_type_resolves_to_root_path();
+    void test_imagelinks_category_link_type_strips_html_suffix();
     void test_imagelinks_page_link_type_resolves_to_root_path();
+    void test_imagelinks_page_link_type_strips_html_suffix();
     void test_imagelinks_url_link_type_uses_target_as_is();
+    void test_imagelinks_url_link_type_keeps_html_suffix();
 
     // --- Grid settings in HTML ---
     void test_imagelinks_desktop_cols_in_style();
@@ -436,9 +439,23 @@ void Test_Website_PageBlocImageLinks::test_imagelinks_category_link_type_resolve
     PageBlocImageLinks bloc;
     const auto &html = htmlFrom(bloc, oneItemHash(QStringLiteral("https://example.com/img.jpg"),
                                                    QLatin1String(PageBlocImageLinks::LINK_TYPE_CATEGORY),
+                                                   QStringLiteral("food"),
+                                                   QStringLiteral("Food")));
+    QVERIFY(html.contains(QStringLiteral("href=\"food\"")));
+}
+
+void Test_Website_PageBlocImageLinks::test_imagelinks_category_link_type_strips_html_suffix()
+{
+    // category_hub pages are registered and served under the bare permalink
+    // (no ".html" — see PageController::servePage's exact-match lookup).
+    // A manually-typed "food.html" target must still resolve, not 404.
+    PageBlocImageLinks bloc;
+    const auto &html = htmlFrom(bloc, oneItemHash(QStringLiteral("https://example.com/img.jpg"),
+                                                   QLatin1String(PageBlocImageLinks::LINK_TYPE_CATEGORY),
                                                    QStringLiteral("food.html"),
                                                    QStringLiteral("Food")));
-    QVERIFY(html.contains(QStringLiteral("href=\"food.html\"")));
+    QVERIFY(html.contains(QStringLiteral("href=\"food\"")));
+    QVERIFY(!html.contains(QStringLiteral("href=\"food.html\"")));
 }
 
 void Test_Website_PageBlocImageLinks::test_imagelinks_page_link_type_resolves_to_root_path()
@@ -452,6 +469,17 @@ void Test_Website_PageBlocImageLinks::test_imagelinks_page_link_type_resolves_to
     QVERIFY(html.contains(QStringLiteral("href=\"about-us\"")));   // 32
 }
 
+void Test_Website_PageBlocImageLinks::test_imagelinks_page_link_type_strips_html_suffix()
+{
+    PageBlocImageLinks bloc;
+    const auto &html = htmlFrom(bloc, oneItemHash(QStringLiteral("https://example.com/img.jpg"),
+                                                   QLatin1String(PageBlocImageLinks::LINK_TYPE_PAGE),
+                                                   QStringLiteral("about-us.html"),
+                                                   QStringLiteral("About")));
+    QVERIFY(html.contains(QStringLiteral("href=\"about-us\"")));
+    QVERIFY(!html.contains(QStringLiteral("href=\"about-us.html\"")));
+}
+
 void Test_Website_PageBlocImageLinks::test_imagelinks_url_link_type_uses_target_as_is()
 {
     PageBlocImageLinks bloc;
@@ -460,6 +488,18 @@ void Test_Website_PageBlocImageLinks::test_imagelinks_url_link_type_uses_target_
                                                    QStringLiteral("https://external.com/page"),
                                                    QStringLiteral("External")));
     QVERIFY(html.contains(QStringLiteral("href=\"https://external.com/page\"")));   // 33
+}
+
+void Test_Website_PageBlocImageLinks::test_imagelinks_url_link_type_keeps_html_suffix()
+{
+    // The ".html" stripping is specific to category/page permalinks — a plain
+    // external/url target must be left untouched even if it ends in ".html".
+    PageBlocImageLinks bloc;
+    const auto &html = htmlFrom(bloc, oneItemHash(QStringLiteral("https://example.com/img.jpg"),
+                                                   QLatin1String(PageBlocImageLinks::LINK_TYPE_URL),
+                                                   QStringLiteral("https://external.com/page.html"),
+                                                   QStringLiteral("External")));
+    QVERIFY(html.contains(QStringLiteral("href=\"https://external.com/page.html\"")));
 }
 
 // =============================================================================

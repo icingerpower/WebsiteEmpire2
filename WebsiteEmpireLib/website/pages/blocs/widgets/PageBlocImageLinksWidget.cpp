@@ -204,12 +204,15 @@ void PageBlocImageLinksWidget::_onUploadImage()
         return;
     }
 
-    // Register the image for all configured domains.
-    // If no domains are configured yet, store with an empty domain string —
-    // consistent with how SVG images are stored before the engine has a domain.
-    // ImageRepositorySQLite falls back to domain="" when a domain-specific
-    // entry is not found, so images remain serveable after domains are configured.
-    const QStringList &domains = m_domains.isEmpty() ? QStringList{QString()} : m_domains;
+    // Always register the image under domain="" first — ImageRepositorySQLite
+    // falls back to domain="" when the Host header doesn't match a configured
+    // domain (e.g. a local preview server hit as "localhost:PORT"). Without
+    // this, images uploaded here 404 on every local preview until someone
+    // notices and patches image_names by hand.
+    QStringList domains = m_domains;
+    if (!domains.contains(QString())) {
+        domains.prepend(QString());
+    }
 
     const qint64 imageId = m_imageWriter->writeQImage(image, domains.first(), filename);
     if (imageId < 0) {

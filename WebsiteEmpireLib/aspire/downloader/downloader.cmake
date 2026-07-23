@@ -3,6 +3,10 @@ set(ASPIRE_DOWNLOADER_FILES
     ${CMAKE_CURRENT_LIST_DIR}/AbstractDownloader.cpp
     ${CMAKE_CURRENT_LIST_DIR}/DownloadedPagesTable.h
     ${CMAKE_CURRENT_LIST_DIR}/DownloadedPagesTable.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/OrderedImageCollector.h
+    ${CMAKE_CURRENT_LIST_DIR}/OrderedImageCollector.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/OrderedImageDownloader.h
+    ${CMAKE_CURRENT_LIST_DIR}/OrderedImageDownloader.cpp
     ${CMAKE_CURRENT_LIST_DIR}/DownloaderVogelvoerkopen.h
     ${CMAKE_CURRENT_LIST_DIR}/DownloaderVogelvoerkopen.cpp
     ${CMAKE_CURRENT_LIST_DIR}/DownloaderVogelvoerkopenCategory.h

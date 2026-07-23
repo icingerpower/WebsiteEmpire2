@@ -12,6 +12,13 @@ const QString PageAttributesProduct::ID_DESCRIPTION = "description";
 const QString PageAttributesProduct::ID_SUPPLIER_PRICE = "supplier_price";
 const QString PageAttributesProduct::ID_IMAGES = "images";
 
+// Out-of-line definition for the in-class-initialised static const. Required
+// because MIN_IMAGE_SIDE_PX is odr-used: OrderedImageDownloader passes it to
+// QSharedPointer::create(), which perfectly-forwards its arguments and thus
+// binds a reference to the member (a reference bind is an odr-use, so the
+// value-in-the-header alone is not enough — the symbol must exist).
+const int PageAttributesProduct::MIN_IMAGE_SIDE_PX;
+
 DECLARE_PAGE_ATTRIBUTES(PageAttributesProduct);
 
 QString PageAttributesProduct::getId() const
@@ -148,14 +155,15 @@ QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesProduct::
                             , std::nullopt // no reference
                             , true         // is image
                             , [](const QList<QSharedPointer<QImage>> &images) -> QString {
+                                // Sub-MIN_IMAGE_SIDE_PX images are pre-filtered upstream
+                                // (OrderedImageCollector via OrderedImageDownloader), so a
+                                // single too-small image no longer drops the whole product
+                                // (approved 2026-07). This validator therefore only enforces
+                                // the 1..10 count: an empty list here means every downloaded
+                                // image was too small (or all failed) — the product is then
+                                // skipped, with the explicit reason already logged upstream.
                                 if (images.isEmpty() || images.size() > 10) {
                                     return tr("The product must have between 1 and 10 images");
-                                }
-                                for (const auto &img : std::as_const(images)) {
-                                    const int minSide = qMin(img->width(), img->height());
-                                    if (minSide < MIN_IMAGE_SIDE_PX) {
-                                        return tr("Each image's smallest side must be at least %1 px").arg(MIN_IMAGE_SIDE_PX);
-                                    }
                                 }
                                 return QString{};
                             }

@@ -260,7 +260,14 @@ QString PageBlocImageLinks::resolveHref(const QString &linkType, const QString &
 {
     if (linkType == QLatin1String(LINK_TYPE_CATEGORY)
             || linkType == QLatin1String(LINK_TYPE_PAGE)) {
-        return QStringLiteral("/") + linkTarget;
+        // Category/page permalinks are stored and served without a ".html"
+        // suffix (see PageController::servePage — exact match against the
+        // stored permalink). Strip an accidentally-typed ".html" here so a
+        // manually-authored target still resolves instead of 404ing.
+        const QString &target = linkTarget.endsWith(QStringLiteral(".html"))
+            ? linkTarget.chopped(5)
+            : linkTarget;
+        return QStringLiteral("/") + target;
     }
     // "url" or any unknown type: use target as-is.
     return linkTarget;

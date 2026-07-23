@@ -27,6 +27,7 @@
 #include "aspire/attributes/PageAttributesProduct.h"
 #include "aspire/downloader/AbstractDownloader.h"
 #include "aspire/downloader/DownloadedPagesTable.h"
+#include "aspire/downloader/OrderedImageDownloader.h"
 #include "launcher/AbstractLauncher.h"
 #include "launcher/LauncherDownload.h"
 
@@ -142,7 +143,7 @@ WidgetDownloader::_buildPageParsedCallback()
     QPointer<WidgetDownloader> self(this);
     const QString imageUrlKey = m_dowanloadedPageTable->downloader()->getImageUrlAttributeKey();
 
-    return [self, imageUrlKey](const QString & /*url*/,
+    return [self, imageUrlKey](const QString &url,
                                const QHash<QString, QString> &attrs) -> QFuture<bool> {
         auto promise = QSharedPointer<QPromise<bool>>::create();
         promise->start();
@@ -185,37 +186,9 @@ WidgetDownloader::_buildPageParsedCallback()
         const QStringList imageUrls = attrs.value(imageUrlKey)
                                           .split(QLatin1Char(';'), Qt::SkipEmptyParts);
         if (!imageUrls.isEmpty() && self->m_nam) {
-            auto collected = QSharedPointer<QList<QSharedPointer<QImage>>>::create();
-            auto remaining = QSharedPointer<int>::create(imageUrls.size());
-
-            for (const QString &imgUrl : imageUrls) {
-                QNetworkRequest req{QUrl{imgUrl}};
-                req.setHeader(QNetworkRequest::UserAgentHeader,
-                              QStringLiteral("Mozilla/5.0 (compatible; WebsiteEmpire/1.0)"));
-                req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                                 QNetworkRequest::NoLessSafeRedirectPolicy);
-
-                QNetworkReply *reply = self->m_nam->get(req);
-                QObject::connect(reply, &QNetworkReply::finished, reply,
-                                 [self, reply, collected, remaining, record]() mutable {
-                                     if (self) {
-                                         auto img = QSharedPointer<QImage>::create();
-                                         if (img->loadFromData(reply->readAll())) {
-                                             *collected << img;
-                                         }
-                                     }
-                                     reply->deleteLater();
-                                     if (--(*remaining) == 0) {
-                                         if (collected->isEmpty()) {
-                                             auto placeholder = QSharedPointer<QImage>::create(
-                                                 200, 200, QImage::Format_RGB32);
-                                             placeholder->fill(Qt::white);
-                                             *collected << placeholder;
-                                         }
-                                         record(std::move(*collected));
-                                     }
-                                 });
-            }
+            // Download in URL order (not network-completion order); record()
+            // runs once every reply has finished. See OrderedImageDownloader.
+            OrderedImageDownloader::fetchInOrder(self->m_nam, imageUrls, url, record);
         } else {
             // No image URLs: record with a placeholder immediately.
             auto placeholder = QSharedPointer<QImage>::create(200, 200, QImage::Format_RGB32);
@@ -502,7 +475,7 @@ void WidgetDownloader::reparse()
 
         // Callback that calls updatePage() instead of recordPage().
         auto reparseCallback =
-            [self, rowId, imageUrlKey](const QString & /*url*/,
+            [self, rowId, imageUrlKey](const QString &url,
                                        const QHash<QString, QString> &attrs) -> QFuture<bool> {
             auto promise = QSharedPointer<QPromise<bool>>::create();
             promise->start();
@@ -535,37 +508,9 @@ void WidgetDownloader::reparse()
             const QStringList imageUrls = attrs.value(imageUrlKey)
                                               .split(QLatin1Char(';'), Qt::SkipEmptyParts);
             if (!imageUrls.isEmpty() && self->m_nam) {
-                auto collected = QSharedPointer<QList<QSharedPointer<QImage>>>::create();
-                auto remaining = QSharedPointer<int>::create(imageUrls.size());
-
-                for (const QString &imgUrl : imageUrls) {
-                    QNetworkRequest req{QUrl{imgUrl}};
-                    req.setHeader(QNetworkRequest::UserAgentHeader,
-                                  QStringLiteral("Mozilla/5.0 (compatible; WebsiteEmpire/1.0)"));
-                    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                                     QNetworkRequest::NoLessSafeRedirectPolicy);
-
-                    QNetworkReply *reply = self->m_nam->get(req);
-                    QObject::connect(reply, &QNetworkReply::finished, reply,
-                                     [self, reply, collected, remaining, doUpdate]() mutable {
-                                         if (self) {
-                                             auto img = QSharedPointer<QImage>::create();
-                                             if (img->loadFromData(reply->readAll())) {
-                                                 *collected << img;
-                                             }
-                                         }
-                                         reply->deleteLater();
-                                         if (--(*remaining) == 0) {
-                                             if (collected->isEmpty()) {
-                                                 auto placeholder = QSharedPointer<QImage>::create(
-                                                     200, 200, QImage::Format_RGB32);
-                                                 placeholder->fill(Qt::white);
-                                                 *collected << placeholder;
-                                             }
-                                             doUpdate(std::move(*collected));
-                                         }
-                                     });
-                }
+                // Same order-preserving download path as the initial crawl;
+                // doUpdate() runs once every reply has finished.
+                OrderedImageDownloader::fetchInOrder(self->m_nam, imageUrls, url, doUpdate);
             } else {
                 auto placeholder = QSharedPointer<QImage>::create(200, 200, QImage::Format_RGB32);
                 placeholder->fill(Qt::white);

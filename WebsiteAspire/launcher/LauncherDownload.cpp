@@ -19,6 +19,7 @@
 #include "aspire/attributes/PageAttributesProduct.h"
 #include "aspire/downloader/AbstractDownloader.h"
 #include "aspire/downloader/DownloadedPagesTable.h"
+#include "aspire/downloader/OrderedImageDownloader.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
 
 const QString LauncherDownload::OPTION_NAME = QStringLiteral("download");
@@ -108,35 +109,9 @@ void LauncherDownload::run(const QString &value)
             const QStringList imageUrls = attrs.value(imageUrlKey)
                                               .split(QLatin1Char(';'), Qt::SkipEmptyParts);
             if (!imageUrls.isEmpty()) {
-                auto collected = QSharedPointer<QList<QSharedPointer<QImage>>>::create();
-                auto remaining = QSharedPointer<int>::create(imageUrls.size());
-
-                for (const QString &imgUrl : imageUrls) {
-                    QNetworkRequest req{QUrl{imgUrl}};
-                    req.setHeader(QNetworkRequest::UserAgentHeader,
-                                  QStringLiteral("Mozilla/5.0 (compatible; WebsiteEmpire/1.0)"));
-                    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                                     QNetworkRequest::NoLessSafeRedirectPolicy);
-
-                    QNetworkReply *reply = nam->get(req);
-                    QObject::connect(reply, &QNetworkReply::finished, reply,
-                                     [reply, collected, remaining, record]() mutable {
-                                         auto img = QSharedPointer<QImage>::create();
-                                         if (img->loadFromData(reply->readAll())) {
-                                             *collected << img;
-                                         }
-                                         reply->deleteLater();
-                                         if (--(*remaining) == 0) {
-                                             if (collected->isEmpty()) {
-                                                 auto placeholder = QSharedPointer<QImage>::create(
-                                                     200, 200, QImage::Format_RGB32);
-                                                 placeholder->fill(Qt::white);
-                                                 *collected << placeholder;
-                                             }
-                                             record(std::move(*collected));
-                                         }
-                                     });
-                }
+                // Download in URL order (not network-completion order); record()
+                // runs once every reply has finished. See OrderedImageDownloader.
+                OrderedImageDownloader::fetchInOrder(nam, imageUrls, url, record);
             } else {
                 auto placeholder = QSharedPointer<QImage>::create(200, 200, QImage::Format_RGB32);
                 placeholder->fill(Qt::white);

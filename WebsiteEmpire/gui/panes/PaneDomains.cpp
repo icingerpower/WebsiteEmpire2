@@ -2,6 +2,7 @@
 #include "ui_PaneDomains.h"
 
 #include "../dialogs/DialogEditHosts.h"
+#include "../dialogs/DialogShowCommand.h"
 #include "website/AbstractEngine.h"
 #include "website/HostTable.h"
 #include "website/WebsiteSettingsTable.h"
@@ -29,6 +30,7 @@
 #include <QMessageBox>
 #include <QProcess>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -206,8 +208,17 @@ void PaneDomains::upload()
         return;
     }
 
-    // Auto-deploy if needed
-    if (_deployNeeded()) {
+    // Auto-deploy the flat deployPath/content.db if needed — but only when a
+    // resolved host actually has no per-language row (langCodes empty), since
+    // that flat file is the only thing such a host reads further down. Every
+    // multi-language engine (Health, Healybio, ...) has a language code on
+    // every row, so this must never run for them: _deployLocallyImpl() requires
+    // a flat workingDir/content.db that per-language engines never produce
+    // (they use PageRepositoryDb/pages.db via "Deploy Locally" instead), so it
+    // would always throw "content.db not found" for a freshly set up site.
+    const bool hasFlatHost = std::any_of(hosts.begin(), hosts.end(),
+        [](const HostInfo &h) { return h.langCodes.isEmpty(); });
+    if (hasFlatHost && _deployNeeded()) {
         try {
             _deployLocallyImpl();
         } catch (const ExceptionWithTitleText &ex) {
@@ -322,9 +333,9 @@ void PaneDomains::upload()
         if (!_verifyRemoteDbIntegrity(host, remoteContentPath, remoteIntegrityError)) {
             QMessageBox::critical(this, tr("Upload"),
                                   tr("Uploaded content.db to %1 but the remote copy failed "
-                                     "integrity check — NOT restarting website-%2, the previous "
+                                     "integrity check — NOT restarting %2, the previous "
                                      "version keeps serving:\n%3")
-                                      .arg(host.name, lang, remoteIntegrityError));
+                                      .arg(host.name, _siteServiceName(host, lang), remoteIntegrityError));
             anyError = true;
             continue;
         }
@@ -334,17 +345,24 @@ void PaneDomains::upload()
         // holding the port causes systemctl restart to silently fail, leaving
         // the old binary (and its stale content.db) serving requests.
         if (!lang.isEmpty()) {
+            // Anchor the kill to this site's deploy root (via its --images-db
+            // argument) as well as the language, so a rogue process belonging
+            // to a *different* site sharing the same VPS and language code
+            // (e.g. two engines both deploying "fr") is never killed.
+            const QString siteRoot = QFileInfo(host.hostFolder).path();
             const QString killCmd = QStringLiteral("pkill -f 'StaticWebsiteServe.*--lang ")
-                                    + lang + QStringLiteral("' 2>/dev/null; true");
+                                    + lang + QStringLiteral(".*") + siteRoot
+                                    + QStringLiteral("' 2>/dev/null; true");
             QString killError;
             _runSshCommand(host, killCmd, killError); // best-effort; ignore failure
 
-            const QString restartCmd = QStringLiteral("systemctl restart website-") + lang;
+            const QString serviceName = _siteServiceName(host, lang);
+            const QString restartCmd = QStringLiteral("systemctl restart ") + serviceName;
             QString restartError;
             if (!_runSshCommand(host, restartCmd, restartError)) {
                 QMessageBox::warning(this, tr("Upload"),
-                                     tr("Uploaded %1 to %2 but failed to restart website-%3:\n%4")
-                                         .arg(lang, host.name, lang, restartError));
+                                     tr("Uploaded %1 to %2 but failed to restart %3:\n%4")
+                                         .arg(lang, host.name, serviceName, restartError));
             }
         }
     }
@@ -422,9 +440,9 @@ void PaneDomains::uploadFull()
         }
         binaryUploadedTo.insert(dedupeKey);
 
+        const QString remoteBinaryPath = remoteGrandparent + QStringLiteral("/StaticWebsiteServe");
         const QString remoteBinary = host.username + QStringLiteral("@") + host.url
-                                     + QStringLiteral(":") + remoteGrandparent
-                                     + QStringLiteral("/StaticWebsiteServe");
+                                     + QStringLiteral(":") + remoteBinaryPath;
         QString binaryError;
         if (!_runRsync(host, localBinary, remoteBinary, binaryError)) {
             QMessageBox::critical(this, tr("Upload Full"),
@@ -433,12 +451,15 @@ void PaneDomains::uploadFull()
             return;
         }
 
-        // Make executable and stop all running instances — they must be down
-        // before the new binary starts so the ports are free.
+        // Make executable and stop all running instances of THIS SITE'S binary
+        // only — they must be down before the new binary starts so the ports
+        // are free. Match the exact binary path (not just the bare executable
+        // name) so a second site sharing this VPS but living at a different
+        // deploy root (a different remoteGrandparent) is never killed.
         const QString prepCmd =
-            QStringLiteral("chmod +x ") + remoteGrandparent
-            + QStringLiteral("/StaticWebsiteServe"
-                             " && pkill -f StaticWebsiteServe 2>/dev/null; true");
+            QStringLiteral("chmod +x ") + remoteBinaryPath
+            + QStringLiteral(" && pkill -f '") + remoteBinaryPath
+            + QStringLiteral("' 2>/dev/null; true");
         QString prepError;
         _runSshCommand(host, prepCmd, prepError); // best-effort
     }
@@ -516,20 +537,21 @@ void PaneDomains::uploadFull()
         if (!_verifyRemoteDbIntegrity(host, remoteContentPath, remoteIntegrityError)) {
             QMessageBox::critical(this, tr("Upload Full"),
                                   tr("Uploaded content.db to %1 but the remote copy failed "
-                                     "integrity check — NOT restarting website-%2, the previous "
+                                     "integrity check — NOT restarting %2, the previous "
                                      "version keeps serving:\n%3")
-                                      .arg(host.name, lang, remoteIntegrityError));
+                                      .arg(host.name, _siteServiceName(host, lang), remoteIntegrityError));
             anyError = true;
             continue;
         }
 
         if (!lang.isEmpty()) {
-            const QString restartCmd = QStringLiteral("systemctl restart website-") + lang;
+            const QString serviceName = _siteServiceName(host, lang);
+            const QString restartCmd = QStringLiteral("systemctl restart ") + serviceName;
             QString restartError;
             if (!_runSshCommand(host, restartCmd, restartError)) {
                 QMessageBox::warning(this, tr("Upload Full"),
-                                     tr("Uploaded content to %1 but failed to restart website-%2:\n%3")
-                                         .arg(host.name, lang, restartError));
+                                     tr("Uploaded content to %1 but failed to restart %2:\n%3")
+                                         .arg(host.name, serviceName, restartError));
             }
         }
     }
@@ -623,6 +645,7 @@ void PaneDomains::deployLocally()
             QString lang;
             QString domain;
             int     port;
+            QString hostFolder;
         };
 
         QList<LangTarget> targets;
@@ -645,7 +668,9 @@ void PaneDomains::deployLocally()
                 ex.raise();
                 return;
             }
-            targets.append({i, lang, domain, 8080 + portOffset});
+            const QString hostFolder = m_engine->data(
+                m_engine->index(i, AbstractEngine::COL_HOST_FOLDER)).toString().trimmed();
+            targets.append({i, lang, domain, 8080 + portOffset, hostFolder});
             ++portOffset;
         }
 
@@ -701,14 +726,50 @@ void PaneDomains::deployLocally()
         // Copy images.db once to the deploy base — shared across all languages.
         const QString srcImages    = m_workingDir.filePath(QStringLiteral("images.db"));
         const QString sharedImages = QDir(deployBase).filePath(QStringLiteral("images.db"));
-        if (QFile::exists(srcImages)) {
-            if (QFile::exists(sharedImages)) {
-                QFile::remove(sharedImages);
-            }
-            QFile::copy(srcImages, sharedImages);
+        if (!QFile::exists(srcImages)) {
+            ExceptionWithTitleText ex(tr("Generate & Publish"),
+                                      tr("images.db not found in the working directory:\n%1\n\n"
+                                         "No images would be served — aborting before generating pages.")
+                                         .arg(srcImages));
+            ex.raise();
+            return;
+        }
+        if (!QDir().mkpath(deployBase)) {
+            ExceptionWithTitleText ex(tr("Generate & Publish"),
+                                      tr("Could not create deploy folder:\n%1").arg(deployBase));
+            ex.raise();
+            return;
+        }
+        if (QFile::exists(sharedImages) && !QFile::remove(sharedImages)) {
+            ExceptionWithTitleText ex(tr("Generate & Publish"),
+                                      tr("Could not remove the previous images.db before copying "
+                                         "the new one:\n%1").arg(sharedImages));
+            ex.raise();
+            return;
+        }
+        if (!QFile::copy(srcImages, sharedImages)) {
+            ExceptionWithTitleText ex(tr("Generate & Publish"),
+                                      tr("Failed to copy images.db to the deploy folder:\n%1\n\n"
+                                         "Pages would generate but NO IMAGES would be served — "
+                                         "aborting before generating pages.")
+                                         .arg(sharedImages));
+            ex.raise();
+            return;
         }
 
         int totalPages = 0;
+
+        // The language served at the domain root (no URL prefix) is whatever
+        // WebsiteSettingsTable says is the editing/source language — NOT
+        // m_engine->getLangCode(0). Row 0 is just whichever target language
+        // happens to sort first in the table (AbstractEngine::_reconcileRows()
+        // always appends the editing language rather than prepending it), so
+        // comparing against row 0 silently prefixes the root language's own
+        // sitemap/page URLs with its own lang code, breaking every URL in it.
+        QString primaryLang = WebsiteSettingsTable(m_workingDir).editingLangCode();
+        if (primaryLang.isEmpty()) {
+            primaryLang = QStringLiteral("en");
+        }
 
         QStringList urls;
         QStringList langSummaries;
@@ -726,7 +787,6 @@ void PaneDomains::deployLocally()
             QFile::remove(ddir.filePath(QStringLiteral("content.db-shm")));
             QFile::remove(ddir.filePath(QStringLiteral("content.db")));
 
-            const QString primaryLang = m_engine->getLangCode(0);
             const QString sitemapBase = QStringLiteral("https://") + t.domain
                 + (t.lang == primaryLang ? QString{} : QStringLiteral("/") + t.lang);
             const int langPages = generator.generateAll(m_workingDir, ddir, t.domain, *m_engine, t.engineIndex, sitemapBase);
@@ -751,7 +811,9 @@ void PaneDomains::deployLocally()
 
         QStringList serviceNames;
         for (const auto &t : std::as_const(targets)) {
-            serviceNames.append(QStringLiteral("website-") + t.lang);
+            const QString slug = t.hostFolder.isEmpty() ? QString() : _siteSlug(t.hostFolder);
+            serviceNames.append(QStringLiteral("website-")
+                                 + (slug.isEmpty() ? QString() : slug + QStringLiteral("-")) + t.lang);
         }
         const QString restartCmd = QStringLiteral("systemctl restart ") + serviceNames.join(QLatin1Char(' '));
 
@@ -784,6 +846,66 @@ void PaneDomains::deployLocally()
     } catch (const ExceptionWithTitleText &ex) {
         QMessageBox::critical(this, ex.errorTitle(), ex.errorText());
     }
+}
+
+void PaneDomains::viewSitemaps()
+{
+    if (!m_engine || m_engine->rowCount() == 0) {
+        QMessageBox::information(this, tr("View sitemaps"),
+                                 tr("No engine configured. Set up at least one domain row first."));
+        return;
+    }
+
+    // Same qualification gate as deployLocally()/upload(): a language must
+    // have enough translated pages AND already have a locally-generated
+    // content.db — otherwise its sitemap.xml isn't actually live yet.
+    const QStringList qualifying = _qualifyingLangCodes();
+    const QString deployPath = _resolveDeployPath();
+
+    QString primaryLang = WebsiteSettingsTable(m_workingDir).editingLangCode();
+    if (primaryLang.isEmpty()) {
+        primaryLang = QStringLiteral("en");
+    }
+
+    QStringList sitemapUrls;
+    QSet<QString> seenLangs;
+    const int rows = m_engine->rowCount();
+    for (int i = 0; i < rows; ++i) {
+        const QString lang = m_engine->getLangCode(i);
+        if (lang.isEmpty() || seenLangs.contains(lang) || !qualifying.contains(lang)) {
+            continue;
+        }
+        seenLangs.insert(lang);
+
+        const QString contentDb = QDir(deployPath).filePath(lang + QStringLiteral("/content.db"));
+        if (!QFile::exists(contentDb)) {
+            continue; // qualifying but never locally generated — no live sitemap
+        }
+
+        const QString domain = m_engine->data(
+            m_engine->index(i, AbstractEngine::COL_DOMAIN)).toString().trimmed();
+        if (domain.isEmpty()) {
+            continue;
+        }
+
+        const QString sitemapUrl = QStringLiteral("https://") + domain
+            + (lang == primaryLang ? QString{} : QStringLiteral("/") + lang)
+            + QStringLiteral("/sitemap.xml");
+        sitemapUrls.append(sitemapUrl);
+    }
+
+    if (sitemapUrls.isEmpty()) {
+        QMessageBox::information(this, tr("View sitemaps"),
+                                 tr("No language has a locally-generated sitemap yet.\n"
+                                    "Run \"Generate & Publish locally\" first."));
+        return;
+    }
+
+    DialogShowCommand dlg(tr("View sitemaps"),
+                          tr("Submit these sitemap URLs to Google Search Console "
+                             "(one per language with published pages):"),
+                          sitemapUrls.join(QLatin1Char('\n')), this);
+    dlg.exec();
 }
 
 void PaneDomains::_deployLocallyImpl()
@@ -856,6 +978,7 @@ void PaneDomains::_connectSlots()
     connect(ui->buttonViewCommands, &QPushButton::clicked, this, &PaneDomains::viewCommands);
     connect(ui->buttonBrowseLocally, &QPushButton::clicked, this, &PaneDomains::browseLocalDeployFolder);
     connect(ui->buttonDeployLocally, &QPushButton::clicked, this, &PaneDomains::deployLocally);
+    connect(ui->buttonViewSitemaps,  &QPushButton::clicked, this, &PaneDomains::viewSitemaps);
 }
 
 QString PaneDomains::_resolveDeployPath() const
@@ -1079,24 +1202,73 @@ bool PaneDomains::_verifyLocalDbIntegrity(const QString &dbPath, QString &errorO
 
         // Fold the WAL into the main file first so the check (and the file that
         // gets rsynced) reflects a fully-settled snapshot, not one with pending
-        // frames that a mid-checkpoint copy could tear.
+        // frames that a mid-checkpoint copy could tear. TRUNCATE mode only fully
+        // merges the WAL when it isn't blocked by another connection's lock — if
+        // "busy" comes back non-zero, some committed pages are still stranded in
+        // content.db-wal, which _runRsync() never uploads. The subsequent
+        // integrity_check below would still report "ok" in that case (a live
+        // connection always reads main+WAL transparently), so that check alone
+        // cannot catch this — the bare main file that actually gets rsynced would
+        // still be missing pages, which is exactly what showed up as "Page N:
+        // never used" on the remote copy after upload. So checkpoint success
+        // must be verified explicitly here, before trusting the file is complete.
+        bool checkpointStuck = false;
         QSqlQuery checkpoint(db);
-        checkpoint.exec(QStringLiteral("PRAGMA wal_checkpoint(TRUNCATE);"));
+        if (checkpoint.exec(QStringLiteral("PRAGMA wal_checkpoint(TRUNCATE);")) && checkpoint.next()) {
+            const int busy = checkpoint.value(0).toInt();
+            if (busy != 0) {
+                checkpointStuck = true;
+                errorOutput = tr("Could not fully checkpoint the WAL for %1 before upload — "
+                                 "another connection is still holding it open (busy=%2). "
+                                 "Close any other process using this database (a running local "
+                                 "preview server, another WebsiteEmpire instance, etc.) and try again.")
+                                  .arg(dbPath).arg(busy);
+            }
+        }
 
-        QSqlQuery check(db);
-        if (check.exec(QStringLiteral("PRAGMA integrity_check;")) && check.next()) {
-            result = check.value(0).toString();
-        } else {
-            result = tr("(integrity_check query failed: %1)").arg(check.lastError().text());
+        if (!checkpointStuck) {
+            QSqlQuery check(db);
+            if (check.exec(QStringLiteral("PRAGMA integrity_check;")) && check.next()) {
+                result = check.value(0).toString();
+            } else {
+                result = tr("(integrity_check query failed: %1)").arg(check.lastError().text());
+            }
         }
     }
     QSqlDatabase::removeDatabase(connName);
+
+    if (!errorOutput.isEmpty()) {
+        return false;
+    }
 
     if (result.compare(QStringLiteral("ok"), Qt::CaseInsensitive) != 0) {
         errorOutput = tr("Local database %1 failed integrity check:\n%2").arg(dbPath, result);
         return false;
     }
     return true;
+}
+
+QString PaneDomains::_siteSlug(const QString &hostFolder) const
+{
+    // hostFolder = .../<siteRoot>/deploy/<lang> -- strip "<lang>" then "deploy"
+    // to reach <siteRoot>, e.g.:
+    //   /opt/websiteempire/deploy/fr          -> parent "/opt/websiteempire/deploy" -> grandparentDir "/opt/websiteempire" -> "websiteempire"
+    //   /opt/websiteempire/healybio/deploy/fr -> parent ".../healybio/deploy"       -> grandparentDir ".../healybio"       -> "healybio"
+    const QString &parent        = QFileInfo(hostFolder).path();
+    const QString &grandparentDir = QFileInfo(parent).path();
+    const QString &siteRoot      = QFileInfo(grandparentDir).fileName();
+    if (siteRoot.compare(QStringLiteral("websiteempire"), Qt::CaseInsensitive) == 0) {
+        return {};
+    }
+    QString slug = siteRoot.toLower();
+    slug.replace(QRegularExpression(QStringLiteral("[^a-z0-9]+")), QStringLiteral("-"));
+    return slug;
+}
+
+QString PaneDomains::_siteServiceName(const HostInfo &host, const QString &lang) const
+{
+    const QString slug = _siteSlug(host.hostFolder);
+    return QStringLiteral("website-") + (slug.isEmpty() ? QString() : slug + QStringLiteral("-")) + lang;
 }
 
 bool PaneDomains::_verifyRemoteDbIntegrity(const HostInfo &host, const QString &remotePath,

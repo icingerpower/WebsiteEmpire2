@@ -57,3 +57,8 @@ add_executable(Test_Params_Model test_params_model.cpp)
 add_test(NAME Test_Params_Model COMMAND Test_Params_Model)
 target_link_libraries(Test_Params_Model PRIVATE Qt${QT_VERSION_MAJOR}::Test QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
 target_include_directories(Test_Params_Model PRIVATE ../WebsiteEmpireLib)
+
+add_executable(Test_Aspire_OrderedImageCollector test_ordered_image_collector.cpp)
+add_test(NAME Test_Aspire_OrderedImageCollector COMMAND Test_Aspire_OrderedImageCollector)
+target_link_libraries(Test_Aspire_OrderedImageCollector PRIVATE Qt${QT_VERSION_MAJOR}::Test QCoro::Core -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+target_include_directories(Test_Aspire_OrderedImageCollector PRIVATE ../WebsiteEmpireLib)
