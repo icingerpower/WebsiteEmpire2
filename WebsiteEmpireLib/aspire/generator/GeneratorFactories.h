@@ -3,14 +3,14 @@
 
 #include "AbstractGenerator.h"
 
-// Generator that builds a database of manufacturing factories for French cities.
+// Generator that builds a database of manufacturing factories for cities worldwide.
 //
 // City data is loaded from a worldcities.csv file (SimpleMaps format).
 // The path is taken from the "csv_path" Param (set via the UI parameter editor)
 // when the constructor is called without an explicit csvPath argument.  Passing
 // csvPath to the constructor overrides the param (used by tests and the CLI).
-// Only rows whose "country" column equals "France" are used; they are sorted by
-// population descending (cities with no population data go last).
+// All rows are used except those whose "iso2" column equals "CN" (China);
+// they are sorted by population descending (cities with no population data go last).
 //
 // Two-step job pipeline:
 //

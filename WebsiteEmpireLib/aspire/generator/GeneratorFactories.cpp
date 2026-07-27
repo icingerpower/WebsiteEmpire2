@@ -164,7 +164,7 @@ QList<GeneratorFactories::CityData> GeneratorFactories::loadCitiesFromCsv(
 
         // Columns: city, city_ascii, lat, lng, country, iso2, iso3, admin_name,
         //          capital, population[, id]
-        if (fields.at(4) != QLatin1String("France")) {
+        if (fields.at(5) == QLatin1String("CN")) {
             continue;
         }
 
@@ -539,7 +539,7 @@ QList<AbstractGenerator::Param> GeneratorFactories::getParams() const
     p.id           = QStringLiteral("csv_path");
     p.name         = tr("World Cities CSV");
     p.tooltip      = tr("Path to the worldcities.csv file (SimpleMaps format). "
-                        "Only rows whose 'country' column equals 'France' are used.");
+                        "All rows are used except those whose 'iso2' column equals 'CN' (China).");
     p.defaultValue = QString();
     p.isFile       = true;
     return {p};

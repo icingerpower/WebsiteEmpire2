@@ -42,9 +42,12 @@ static bool writeTestCsv(const QString &path)
     // City with no population → should sink to end
     out << "\"Smalltown\",\"Smalltown\",\"43.0000\",\"2.0000\",\"France\","
            "\"FR\",\"FRA\",\"Occitanie\",\"\",\"\",\"4\"\n";
-    // Non-French city → must be filtered out
+    // Non-French, non-China city → must be kept (only China is excluded)
     out << "\"London\",\"London\",\"51.5074\",\"-0.1278\",\"United Kingdom\","
            "\"GB\",\"GBR\",\"England\",\"primary\",\"9000000\",\"5\"\n";
+    // China → must be filtered out
+    out << "\"Shanghai\",\"Shanghai\",\"31.2286\",\"121.4747\",\"China\","
+           "\"CN\",\"CHN\",\"Shanghai\",\"admin\",\"24073000\",\"6\"\n";
     return true;
 }
 
@@ -151,22 +154,31 @@ private slots:
 
     // ==== CSV loading / city filtering / sorting ============================
 
-    void test_csv_france_only_four_cities()
+    void test_csv_excludes_china_keeps_others()
     {
         Fixture fx;
         QVERIFY(fx.setup());
         QScopedPointer<GeneratorFactories> gen(fx.makeGen());
-        QCOMPARE(gen->getAllJobIds().size(), 4); // London filtered out
+        QCOMPARE(gen->getAllJobIds().size(), 5); // Shanghai (China) filtered out
     }
 
-    void test_csv_no_london()
+    void test_csv_no_china()
     {
         Fixture fx;
         QVERIFY(fx.setup());
         QScopedPointer<GeneratorFactories> gen(fx.makeGen());
         for (const QString &id : gen->getAllJobIds()) {
-            QVERIFY(!id.contains(QLatin1String("london")));
+            QVERIFY(!id.startsWith(QLatin1String("CN/")));
         }
+    }
+
+    void test_csv_keeps_non_france_non_china_city()
+    {
+        Fixture fx;
+        QVERIFY(fx.setup());
+        QScopedPointer<GeneratorFactories> gen(fx.makeGen());
+        QVERIFY(gen->getAllJobIds().contains(
+            GeneratorFactories::cityJobId(QStringLiteral("GB"), QStringLiteral("London"))));
     }
 
     void test_csv_sorted_paris_first()
@@ -406,8 +418,8 @@ private slots:
         Fixture fx;
         QVERIFY(fx.setup());
         QScopedPointer<GeneratorFactories> gen(fx.makeGen());
-        // Drain Paris, Bordeaux, Lyon to get Smalltown
-        for (int i = 0; i < 3; ++i) { gen->getNextJob(); }
+        // Drain Paris, London, Bordeaux, Lyon to get Smalltown
+        for (int i = 0; i < 4; ++i) { gen->getNextJob(); }
         QVERIFY(!jobObj(gen->getNextJob()).contains(QStringLiteral("population")));
     }
 
@@ -513,13 +525,13 @@ private slots:
         QVERIFY(id1 != id2);
     }
 
-    void test_get_next_job_all_four_cities_distinct()
+    void test_get_next_job_all_five_cities_distinct()
     {
         Fixture fx;
         QVERIFY(fx.setup());
         QScopedPointer<GeneratorFactories> gen(fx.makeGen());
         QSet<QString> seen;
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < 5; ++i) {
             const QString id = jobObj(gen->getNextJob()).value(QStringLiteral("jobId")).toString();
             QVERIFY(!seen.contains(id));
             seen << id;
@@ -629,8 +641,8 @@ private slots:
         const QString pId = GeneratorFactories::cityJobId(QStringLiteral("FR"), QStringLiteral("Paris"));
         gen->recordReply(makeStep1ReplyBig(pId, {QStringLiteral("aerospace")}));
 
-        // Drain remaining three step-1 jobs (Bordeaux, Lyon, Smalltown)
-        for (int i = 0; i < 3; ++i) { gen->getNextJob(); }
+        // Drain remaining four step-1 jobs (London, Bordeaux, Lyon, Smalltown)
+        for (int i = 0; i < 4; ++i) { gen->getNextJob(); }
 
         const QString step2Raw = gen->getNextJob();
         QVERIFY(!step2Raw.isEmpty());
@@ -647,7 +659,7 @@ private slots:
         QScopedPointer<GeneratorFactories> gen(fx.makeGen());
         const QString pId = GeneratorFactories::cityJobId(QStringLiteral("FR"), QStringLiteral("Paris"));
         gen->recordReply(makeStep1ReplyBig(pId, {QStringLiteral("aerospace")}));
-        for (int i = 0; i < 3; ++i) { gen->getNextJob(); }
+        for (int i = 0; i < 4; ++i) { gen->getNextJob(); }
         const QJsonObject obj = jobObj(gen->getNextJob());
         QCOMPARE(obj.value(QStringLiteral("task")).toString(), GeneratorFactories::STEP2_TASK);
     }
@@ -659,7 +671,7 @@ private slots:
         QScopedPointer<GeneratorFactories> gen(fx.makeGen());
         const QString pId = GeneratorFactories::cityJobId(QStringLiteral("FR"), QStringLiteral("Paris"));
         gen->recordReply(makeStep1ReplyBig(pId, {QStringLiteral("aerospace")}));
-        for (int i = 0; i < 3; ++i) { gen->getNextJob(); }
+        for (int i = 0; i < 4; ++i) { gen->getNextJob(); }
         const QJsonObject obj = jobObj(gen->getNextJob());
         QVERIFY(!obj.value(QStringLiteral("city")).toString().isEmpty());
         QCOMPARE(obj.value(QStringLiteral("country")).toString(), QStringLiteral("France"));
@@ -672,9 +684,9 @@ private slots:
         QScopedPointer<GeneratorFactories> gen(fx.makeGen());
         const QString pId = GeneratorFactories::cityJobId(QStringLiteral("FR"), QStringLiteral("Paris"));
         gen->recordReply(makeStep1ReplyBig(pId, {QStringLiteral("aerospace")}));
-        for (int i = 0; i < 3; ++i) { gen->getNextJob(); }
+        for (int i = 0; i < 4; ++i) { gen->getNextJob(); }
         const QJsonObject obj = jobObj(gen->getNextJob());
-        QCOMPARE(obj.value(QStringLiteral("category")).toString(), QStringLiteral("aerospace"));
+        QCOMPARE(obj.value(QStringLiteral("categoryHint")).toString(), QStringLiteral("aerospace"));
     }
 
     void test_step2_payload_has_factory_schema()
@@ -684,7 +696,7 @@ private slots:
         QScopedPointer<GeneratorFactories> gen(fx.makeGen());
         const QString pId = GeneratorFactories::cityJobId(QStringLiteral("FR"), QStringLiteral("Paris"));
         gen->recordReply(makeStep1ReplyBig(pId, {QStringLiteral("aerospace")}));
-        for (int i = 0; i < 3; ++i) { gen->getNextJob(); }
+        for (int i = 0; i < 4; ++i) { gen->getNextJob(); }
         const QJsonObject obj = jobObj(gen->getNextJob());
         QVERIFY(obj.value(QStringLiteral("factorySchema")).isObject());
         QVERIFY(!obj.value(QStringLiteral("factorySchema")).toObject().isEmpty());
@@ -697,7 +709,7 @@ private slots:
         QScopedPointer<GeneratorFactories> gen(fx.makeGen());
         const QString pId = GeneratorFactories::cityJobId(QStringLiteral("FR"), QStringLiteral("Paris"));
         gen->recordReply(makeStep1ReplyBig(pId, {QStringLiteral("aerospace")}));
-        for (int i = 0; i < 3; ++i) { gen->getNextJob(); }
+        for (int i = 0; i < 4; ++i) { gen->getNextJob(); }
         const QJsonObject resp =
             jobObj(gen->getNextJob()).value(QStringLiteral("replyFormat")).toObject();
         QVERIFY(resp.contains(QStringLiteral("jobId")));
@@ -812,11 +824,11 @@ private slots:
             QScopedPointer<GeneratorFactories> gen(fx.makeGen());
             QVERIFY(gen->recordReply(makeStep1ReplySmall(lyonId, QStringLiteral("69001"))));
         }
-        // Second instance should have 3 pending jobs, not 4
+        // Second instance should have 4 pending jobs, not 5
         QScopedPointer<GeneratorFactories> gen2(fx.makeGen());
         int count = 0;
         while (!gen2->getNextJob().isEmpty()) { ++count; }
-        QCOMPARE(count, 3);
+        QCOMPARE(count, 4);
     }
 
     void test_resume_done_id_absent_from_pending()
@@ -921,7 +933,7 @@ private slots:
             if (raw.isEmpty()) { break; }
             const QJsonObject obj = jobObj(raw);
             if (obj.value(QStringLiteral("task")).toString() == GeneratorFactories::STEP2_TASK
-                && obj.value(QStringLiteral("category")).toString() == QLatin1String("aerospace")) {
+                && obj.value(QStringLiteral("categoryHint")).toString() == QLatin1String("aerospace")) {
                 ++count;
             }
         }
