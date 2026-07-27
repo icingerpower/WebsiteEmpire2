@@ -9,3 +9,4 @@ WebsiteEcom/
 *build*
 *.db
 Testing/
+.claude/common
