@@ -1,0 +1,13 @@
+[Unit]
+Description=Healybio FR
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/websiteempire/healybio/deploy/fr
+ExecStart=/opt/websiteempire/healybio/StaticWebsiteServe --port 8097 --lang fr --images-db /opt/websiteempire/healybio/deploy/images.db
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
