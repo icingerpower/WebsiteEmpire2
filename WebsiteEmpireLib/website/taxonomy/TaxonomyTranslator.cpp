@@ -226,10 +226,18 @@ void TaxonomyTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /
         if (it.value().isEmpty()) {
             continue;
         }
+        const QString &englishName = m_currentJob.englishNames.at(idx);
+        const QString cleaned = TranslationProtocol::sanitizeShortName(it.value(), englishName);
+        if (cleaned.isEmpty()) {
+            _log(QStringLiteral("  '%1' → %2: rejected implausible translation for '%3' — got: %4")
+                     .arg(m_currentJob.type, m_currentJob.targetLang, englishName, it.value().left(120)),
+                 true);
+            continue;
+        }
         m_taxonomyDb.setTranslation(m_currentJob.type,
-                                     m_currentJob.englishNames.at(idx),
+                                     englishName,
                                      m_currentJob.targetLang,
-                                     it.value());
+                                     cleaned);
         ++saved;
     }
 

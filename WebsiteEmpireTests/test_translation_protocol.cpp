@@ -36,6 +36,18 @@ private slots:
     // (e.g. shortcode attributes like [TITLE level="1"]).  The delimiter format
     // must survive the round-trip even when translated text contains such quotes.
     void test_protocol_roundtrip_text_with_embedded_quotes_survives();
+
+    // sanitizeShortName -----------------------------------------------------
+
+    void test_protocol_sanitize_clean_value_returned_unchanged();
+    void test_protocol_sanitize_healybio_ko_promptleak_rejected();
+    void test_protocol_sanitize_healybio_it_duplicate_line_keeps_first();
+    void test_protocol_sanitize_multiline_takes_first_nonempty_line();
+    void test_protocol_sanitize_leading_blank_lines_skipped();
+    void test_protocol_sanitize_all_blank_lines_rejected();
+    void test_protocol_sanitize_marker_case_insensitive();
+    void test_protocol_sanitize_implausibly_long_relative_to_source_rejected();
+    void test_protocol_sanitize_verbose_translation_within_ratio_accepted();
 };
 
 // =============================================================================
@@ -306,6 +318,94 @@ void Test_TranslationProtocol::test_protocol_roundtrip_text_with_embedded_quotes
     const auto result = TranslationProtocol::parseResponse(simulatedResponse);
     QCOMPARE(result.size(), 1);
     QCOMPARE(result.value(QStringLiteral("1_text")), simulatedTranslation);
+}
+
+// =============================================================================
+// sanitizeShortName
+// =============================================================================
+
+void Test_TranslationProtocol::test_protocol_sanitize_clean_value_returned_unchanged()
+{
+    const QString result = TranslationProtocol::sanitizeShortName(
+        QStringLiteral("cholesterol-crystal-arthropathy-dos-and-dont"),
+        QStringLiteral("cholesterol-crystal-arthropathy-dos-and-dont"));
+    QCOMPARE(result, QStringLiteral("cholesterol-crystal-arthropathy-dos-and-dont"));
+}
+
+void Test_TranslationProtocol::test_protocol_sanitize_healybio_ko_promptleak_rejected()
+{
+    // Reproduces the Healybio Korean regression: the AI echoed the slug
+    // instruction text verbatim instead of translating.
+    const QString raw = QStringLiteral(
+        "[This field is a URL slug. Output a valid URL slug only: "
+        "lowercase words separated by hyphens, no spaces, no special characters.]");
+    const QString result = TranslationProtocol::sanitizeShortName(
+        raw, QStringLiteral("hidradenitis-suppurativa-associated-arthropathy-dos-and-dont"));
+    QVERIFY(result.isEmpty());
+}
+
+void Test_TranslationProtocol::test_protocol_sanitize_healybio_it_duplicate_line_keeps_first()
+{
+    // Reproduces the Healybio Italian regression: taxonomy.db stored two
+    // candidate phrasings joined by a literal newline.
+    const QString raw = QStringLiteral(
+        "Compromissione della propriocezione degli arti inferiori\n"
+        "Alterata propriocezione degli arti inferiori");
+    const QString result = TranslationProtocol::sanitizeShortName(
+        raw, QStringLiteral("Impaired proprioception in lower limbs"));
+    QCOMPARE(result, QStringLiteral("Compromissione della propriocezione degli arti inferiori"));
+}
+
+void Test_TranslationProtocol::test_protocol_sanitize_multiline_takes_first_nonempty_line()
+{
+    const QString result = TranslationProtocol::sanitizeShortName(
+        QStringLiteral("First candidate\nSecond candidate\nThird candidate"),
+        QStringLiteral("Source name"));
+    QCOMPARE(result, QStringLiteral("First candidate"));
+}
+
+void Test_TranslationProtocol::test_protocol_sanitize_leading_blank_lines_skipped()
+{
+    const QString result = TranslationProtocol::sanitizeShortName(
+        QStringLiteral("\n\n  Actual value  \nSecond candidate"),
+        QStringLiteral("Source name"));
+    QCOMPARE(result, QStringLiteral("Actual value"));
+}
+
+void Test_TranslationProtocol::test_protocol_sanitize_all_blank_lines_rejected()
+{
+    const QString result = TranslationProtocol::sanitizeShortName(
+        QStringLiteral("\n   \n\t\n"), QStringLiteral("Source name"));
+    QVERIFY(result.isEmpty());
+}
+
+void Test_TranslationProtocol::test_protocol_sanitize_marker_case_insensitive()
+{
+    const QString result = TranslationProtocol::sanitizeShortName(
+        QStringLiteral("Please output a Valid URL Slug for this topic"),
+        QStringLiteral("some-topic"));
+    QVERIFY(result.isEmpty());
+}
+
+void Test_TranslationProtocol::test_protocol_sanitize_implausibly_long_relative_to_source_rejected()
+{
+    // Source is short; translated value is unrelated free text far exceeding
+    // any plausible name/slug length for that source.
+    const QString longGarbage =
+        QStringLiteral("this is a very long sentence that goes on and on and is clearly "
+                       "not a short name or slug for anything in particular at all");
+    const QString result = TranslationProtocol::sanitizeShortName(longGarbage, QStringLiteral("gout"));
+    QVERIFY(result.isEmpty());
+}
+
+void Test_TranslationProtocol::test_protocol_sanitize_verbose_translation_within_ratio_accepted()
+{
+    // A verbose but legitimate translation (target language naturally longer
+    // than source) must not be rejected as long as it stays within ratio.
+    const QString source = QStringLiteral("gout");
+    const QString verboseButPlausible = QStringLiteral("goutte-articulaire-chronique");
+    const QString result = TranslationProtocol::sanitizeShortName(verboseButPlausible, source);
+    QCOMPARE(result, verboseButPlausible);
 }
 
 QTEST_MAIN(Test_TranslationProtocol)

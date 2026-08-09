@@ -1219,27 +1219,48 @@ void PageTranslator::_finalizeTextTranslations(const QHash<QString, QString> &tr
 
     // Normalize and store the translated permalink slug if one was provided.
     if (translations.contains(QStringLiteral("_permalink_slug"))) {
-        static const QRegularExpression reInvalidSlugChars(QStringLiteral("[^a-z0-9-]"));
-        static const QRegularExpression reMultiHyphen(QStringLiteral("-{2,}"));
-        static const QRegularExpression reCombining(QStringLiteral("[\\x{0300}-\\x{036F}]"));
-        // NFD decomposition maps accented letters to ASCII base (é→e, ü→u).
-        // Non-Latin scripts (Japanese kanji, Arabic, etc.) produce no ASCII base and
-        // are removed by reInvalidSlugChars — the empty result keeps the English URL.
-        QString trSlug = translations.value(QStringLiteral("_permalink_slug"))
-                             .toLower()
-                             .normalized(QString::NormalizationForm_D);
-        trSlug.remove(reCombining);
-        trSlug.replace(QLatin1Char(' '), QLatin1Char('-'));
-        trSlug.replace(reInvalidSlugChars, QString{});
-        trSlug.replace(reMultiHyphen, QStringLiteral("-"));
-        while (trSlug.startsWith(QLatin1Char('-'))) { trSlug.remove(0, 1); }
-        while (trSlug.endsWith(QLatin1Char('-')))   { trSlug.chop(1); }
-        if (!trSlug.isEmpty()) {
-            const QString key = QStringLiteral("tr:")
-                                + m_currentJob.targetLang
-                                + QStringLiteral(":_permalink_slug");
-            finalData.insert(key, trSlug);
-            _log(QStringLiteral("  Slug translated: %1").arg(trSlug));
+        // Reject implausible responses (the AI echoing the slug instruction
+        // text verbatim, or keeping several candidate phrasings on separate
+        // lines) before any character-sanitizing runs — otherwise sanitizing
+        // can turn garbage into something that merely *looks* like a valid
+        // slug (see the Healybio "this-field-is-a-url-slug-..." regression).
+        // Leaving the tr:<lang>:_permalink_slug key unset here falls back to
+        // the source permalink, per PageGenerator's documented behaviour.
+        QString bareSourceSlug = m_currentPermalink;
+        if (bareSourceSlug.startsWith(QLatin1Char('/'))) {
+            bareSourceSlug.remove(0, 1);
+        }
+        const QString rawSlug = TranslationProtocol::sanitizeShortName(
+            translations.value(QStringLiteral("_permalink_slug")), bareSourceSlug);
+        if (rawSlug.isEmpty()) {
+            _log(QStringLiteral("  Page %1 → %2: rejected implausible translated slug — got: %3")
+                     .arg(m_currentJob.pageId).arg(m_currentJob.targetLang,
+                          translations.value(QStringLiteral("_permalink_slug")).left(120)),
+                 true);
+        } else {
+            static const QRegularExpression reInvalidSlugChars(QStringLiteral("[^a-z0-9-]"));
+            static const QRegularExpression reMultiHyphen(QStringLiteral("-{2,}"));
+            static const QRegularExpression reCombining(QStringLiteral("[\\x{0300}-\\x{036F}]"));
+            // NFD decomposition maps accented letters to ASCII base (é→e, ü→u).
+            // Non-Latin scripts (Japanese kanji, Arabic, etc.) produce no ASCII base
+            // and are removed by reInvalidSlugChars — the empty result keeps the
+            // English URL.
+            QString trSlug = rawSlug
+                                 .toLower()
+                                 .normalized(QString::NormalizationForm_D);
+            trSlug.remove(reCombining);
+            trSlug.replace(QLatin1Char(' '), QLatin1Char('-'));
+            trSlug.replace(reInvalidSlugChars, QString{});
+            trSlug.replace(reMultiHyphen, QStringLiteral("-"));
+            while (trSlug.startsWith(QLatin1Char('-'))) { trSlug.remove(0, 1); }
+            while (trSlug.endsWith(QLatin1Char('-')))   { trSlug.chop(1); }
+            if (!trSlug.isEmpty()) {
+                const QString key = QStringLiteral("tr:")
+                                    + m_currentJob.targetLang
+                                    + QStringLiteral(":_permalink_slug");
+                finalData.insert(key, trSlug);
+                _log(QStringLiteral("  Slug translated: %1").arg(trSlug));
+            }
         }
     }
 

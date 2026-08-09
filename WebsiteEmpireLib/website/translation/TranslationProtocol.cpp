@@ -114,3 +114,54 @@ QHash<QString, QString> TranslationProtocol::parseResponse(const QString &respon
     }
     return result;
 }
+
+// =============================================================================
+// sanitizeShortName
+// =============================================================================
+
+QString TranslationProtocol::sanitizeShortName(const QString &raw, const QString &sourceText)
+{
+    // Take only the first non-empty line — handles the "AI kept two candidate
+    // phrasings, one per line" failure mode instead of discarding the whole value.
+    QString cleaned;
+    const QStringList lines = raw.split(QLatin1Char('\n'));
+    for (const QString &line : lines) {
+        const QString trimmed = line.trimmed();
+        if (!trimmed.isEmpty()) {
+            cleaned = trimmed;
+            break;
+        }
+    }
+    if (cleaned.isEmpty()) {
+        return {};
+    }
+
+    // Obvious prompt-leak markers — the AI echoed the instruction text
+    // instead of producing a translation.
+    static const QStringList markers = {
+        QStringLiteral("url slug"),        QStringLiteral("valid url"),
+        QStringLiteral("special character"), QStringLiteral("lowercase words"),
+        QStringLiteral("this field is"),
+    };
+    const QString lower = cleaned.toLower();
+    for (const QString &marker : markers) {
+        if (lower.contains(marker)) {
+            return {};
+        }
+    }
+
+    // Length sanity: a translated name/slug should never balloon far beyond
+    // its source length, even accounting for verbose target languages. The
+    // additive floor keeps short single-word sources (e.g. "gout") from
+    // being rejected when they legitimately translate into a much longer
+    // descriptive compound phrase — ratio alone breaks down for tiny sources.
+    constexpr qsizetype kMaxNameLengthRatio = 6;
+    constexpr qsizetype kMaxNameLengthFloor = 40;
+    const qsizetype sourceLen = qMax<qsizetype>(sourceText.trimmed().size(), 1);
+    const qsizetype maxLen = qMax(sourceLen * kMaxNameLengthRatio, sourceLen + kMaxNameLengthFloor);
+    if (cleaned.size() > maxLen) {
+        return {};
+    }
+
+    return cleaned;
+}

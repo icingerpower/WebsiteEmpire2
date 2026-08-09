@@ -214,7 +214,21 @@ void CategoryTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /
         if (!ok || it.value().isEmpty()) {
             continue;
         }
-        m_categoryTable.setTranslation(catId, m_currentJob.targetLang, it.value());
+        // Look up the English source name to sanity-check the translation against.
+        QString sourceName;
+        for (const TranslatableField &f : std::as_const(m_currentJob.fields)) {
+            if (f.id == it.key()) {
+                sourceName = f.sourceText;
+                break;
+            }
+        }
+        const QString cleaned = TranslationProtocol::sanitizeShortName(it.value(), sourceName);
+        if (cleaned.isEmpty()) {
+            _log(QStringLiteral("  Category %1 → %2: rejected implausible translation — got: %3")
+                     .arg(catId).arg(m_currentJob.targetLang, it.value().left(120)), true);
+            continue;
+        }
+        m_categoryTable.setTranslation(catId, m_currentJob.targetLang, cleaned);
         ++saved;
     }
 
