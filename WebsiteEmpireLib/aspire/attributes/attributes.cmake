@@ -1,5 +1,6 @@
 include(${CMAKE_CURRENT_LIST_DIR}/health/health.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/languages/languages.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/fashion/fashion.cmake)
 
 set(ASPIRE_ATTRIBUTES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/AbstractPageAttributes.h
@@ -24,4 +25,5 @@ set(ASPIRE_ATTRIBUTES_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesProductFashion.cpp
     ${ASPIRE_ATTRIBUTES_HEALTH_FILES}
     ${ASPIRE_ATTRIBUTES_LANGUAGES_FILES}
+    ${ASPIRE_ATTRIBUTES_FASHION_FILES}
 )

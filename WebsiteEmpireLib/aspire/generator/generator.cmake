@@ -9,4 +9,6 @@ set(ASPIRE_GENERATOR_FILES
     ${CMAKE_CURRENT_LIST_DIR}/GeneratorHealth.cpp
     ${CMAKE_CURRENT_LIST_DIR}/GeneratorLanguages.h
     ${CMAKE_CURRENT_LIST_DIR}/GeneratorLanguages.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/GeneratorFashionTaxonomy.h
+    ${CMAKE_CURRENT_LIST_DIR}/GeneratorFashionTaxonomy.cpp
 )

@@ -34,9 +34,13 @@
  *   "url"      -> target as-is
  *
  * Translation:
- *   Item labels are translatable.  Field IDs follow the pattern "item_N_label"
- *   (0-based index).  BlocTranslations handles persistence in the flat data map.
- *   Labels with empty source text are silently skipped by the translation pipeline.
+ *   Item labels AND alt texts are translatable.  Field IDs follow the pattern
+ *   "item_N_label" / "item_N_alt" (0-based index).  Two independent
+ *   BlocTranslations instances are used so that a page is not re-queued for
+ *   translation just because alt texts change while labels are still valid.
+ *   isTranslationComplete() requires BOTH to be complete.
+ *   Labels / alt texts with empty source text are silently skipped by the
+ *   translation pipeline.
  */
 class PageBlocImageLinks : public AbstractPageBloc
 {
@@ -126,7 +130,8 @@ private:
     int m_rowsMobile  = 4;
 
     QList<Item>      m_items;
-    BlocTranslations m_translations;
+    BlocTranslations m_translations;    ///< item_N_label translations
+    BlocTranslations m_altTranslations; ///< item_N_alt translations
 
     /**
      * Resolves a link type + target pair into the final href value.

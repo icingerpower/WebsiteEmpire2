@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <QCryptographicHash>
 
 #include "website/pages/blocs/widgets/AbstractPageBlockWidget.h"
 #include "website/pages/blocs/PageBlocImageLinks.h"
@@ -157,6 +158,12 @@ private slots:
     // --- Accessors ---
     void test_imagelinks_items_accessor_matches_loaded_data();
     void test_imagelinks_grid_accessors_match_loaded_values();
+
+    // --- Alt text translation ---
+    void test_imagelinks_alt_text_falls_back_to_english_when_no_translation();
+    void test_imagelinks_translated_alt_text_used_when_stored();
+    void test_imagelinks_collect_translatables_includes_alt_fields();
+    void test_imagelinks_is_translation_complete_requires_alt_text();
 };
 
 // =============================================================================
@@ -933,6 +940,92 @@ void Test_Website_PageBlocImageLinks::test_imagelinks_grid_accessors_match_loade
     QCOMPARE(bloc.rowsTablet(),  4);   // 94
     QCOMPARE(bloc.colsMobile(),  2);   // 95
     QCOMPARE(bloc.rowsMobile(),  5);   // 96
+}
+
+// =============================================================================
+// Alt text translation
+// =============================================================================
+
+void Test_Website_PageBlocImageLinks::test_imagelinks_alt_text_falls_back_to_english_when_no_translation()
+{
+    // No translation stored → English alt text must appear in the HTML.
+    PageBlocImageLinks bloc;
+    const auto &html = htmlFrom(bloc, oneItemHash(QStringLiteral("https://example.com/img.jpg"),
+                                                   QLatin1String(PageBlocImageLinks::LINK_TYPE_URL),
+                                                   QStringLiteral("https://example.com"),
+                                                   QStringLiteral("English alt text")));
+    QVERIFY(html.contains(QStringLiteral("English alt text")));   // 97
+}
+
+void Test_Website_PageBlocImageLinks::test_imagelinks_translated_alt_text_used_when_stored()
+{
+    // Build a hash with the English source AND a pre-stored alt translation.
+    // The engine always uses websiteIndex=0 (lang "en") so we store the "en" translation.
+    // BlocTranslations map key format: "tr:<lang>:<fieldId>" / "tr:<lang>:<fieldId>:hash"
+    QHash<QString, QString> h = oneItemHash(
+        QStringLiteral("https://example.com/img.jpg"),
+        QLatin1String(PageBlocImageLinks::LINK_TYPE_URL),
+        QStringLiteral("https://example.com"),
+        QStringLiteral("English alt"));
+    h.insert(QStringLiteral("item_0_label"), QStringLiteral("Label"));
+    h.insert(QStringLiteral("tr:en:item_0_alt"),
+             QStringLiteral("Translated alt"));
+    h.insert(QStringLiteral("tr:en:item_0_alt:hash"),
+             QString::fromLatin1(QCryptographicHash::hash(
+                 QByteArrayLiteral("English alt"),
+                 QCryptographicHash::Sha1).toHex()));
+
+    PageBlocImageLinks bloc;
+    const auto &html = htmlFrom(bloc, h);
+    QVERIFY(html.contains(QStringLiteral("Translated alt")));    // 98
+    QVERIFY(!html.contains(QStringLiteral("English alt")));      // 99
+}
+
+void Test_Website_PageBlocImageLinks::test_imagelinks_collect_translatables_includes_alt_fields()
+{
+    QHash<QString, QString> h = oneItemHash(
+        QStringLiteral("https://example.com/img.jpg"),
+        QLatin1String(PageBlocImageLinks::LINK_TYPE_URL),
+        QStringLiteral("https://example.com"),
+        QStringLiteral("My alt text"));
+    h.insert(QStringLiteral("item_0_label"), QStringLiteral("My label"));
+
+    PageBlocImageLinks bloc;
+    bloc.load(h);
+    QList<TranslatableField> fields;
+    bloc.collectTranslatables(QStringView{}, fields);
+
+    bool foundAlt = false;
+    for (const auto &f : std::as_const(fields)) {
+        if (f.id == QStringLiteral("item_0_alt")) {
+            foundAlt = true;
+            QCOMPARE(f.sourceText, QStringLiteral("My alt text"));   // 100
+        }
+    }
+    QVERIFY(foundAlt);   // 101
+}
+
+void Test_Website_PageBlocImageLinks::test_imagelinks_is_translation_complete_requires_alt_text()
+{
+    // Load a bloc with both a label AND alt text, then supply only a label translation.
+    // isTranslationComplete must return false because alt text is not yet translated.
+    QHash<QString, QString> h = oneItemHash(
+        QStringLiteral("https://example.com/img.jpg"),
+        QLatin1String(PageBlocImageLinks::LINK_TYPE_URL),
+        QStringLiteral("https://example.com"),
+        QStringLiteral("Alt source"));
+    h.insert(QStringLiteral("item_0_label"), QStringLiteral("Label source"));
+    // Supply a complete label translation for "de".
+    h.insert(QStringLiteral("tr:de:item_0_label"),       QStringLiteral("Deutsches Label"));
+    h.insert(QStringLiteral("tr:de:item_0_label:hash"),
+             QString::fromLatin1(QCryptographicHash::hash(
+                 QByteArrayLiteral("Label source"),
+                 QCryptographicHash::Sha1).toHex()));
+
+    PageBlocImageLinks bloc;
+    bloc.load(h);
+    // Label is complete for "de" but alt text has no "de" translation → incomplete.
+    QVERIFY(!bloc.isTranslationComplete(QStringView{}, QStringLiteral("de")));   // 102
 }
 
 QTEST_MAIN(Test_Website_PageBlocImageLinks)

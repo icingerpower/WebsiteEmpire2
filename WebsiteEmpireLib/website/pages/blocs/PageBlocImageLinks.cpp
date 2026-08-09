@@ -42,16 +42,23 @@ void PageBlocImageLinks::load(const QHash<QString, QString> &values)
         m_items.append(std::move(item));
     }
 
-    // Register each non-empty label as a BlocTranslations source, then restore
+    // Register labels and alt texts as BlocTranslations sources, then restore
     // any previously stored translations from the flat map.
     for (int i = 0; i < m_items.size(); ++i) {
+        const QString &num = QString::number(i);
         if (!m_items.at(i).label.isEmpty()) {
             m_translations.setSource(
-                QStringLiteral("item_") + QString::number(i) + QStringLiteral("_label"),
+                QStringLiteral("item_") + num + QStringLiteral("_label"),
                 m_items.at(i).label);
+        }
+        if (!m_items.at(i).altText.isEmpty()) {
+            m_altTranslations.setSource(
+                QStringLiteral("item_") + num + QStringLiteral("_alt"),
+                m_items.at(i).altText);
         }
     }
     m_translations.loadFromMap(values);
+    m_altTranslations.loadFromMap(values);
 }
 
 void PageBlocImageLinks::save(QHash<QString, QString> &values) const
@@ -76,6 +83,7 @@ void PageBlocImageLinks::save(QHash<QString, QString> &values) const
     }
 
     m_translations.saveToMap(values);
+    m_altTranslations.saveToMap(values);
 }
 
 // =============================================================================
@@ -132,10 +140,14 @@ void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
             resolvedUrl = item.imageUrl;
         }
 
-        // Resolve translated label; fall back to source label if none stored.
-        const QString fieldId = QStringLiteral("item_") + QString::number(i) + QStringLiteral("_label");
-        const QString &tr = m_translations.translation(fieldId, langCode);
-        const QString &displayLabel = tr.isEmpty() ? item.label : tr;
+        // Resolve translated label and alt text; fall back to source if none stored.
+        const QString num     = QString::number(i);
+        const QString labelId = QStringLiteral("item_") + num + QStringLiteral("_label");
+        const QString altId   = QStringLiteral("item_") + num + QStringLiteral("_alt");
+        const QString &trLabel = m_translations.translation(labelId, langCode);
+        const QString &trAlt   = m_altTranslations.translation(altId, langCode);
+        const QString &displayLabel = trLabel.isEmpty() ? item.label : trLabel;
+        const QString &displayAlt   = trAlt.isEmpty()   ? item.altText : trAlt;
 
         html += QStringLiteral("<a href=\"");
         html += href.mid(href.startsWith(QLatin1Char('/')) ? 1 : 0);
@@ -144,7 +156,7 @@ void PageBlocImageLinks::addCode(QStringView     /*origContent*/,
         html += QStringLiteral("\"><img src=\"");
         html += resolvedUrl;
         html += QStringLiteral("\" alt=\"");
-        html += item.altText;
+        html += displayAlt;
         html += QStringLiteral("\" loading=\"lazy\">");
         html += QStringLiteral("<span class=\"image-link-label\">");
         if (!displayLabel.isEmpty()) {
@@ -205,10 +217,14 @@ void PageBlocImageLinks::collectTranslatables(QStringView /*origContent*/,
                                                QList<TranslatableField> &out) const
 {
     for (int i = 0; i < m_items.size(); ++i) {
+        const QString num = QString::number(i);
         const QString &lbl = m_items.at(i).label;
         if (!lbl.isEmpty()) {
-            out.append({QStringLiteral("item_") + QString::number(i) + QStringLiteral("_label"),
-                        lbl});
+            out.append({QStringLiteral("item_") + num + QStringLiteral("_label"), lbl});
+        }
+        const QString &alt = m_items.at(i).altText;
+        if (!alt.isEmpty()) {
+            out.append({QStringLiteral("item_") + num + QStringLiteral("_alt"), alt});
         }
     }
 }
@@ -218,13 +234,17 @@ void PageBlocImageLinks::applyTranslation(QStringView   /*origContent*/,
                                            const QString &lang,
                                            const QString &text)
 {
-    m_translations.setTranslation(fieldId, lang, text);
+    if (fieldId.endsWith(QStringLiteral("_alt"))) {
+        m_altTranslations.setTranslation(fieldId, lang, text);
+    } else {
+        m_translations.setTranslation(fieldId, lang, text);
+    }
 }
 
 bool PageBlocImageLinks::isTranslationComplete(QStringView   /*origContent*/,
                                                 const QString &lang) const
 {
-    return m_translations.isComplete(lang);
+    return m_translations.isComplete(lang) && m_altTranslations.isComplete(lang);
 }
 
 // =============================================================================
