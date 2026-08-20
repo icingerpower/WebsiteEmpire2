@@ -68,7 +68,7 @@ public:
      * <title> and <meta name="description"> come from the base via autoSeoTitle /
      * autoSeoDescription.
      */
-    QString buildHeadMetaTags(const QString &baseUrl, const QString &langCode) const override;
+    QString buildHeadMetaTags(const QString &baseUrl, const QString &langCode, const QString &canonicalPath) const override;
 
     /**
      * Returns the English SEO templates for symptom hub pages:

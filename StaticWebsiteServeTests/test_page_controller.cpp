@@ -237,6 +237,83 @@ DROGON_TEST(test_pagecontroller_servepage_html_content_type)
 }
 
 // ---------------------------------------------------------------------------
+// servePage — --path-prefix (local browsing without nginx)
+//
+// Generated pages link to "/fr/some-page", but content.db stores paths bare
+// because production strips the prefix at nginx.  Hitting this server directly
+// there is no nginx, so every menu link 404s.  setPathPrefix("fr") makes the
+// server strip it itself.  Unset (production) it must change nothing.
+// ---------------------------------------------------------------------------
+
+/** Serves path and returns the response, with the given prefix configured. */
+static drogon::HttpResponsePtr serveWithPrefix(const std::string &prefix,
+                                                const std::string &storedPath,
+                                                const std::string &requestPath)
+{
+    StubPageRepository     pageRepo;
+    StubMenuRepository     menuRepo;
+    StubRedirectRepository redirectRepo;
+
+    pageRepo.entry = makePage(10, storedPath, "etag-prefix");
+    setupController(pageRepo, menuRepo, redirectRepo);
+    PageController::setPathPrefix(prefix);
+
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setMethod(drogon::Get);
+    req->setPath(requestPath);
+
+    drogon::HttpResponsePtr captured;
+    PageController ctrl;
+    // Drogon hands the regex capture (path without the leading '/') to servePage.
+    ctrl.servePage(req,
+                   [&captured](const drogon::HttpResponsePtr &resp) { captured = resp; },
+                   requestPath.substr(1));
+
+    PageController::setPathPrefix("");  // reset — statics leak across tests
+    return captured;
+}
+
+DROGON_TEST(test_pagecontroller_pathprefix_strips_lang_prefix)
+{
+    // The exact failure: menu links to /fr/symptoms, content.db holds /symptoms.
+    auto resp = serveWithPrefix("fr", "/symptoms", "/fr/symptoms");
+    REQUIRE(resp != nullptr);
+    CHECK(resp->getStatusCode() == drogon::k200OK);
+}
+
+DROGON_TEST(test_pagecontroller_pathprefix_accepts_slashed_forms)
+{
+    // "fr", "/fr" and "/fr/" must all normalise to the same prefix.
+    CHECK(serveWithPrefix("/fr", "/symptoms", "/fr/symptoms")->getStatusCode() == drogon::k200OK);
+    CHECK(serveWithPrefix("/fr/", "/symptoms", "/fr/symptoms")->getStatusCode() == drogon::k200OK);
+}
+
+DROGON_TEST(test_pagecontroller_pathprefix_bare_path_still_served)
+{
+    // With a prefix configured, an unprefixed request must still resolve.
+    auto resp = serveWithPrefix("fr", "/symptoms", "/symptoms");
+    REQUIRE(resp != nullptr);
+    CHECK(resp->getStatusCode() == drogon::k200OK);
+}
+
+DROGON_TEST(test_pagecontroller_pathprefix_unset_does_not_strip)
+{
+    // Production default: nginx already stripped the prefix, so the server must
+    // NOT strip again — "/fr/symptoms" is simply not a known path.
+    auto resp = serveWithPrefix("", "/symptoms", "/fr/symptoms");
+    REQUIRE(resp != nullptr);
+    CHECK(resp->getStatusCode() == drogon::k404NotFound);
+}
+
+DROGON_TEST(test_pagecontroller_pathprefix_requires_segment_boundary)
+{
+    // "/france-guide" must not be mangled into "ance-guide" by the "fr" prefix.
+    auto resp = serveWithPrefix("fr", "/france-guide", "/france-guide");
+    REQUIRE(resp != nullptr);
+    CHECK(resp->getStatusCode() == drogon::k200OK);
+}
+
+// ---------------------------------------------------------------------------
 
 int main(int argc, char *argv[])
 {

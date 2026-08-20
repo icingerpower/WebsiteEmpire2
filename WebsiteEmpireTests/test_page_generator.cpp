@@ -224,6 +224,12 @@ private slots:
     // --- translated article permalink ---
     void test_pagegen_article_stored_at_translated_permalink_when_tr_slug_set();
     void test_pagegen_article_falls_back_to_english_permalink_when_no_tr_slug();
+    void test_pagegen_translated_permalink_map_includes_regular_article_without_end_permalink();
+
+    // --- hreflang + redirect on translated-slug pages (regression) ---
+    void test_pagegen_translated_article_still_emits_hreflang_alternates();
+    void test_pagegen_translated_slug_emits_redirect_from_english_permalink();
+    void test_pagegen_redirect_target_includes_lang_prefix_on_subpath_deployment();
 
     // --- symptom hub availability gating ---
     void test_pagegen_symptom_hub_excluded_when_no_articles_translated_for_lang();
@@ -241,6 +247,11 @@ private slots:
 
     // --- corrupt translation resilience ---
     void test_pagegen_corrupt_shortcode_skips_page_does_not_crash();
+
+    // --- canonical URL lang prefix (regression) ---
+    void test_pagegen_canonical_includes_lang_prefix_on_translated_page();
+    void test_pagegen_canonical_includes_translated_slug_with_lang_prefix();
+    void test_pagegen_og_url_includes_lang_prefix_on_translated_page();
 };
 
 // ---------------------------------------------------------------------------
@@ -1260,6 +1271,340 @@ void Test_PageGenerator::test_pagegen_corrupt_shortcode_skips_page_does_not_cras
     QVERIFY(bad.next());
     QCOMPARE(bad.value(0).toInt(), 0);
 
+    f.closeContentDb(conn);
+}
+
+// ---------------------------------------------------------------------------
+// Canonical URL lang prefix regression
+// ---------------------------------------------------------------------------
+
+// Helper: generate a French article page and return its decompressed HTML.
+// The article is stored at /canonical-test-article in pages.db and in content.db.
+static QByteArray generateFrenchArticleHtml(Fixture &f,
+                                             const QString &extraDataKey = {},
+                                             const QString &extraDataValue = {})
+{
+    const QString enText = QStringLiteral("<h1>Sleep</h1><p>English.</p>");
+    const QString frText = QStringLiteral("<h1>Sommeil</h1><p>Français.</p>");
+
+    const int id = f.repo.create(QStringLiteral("article"),
+                                  QStringLiteral("/canonical-test-article"),
+                                  QStringLiteral("en"));
+    QHash<QString, QString> data = {
+        {QStringLiteral("1_text"),              enText},
+        {QStringLiteral("0_categories"),         QString()},
+        {QStringLiteral("1_tr:fr:text"),         frText},
+        {QStringLiteral("1_tr:fr:text:hash"),    Fixture::sha1(enText)},
+    };
+    if (!extraDataKey.isEmpty()) {
+        data.insert(extraDataKey, extraDataValue);
+    }
+    f.repo.saveData(id, data);
+    f.repo.setLangCodesToTranslate(id, {QStringLiteral("fr")});
+
+    int frIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        if (f.engine.getLangCode(i) == QStringLiteral("fr")) {
+            frIndex = i;
+            break;
+        }
+    }
+    if (frIndex < 0) {
+        return {};
+    }
+
+    // The engine row for fr is auto-created with an empty domain by _reconcileRows().
+    // Without a domain, AbstractPageType::addCode leaves baseUrl empty and the
+    // canonical/<og:url> block is never emitted.  Set "example.com" so the test can
+    // verify the full canonical URL including the /fr/ language prefix.
+    f.engine.setData(f.engine.index(frIndex, AbstractEngine::COL_DOMAIN),
+                     QStringLiteral("example.com"));
+
+    f.gen.generateAll(QDir(f.dir.path()), QDir(f.dir.path()),
+                      QStringLiteral("example.com"), f.engine, frIndex,
+                      QStringLiteral("https://example.com/fr"));
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT pv.html_gz FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id"
+        " WHERE p.path = '/canonical-test-article'"));
+    const QByteArray html = q.next() ? gzipDecompress(q.value(0).toByteArray()) : QByteArray{};
+    f.closeContentDb(conn);
+    return html;
+}
+
+void Test_PageGenerator::test_pagegen_canonical_includes_lang_prefix_on_translated_page()
+{
+    // Regression: <link rel="canonical"> on translated pages pointed to the bare
+    // English URL (e.g. https://example.com/article) instead of the language-prefixed
+    // one (https://example.com/fr/article).  Google then treated the French page as a
+    // duplicate of the English one and dropped it from the index.
+    Fixture f;
+    const QByteArray html = generateFrenchArticleHtml(f);
+    QVERIFY2(!html.isEmpty(), "French article page not found in content.db");
+
+    QVERIFY2(html.contains("rel=\"canonical\" href=\"https://example.com/fr/canonical-test-article\""),
+             "canonical must include /fr/ language prefix");
+    QVERIFY2(!html.contains("rel=\"canonical\" href=\"https://example.com/canonical-test-article\""),
+             "canonical must NOT point to the bare English-domain URL");
+}
+
+void Test_PageGenerator::test_pagegen_og_url_includes_lang_prefix_on_translated_page()
+{
+    // Same regression for og:url — must carry /fr/ prefix so social scrapers
+    // resolve to the correct language URL.
+    Fixture f;
+    const QByteArray html = generateFrenchArticleHtml(f);
+    QVERIFY2(!html.isEmpty(), "French article page not found in content.db");
+
+    QVERIFY2(html.contains("og:url\" content=\"https://example.com/fr/canonical-test-article\""),
+             "og:url must include /fr/ language prefix");
+    QVERIFY2(!html.contains("og:url\" content=\"https://example.com/canonical-test-article\""),
+             "og:url must NOT point to the bare English-domain URL");
+}
+
+void Test_PageGenerator::test_pagegen_canonical_includes_translated_slug_with_lang_prefix()
+{
+    // When endPermalink is non-empty AND a translated slug is stored in page_data,
+    // the canonical must combine both the /fr/ prefix and the translated slug:
+    //   https://example.com/fr/article-en-francais
+    // not https://example.com/fr/canonical-test-article (English slug).
+    //
+    // Note: the generator only looks up page_data translated slugs when endPermalink
+    // is non-empty (strategy-suffix pages), so the test must set it.
+    Fixture f;
+
+    const QString enText = QStringLiteral("<h1>Sleep</h1><p>English.</p>");
+    const QString frText = QStringLiteral("<h1>Sommeil</h1><p>Français.</p>");
+
+    const int id = f.repo.create(QStringLiteral("article"),
+                                  QStringLiteral("/canonical-test-article"),
+                                  QStringLiteral("en"));
+    f.repo.saveData(id, {
+        {QStringLiteral("1_text"),                enText},
+        {QStringLiteral("0_categories"),           QString()},
+        {QStringLiteral("1_tr:fr:text"),           frText},
+        {QStringLiteral("1_tr:fr:text:hash"),      Fixture::sha1(enText)},
+        {QStringLiteral("tr:fr:_permalink_slug"),  QStringLiteral("article-en-francais")},
+    });
+    f.repo.setLangCodesToTranslate(id, {QStringLiteral("fr")});
+    // Non-empty endPermalink is required for the generator to apply the translated slug.
+    f.repo.setEndPermalink(id, QStringLiteral("test-article"));
+
+    int frIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        if (f.engine.getLangCode(i) == QStringLiteral("fr")) {
+            frIndex = i;
+            break;
+        }
+    }
+    QVERIFY2(frIndex >= 0, "No French engine row found");
+    f.engine.setData(f.engine.index(frIndex, AbstractEngine::COL_DOMAIN),
+                     QStringLiteral("example.com"));
+
+    f.gen.generateAll(QDir(f.dir.path()), QDir(f.dir.path()),
+                      QStringLiteral("example.com"), f.engine, frIndex,
+                      QStringLiteral("https://example.com/fr"));
+
+    // The French article is written at /article-en-francais (translated slug).
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT pv.html_gz FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id"
+        " WHERE p.path = '/article-en-francais'"));
+    const QByteArray html = q.next() ? gzipDecompress(q.value(0).toByteArray()) : QByteArray{};
+    f.closeContentDb(conn);
+
+    QVERIFY2(!html.isEmpty(), "French article at /article-en-francais not found in content.db");
+    QVERIFY2(html.contains("rel=\"canonical\" href=\"https://example.com/fr/article-en-francais\""),
+             "canonical must use the translated slug with /fr/ prefix");
+    QVERIFY2(!html.contains("rel=\"canonical\" href=\"https://example.com/canonical-test-article\""),
+             "canonical must NOT use the English slug");
+}
+
+void Test_PageGenerator::test_pagegen_translated_permalink_map_includes_regular_article_without_end_permalink()
+{
+    // Regression: the translatedPermalinks pre-pass only added slug mappings for
+    // pages with a non-empty endPermalink. For regular articles (no endPermalink),
+    // resolveLinkHref always returned the English slug even when tr:fr:_permalink_slug
+    // was stored — so internal links and hreflang alternates on every other page
+    // pointed to the English URL, which no longer existed in content.db.
+    Fixture f;
+
+    const QString enText = QStringLiteral("<h1>Master Sleep</h1><p>English.</p>");
+    const QString frText = QStringLiteral("<h1>Maîtriser le sommeil</h1><p>Français.</p>");
+
+    const int id = f.repo.create(QStringLiteral("article"),
+                                  QStringLiteral("/master-sleep"),
+                                  QStringLiteral("en"));
+    f.repo.saveData(id, {
+        {QStringLiteral("1_text"),                enText},
+        {QStringLiteral("0_categories"),           QString()},
+        {QStringLiteral("1_tr:fr:text"),           frText},
+        {QStringLiteral("1_tr:fr:text:hash"),      Fixture::sha1(enText)},
+        {QStringLiteral("tr:fr:_permalink_slug"),  QStringLiteral("maitriser-le-sommeil")},
+    });
+    f.repo.setLangCodesToTranslate(id, {QStringLiteral("fr")});
+    // NOTE: endPermalink is NOT set — this is the scenario for regular articles.
+
+    int frIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        if (f.engine.getLangCode(i) == QStringLiteral("fr")) {
+            frIndex = i;
+            break;
+        }
+    }
+    QVERIFY2(frIndex >= 0, "No French engine row found");
+
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, frIndex);
+
+    // After generateAll, the engine must know that /master-sleep → /maitriser-le-sommeil
+    // for French, so that any page linking to this article uses the correct French URL.
+    // Without the fix, this returned /master-sleep unchanged.
+    QCOMPARE(f.engine.resolveLinkHref(QStringLiteral("/master-sleep"), frIndex),
+             QStringLiteral("/maitriser-le-sommeil"));
+}
+
+// Builds an article with a French translated slug, generates the French site, and
+// returns the decompressed HTML written at the French path.
+static QByteArray generateTranslatedSlugArticle(Fixture &f, int &frIndexOut)
+{
+    const QString enText = QStringLiteral("<h1>Master Sleep</h1><p>English.</p>");
+    const QString frText = QStringLiteral("<h1>Maîtriser le sommeil</h1><p>Français.</p>");
+
+    const int id = f.repo.create(QStringLiteral("article"),
+                                  QStringLiteral("/master-sleep"),
+                                  QStringLiteral("en"));
+    f.repo.saveData(id, {
+        {QStringLiteral("1_text"),                enText},
+        {QStringLiteral("0_categories"),           QString()},
+        {QStringLiteral("1_tr:fr:text"),           frText},
+        {QStringLiteral("1_tr:fr:text:hash"),      Fixture::sha1(enText)},
+        {QStringLiteral("tr:fr:_permalink_slug"),  QStringLiteral("maitriser-le-sommeil")},
+    });
+    f.repo.setLangCodesToTranslate(id, {QStringLiteral("fr")});
+
+    // Mirror the production setup: every language on ONE domain with /<lang>/ path
+    // prefixes.  _buildHreflangTags skips any row with an empty domain, and also
+    // any language without a deploy/<lang>/content.db, so both must exist here or
+    // no alternate is emitted regardless of the fix under test.
+    frIndexOut = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        const QString lang = f.engine.getLangCode(i);
+        if (lang == QStringLiteral("fr")) {
+            frIndexOut = i;
+        }
+        if (lang == QStringLiteral("fr") || lang == QStringLiteral("en")) {
+            f.engine.setData(f.engine.index(i, AbstractEngine::COL_DOMAIN),
+                             QStringLiteral("example.com"));
+            QDir(f.dir.path()).mkpath(QStringLiteral("deploy/") + lang);
+            QFile marker(QDir(f.dir.path()).filePath(
+                QStringLiteral("deploy/") + lang + QStringLiteral("/content.db")));
+            marker.open(QIODevice::WriteOnly);
+            marker.close();
+        }
+    }
+    if (frIndexOut < 0) {
+        return {};
+    }
+
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, frIndexOut);
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT pv.html_gz FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id"
+        " WHERE p.path = '/maitriser-le-sommeil'"));
+    const QByteArray html = q.next() ? gzipDecompress(q.value(0).toByteArray()) : QByteArray{};
+    f.closeContentDb(conn);
+    return html;
+}
+
+void Test_PageGenerator::test_pagegen_translated_article_still_emits_hreflang_alternates()
+{
+    // Regression: articles were written by passing a record whose permalink had
+    // ALREADY been replaced by the translated slug.  isPageAvailable() and
+    // resolvePermalink() are both keyed by the ENGLISH permalink, so the translated
+    // one matched neither and every hreflang alternate was silently dropped —
+    // translated articles shipped with zero hreflang tags.
+    Fixture f;
+    int frIndex = -1;
+    const QByteArray html = generateTranslatedSlugArticle(f, frIndex);
+
+    QVERIFY2(!html.isEmpty(), "French article not written at the translated slug");
+    QVERIFY2(html.contains("hreflang="),
+             "translated article must still emit hreflang alternates");
+}
+
+void Test_PageGenerator::test_pagegen_translated_slug_emits_redirect_from_english_permalink()
+{
+    // The English permalink stays in Google's index after a slug translation, so a
+    // 301 to the new path must be recorded.  permalink_history only tracks changes
+    // to the English permalink itself and never fires for a per-language slug.
+    Fixture f;
+    int frIndex = -1;
+    const QByteArray html = generateTranslatedSlugArticle(f, frIndex);
+    QVERIFY2(!html.isEmpty(), "French article not written at the translated slug");
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT new_path, status_code FROM redirects WHERE old_path = '/master-sleep'"));
+    QVERIFY2(q.next(), "no redirect recorded for the old English permalink");
+    QCOMPARE(q.value(0).toString(), QStringLiteral("/maitriser-le-sommeil"));
+    QCOMPARE(q.value(1).toInt(), 301);
+    f.closeContentDb(conn);
+}
+
+void Test_PageGenerator::test_pagegen_redirect_target_includes_lang_prefix_on_subpath_deployment()
+{
+    // Production shape: one domain, nginx proxies /fr/ to the French Drogon after
+    // stripping the prefix.  PageController copies new_path straight into the
+    // Location header, so the target MUST keep the /fr prefix — a bare path would
+    // bounce visitors to the English domain root.  old_path stays bare because that
+    // is what Drogon actually receives after nginx strips the prefix.
+    Fixture f;
+
+    const QString enText = QStringLiteral("<h1>Master Sleep</h1><p>English.</p>");
+    const QString frText = QStringLiteral("<h1>Maîtriser le sommeil</h1><p>Français.</p>");
+
+    const int id = f.repo.create(QStringLiteral("article"),
+                                  QStringLiteral("/master-sleep"),
+                                  QStringLiteral("en"));
+    f.repo.saveData(id, {
+        {QStringLiteral("1_text"),                enText},
+        {QStringLiteral("0_categories"),           QString()},
+        {QStringLiteral("1_tr:fr:text"),           frText},
+        {QStringLiteral("1_tr:fr:text:hash"),      Fixture::sha1(enText)},
+        {QStringLiteral("tr:fr:_permalink_slug"),  QStringLiteral("maitriser-le-sommeil")},
+    });
+    f.repo.setLangCodesToTranslate(id, {QStringLiteral("fr")});
+
+    int frIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        if (f.engine.getLangCode(i) == QStringLiteral("fr")) {
+            frIndex = i;
+            break;
+        }
+    }
+    QVERIFY2(frIndex >= 0, "No French engine row found");
+    f.engine.setData(f.engine.index(frIndex, AbstractEngine::COL_DOMAIN),
+                     QStringLiteral("example.com"));
+
+    f.gen.generateAll(QDir(f.dir.path()), QDir(f.dir.path()),
+                      QStringLiteral("example.com"), f.engine, frIndex,
+                      QStringLiteral("https://example.com/fr"));
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT new_path FROM redirects WHERE old_path = '/master-sleep'"));
+    QVERIFY2(q.next(), "no redirect recorded for the old English permalink");
+    QCOMPARE(q.value(0).toString(), QStringLiteral("/fr/maitriser-le-sommeil"));
     f.closeContentDb(conn);
 }
 

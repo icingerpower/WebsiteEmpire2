@@ -1,4 +1,6 @@
 set(TRANSLATION_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/CliErrorPolicy.h
+    ${CMAKE_CURRENT_LIST_DIR}/CliErrorPolicy.cpp
     ${CMAKE_CURRENT_LIST_DIR}/TranslationProtocol.h
     ${CMAKE_CURRENT_LIST_DIR}/TranslationProtocol.cpp
     ${CMAKE_CURRENT_LIST_DIR}/TranslationSettings.h

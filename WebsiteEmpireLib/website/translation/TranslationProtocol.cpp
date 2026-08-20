@@ -165,3 +165,43 @@ QString TranslationProtocol::sanitizeShortName(const QString &raw, const QString
 
     return cleaned;
 }
+
+// =============================================================================
+// normalizeSlug
+// =============================================================================
+
+QString TranslationProtocol::normalizeSlug(const QString &rawSlug, const QString &sourceSlug)
+{
+    static const QRegularExpression reInvalidSlugChars(QStringLiteral("[^a-z0-9-]"));
+    static const QRegularExpression reMultiHyphen(QStringLiteral("-{2,}"));
+    static const QRegularExpression reCombining(QStringLiteral("[\\x{0300}-\\x{036F}]"));
+
+    // Split off a file extension carried by the source ("privacy-policy.html").
+    // '.' is stripped as an invalid slug character, so sanitizing the extension
+    // in place would fuse it onto the slug ("…-confidentialitehtml").
+    QString extension;
+    const qsizetype dotPos = sourceSlug.lastIndexOf(QLatin1Char('.'));
+    if (dotPos > 0) {
+        extension = sourceSlug.mid(dotPos).toLower();
+    }
+    QString body = rawSlug;
+    if (!extension.isEmpty() && body.endsWith(extension, Qt::CaseInsensitive)) {
+        body.chop(extension.size());
+    }
+
+    // NFD decomposition maps accented letters to their ASCII base (é→e, ü→u).
+    // Non-Latin scripts produce no ASCII base and are removed by
+    // reInvalidSlugChars — the empty result keeps the English URL.
+    QString slug = body.toLower().normalized(QString::NormalizationForm_D);
+    slug.remove(reCombining);
+    slug.replace(QLatin1Char(' '), QLatin1Char('-'));
+    slug.replace(reInvalidSlugChars, QString{});
+    slug.replace(reMultiHyphen, QStringLiteral("-"));
+    while (slug.startsWith(QLatin1Char('-'))) { slug.remove(0, 1); }
+    while (slug.endsWith(QLatin1Char('-')))   { slug.chop(1); }
+
+    if (slug.isEmpty()) {
+        return {};
+    }
+    return slug + extension;
+}

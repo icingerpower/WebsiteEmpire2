@@ -13,6 +13,7 @@ private slots:
     void test_scheduler_skips_unassessed_pages();
     void test_scheduler_includes_incomplete_translation();
     void test_scheduler_skips_complete_translation();
+    void test_scheduler_requeues_complete_translation_missing_slug();
     void test_scheduler_queues_all_target_langs_per_page();
     void test_scheduler_limit_caps_result();
     void test_scheduler_limit_zero_means_unlimited();
@@ -64,6 +65,12 @@ void Test_TranslationScheduler::test_scheduler_skips_complete_translation()
     addTranslation(f.repo, f.categoryTable, id,
                    QStringLiteral("fr"), QStringLiteral("de"),
                    QStringLiteral("Quelltexte"));
+    // Content-complete alone isn't enough for a real content page — the
+    // translated permalink slug must also be present (see the requeue test
+    // below). Set it here so this fixture represents true completeness.
+    QHash<QString, QString> data = f.repo.loadData(id);
+    data.insert(QStringLiteral("tr:de:_permalink_slug"), QStringLiteral("a"));
+    f.repo.saveData(id, data);
 
     TranslationSettings settings;
     settings.targetLangs = {QStringLiteral("de")};
@@ -73,6 +80,33 @@ void Test_TranslationScheduler::test_scheduler_skips_complete_translation()
                                                         QStringLiteral("fr"));
     // Translation is complete — no jobs queued
     QVERIFY(jobs.isEmpty());
+}
+
+void Test_TranslationScheduler::test_scheduler_requeues_complete_translation_missing_slug()
+{
+    DbFixture f;
+    const int id = addPageWithText(f.repo, QStringLiteral("article"),
+                                   QStringLiteral("/a.html"), QStringLiteral("fr"));
+    f.repo.setLangCodesToTranslate(id, {QStringLiteral("de")});
+    addTranslation(f.repo, f.categoryTable, id,
+                   QStringLiteral("fr"), QStringLiteral("de"),
+                   QStringLiteral("Quelltexte"));
+    // No tr:de:_permalink_slug set — content is complete but the permalink
+    // would still publish under the source-language (French) URL.
+
+    TranslationSettings settings;
+    settings.targetLangs = {QStringLiteral("de")};
+
+    const auto &jobs = TranslationScheduler::buildJobs(f.repo, f.categoryTable,
+                                                        settings,
+                                                        QStringLiteral("fr"));
+    // Must be re-queued so the missing slug gets translated — this is the
+    // regression this pass exists to catch (English/source-lang permalinks
+    // leaking onto fully-translated pages of every real content type, not
+    // just ones with an endPermalink suffix).
+    QCOMPARE(jobs.size(), 1);
+    QCOMPARE(jobs.at(0).pageId, id);
+    QCOMPARE(jobs.at(0).targetLang, QStringLiteral("de"));
 }
 
 void Test_TranslationScheduler::test_scheduler_queues_all_target_langs_per_page()

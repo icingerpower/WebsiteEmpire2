@@ -58,6 +58,15 @@ PageTranslator::~PageTranslator()
 }
 
 // =============================================================================
+// setErrorCallback
+// =============================================================================
+
+void PageTranslator::setErrorCallback(CliErrorCallback callback)
+{
+    m_errorCallback = std::move(callback);
+}
+
+// =============================================================================
 // start
 // =============================================================================
 
@@ -113,9 +122,10 @@ void PageTranslator::startWithJobs(const QList<TranslationJob> &jobs)
 // startSvgJobs
 // =============================================================================
 
-void PageTranslator::startSvgJobs(const QString &editingLang,
-                                   const QString &languageFilter,
-                                   int            limit)
+void PageTranslator::startSvgJobs(const QString  &editingLang,
+                                   const QString  &languageFilter,
+                                   int             limit,
+                                   AbstractEngine *engine)
 {
     _openLogFile();
 
@@ -127,12 +137,17 @@ void PageTranslator::startSvgJobs(const QString &editingLang,
 
     // Derive the source domain from the engine so SVGs stored under the editing
     // domain (e.g. "biomarky.com") are recognised as source blobs, not translations.
+    // Use the explicitly supplied engine first; fall back to the one stored by
+    // start() (set when text translation preceded SVG translation in the same run).
+    // Without a valid engine the source domain stays empty, which causes SVGs
+    // stored under the editing domain to be misclassified as translated pairs.
+    AbstractEngine *eff = engine ? engine : m_engine;
     m_sourceDomain.clear();
-    if (m_engine) {
-        for (int i = 0; i < m_engine->rowCount(); ++i) {
-            if (m_engine->getLangCode(i) == editingLang) {
-                m_sourceDomain = m_engine->data(
-                    m_engine->index(i, AbstractEngine::COL_DOMAIN)).toString();
+    if (eff) {
+        for (int i = 0; i < eff->rowCount(); ++i) {
+            if (eff->getLangCode(i) == editingLang) {
+                m_sourceDomain = eff->data(
+                    eff->index(i, AbstractEngine::COL_DOMAIN)).toString();
                 // Strip trailing slash for consistent comparison.
                 if (m_sourceDomain.endsWith(QLatin1Char('/'))) {
                     m_sourceDomain.chop(1);
@@ -508,6 +523,7 @@ void PageTranslator::_processNextJob()
             return;
         }
 
+        const QString preparedPrompt = m_cli->preparePrompt(prompt);
         const QString promptPath = m_tempDir->path() + QStringLiteral("/prompt.txt");
         {
             QFile f(promptPath);
@@ -519,7 +535,7 @@ void PageTranslator::_processNextJob()
                 _processNextJob();
                 return;
             }
-            f.write(prompt.toUtf8());
+            f.write(preparedPrompt.toUtf8());
         }
 
         m_processOutput.clear();
@@ -528,7 +544,7 @@ void PageTranslator::_processNextJob()
         m_process->setProgram(m_cli->getExecutable());
         m_process->setWorkingDirectory(m_tempDir->path());
         m_cli->configurePromptProcess(m_process, m_cli->translationPromptArgs(),
-                                      prompt, promptPath);
+                                      preparedPrompt, promptPath);
 
         connect(m_process, &QProcess::readyReadStandardOutput,
                 this, &PageTranslator::_onProcessReadyRead);
@@ -578,7 +594,11 @@ void PageTranslator::_processNextJob()
     const QString trSlugKey = QStringLiteral("tr:")
                               + m_currentJob.targetLang
                               + QStringLiteral(":_permalink_slug");
-    const bool needsSlug = srcRec && !srcRec->endPermalink.isEmpty()
+    // Every real content page gets a translated permalink slug, not just ones
+    // with an endPermalink suffix. Hub/taxonomy types are excluded — they derive
+    // their translated URL from category/symptom name translations instead and
+    // never read this key (see PageGenerator's per-type permalink overrides).
+    const bool needsSlug = srcRec && m_currentPageType->isCountedInTranslationStats()
                            && !m_currentPageData.contains(trSlugKey);
 
     if (m_currentPageType->isTranslationComplete(QStringView{}, m_currentJob.targetLang)) {
@@ -695,8 +715,10 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
 {
     QString translatedJson;
     bool hasError = false;
+    QString errorText; // raw stderr (or a synthetic message), fed to classifyError()/m_errorCallback
 
     if (m_process->error() == QProcess::FailedToStart) {
+        errorText = QStringLiteral("%1 executable not found in PATH").arg(m_cli->getName());
         _log(QStringLiteral("  %1 executable not found in PATH for page %2 → %3")
                  .arg(m_cli->getName()).arg(m_currentJob.pageId).arg(m_currentJob.targetLang), true);
         hasError = true;
@@ -704,10 +726,10 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
         // Drain remaining stdout — CLI may have produced a valid response before the error.
         m_processOutput += m_process->readAllStandardOutput();
 
-        const QString err = QString::fromUtf8(m_process->readAllStandardError()).trimmed();
+        errorText = QString::fromUtf8(m_process->readAllStandardError()).trimmed();
         _log(QStringLiteral("  %1 error for page %2 → %3: %4  (stdout: %5 bytes)")
                  .arg(m_cli->getName()).arg(m_currentJob.pageId).arg(m_currentJob.targetLang,
-                      err.isEmpty() ? QStringLiteral("exit code %1").arg(exitCode) : err)
+                      errorText.isEmpty() ? QStringLiteral("exit code %1").arg(exitCode) : errorText)
                  .arg(m_processOutput.size()), true);
 
         // Save raw stdout so the cause can be diagnosed offline.
@@ -751,6 +773,28 @@ void PageTranslator::_onProcessFinished(int exitCode, QProcess::ExitStatus /*sta
 
     if (hasError) {
         m_processOutput.clear();
+
+        const CliErrorKind kind = m_cli->classifyError(errorText);
+        switch (m_errorCallback(*m_cli, kind, errorText)) {
+        case CliErrorAction::Retry:
+            // Put the job back exactly as it was and re-attempt it — chunk
+            // state (if any) is discarded, so a mid-chunk retry restarts that
+            // field from its first chunk rather than resuming partway.
+            m_chunkState.reset();
+            m_queue.prepend(m_currentJob);
+            _processNextJob();
+            return;
+        case CliErrorAction::Abort:
+            m_chunkState.reset();
+            _log(QStringLiteral("Aborted after CLI error. Translated: %1  Errors: %2")
+                     .arg(m_translated).arg(m_errors + 1));
+            ++m_errors;
+            _emitFinished(m_translated, m_errors);
+            return;
+        case CliErrorAction::Skip:
+            break; // fall through — same as the pre-existing behaviour below.
+        }
+
         m_chunkState.reset();
         ++m_errors;
         _processNextJob();
@@ -1016,8 +1060,9 @@ void PageTranslator::_launchTextTranslation(const QList<TranslatableField> &fiel
 {
     const QString prompt = TranslationProtocol::buildPrompt(
         fields, m_currentJob.sourceLang, m_currentJob.targetLang);
+    const QString preparedPrompt = m_cli->preparePrompt(prompt);
     _log(QStringLiteral("  Sending %1 field(s) to %2, prompt size: %3 chars")
-             .arg(fields.size()).arg(m_cli->getName()).arg(prompt.size()));
+             .arg(fields.size()).arg(m_cli->getName()).arg(preparedPrompt.size()));
 
     m_tempDir = std::make_unique<QTemporaryDir>();
     if (!m_tempDir->isValid()) {
@@ -1042,7 +1087,7 @@ void PageTranslator::_launchTextTranslation(const QList<TranslatableField> &fiel
             _processNextJob();
             return;
         }
-        f.write(prompt.toUtf8());
+        f.write(preparedPrompt.toUtf8());
     }
 
     m_processOutput.clear();
@@ -1051,7 +1096,7 @@ void PageTranslator::_launchTextTranslation(const QList<TranslatableField> &fiel
     m_process->setProgram(m_cli->getExecutable());
     m_process->setWorkingDirectory(m_tempDir->path());
     m_cli->configurePromptProcess(m_process, m_cli->translationPromptArgs(),
-                                  prompt, promptPath);
+                                  preparedPrompt, promptPath);
 
     connect(m_process, &QProcess::readyReadStandardOutput,
             this, &PageTranslator::_onProcessReadyRead);
@@ -1089,8 +1134,9 @@ void PageTranslator::_launchDirectChunkTranslation(const QString &chunkText)
               "Text:\n\n")
         + chunkText;
 
+    const QString preparedPrompt = m_cli->preparePrompt(prompt);
     _log(QStringLiteral("  Sending direct chunk %1/%2 to %3, prompt size: %4 chars")
-             .arg(m_chunkState->chunkIndex).arg(m_chunkState->totalChunks).arg(m_cli->getName()).arg(prompt.size()));
+             .arg(m_chunkState->chunkIndex).arg(m_chunkState->totalChunks).arg(m_cli->getName()).arg(preparedPrompt.size()));
 
     m_tempDir = std::make_unique<QTemporaryDir>();
     if (!m_tempDir->isValid()) {
@@ -1115,7 +1161,7 @@ void PageTranslator::_launchDirectChunkTranslation(const QString &chunkText)
             _processNextJob();
             return;
         }
-        f.write(prompt.toUtf8());
+        f.write(preparedPrompt.toUtf8());
     }
 
     m_processOutput.clear();
@@ -1125,7 +1171,7 @@ void PageTranslator::_launchDirectChunkTranslation(const QString &chunkText)
     m_process->setProgram(m_cli->getExecutable());
     m_process->setWorkingDirectory(m_tempDir->path());
     m_cli->configurePromptProcess(m_process, m_cli->translationPromptArgs(),
-                                  prompt, promptPath);
+                                  preparedPrompt, promptPath);
 
     connect(m_process, &QProcess::readyReadStandardOutput,
             this, &PageTranslator::_onProcessReadyRead);
@@ -1209,13 +1255,13 @@ void PageTranslator::_finalizeTextTranslations(const QHash<QString, QString> &tr
                                              it.value());
     }
 
+    // save() only emits bloc-prefixed keys, and saveData() replaces the whole
+    // page_data set — so every page-level key must be carried over explicitly or
+    // it is destroyed.  This previously copied only "__" keys, which silently
+    // wiped tr:<other-lang>:_permalink_slug on every translation run.
     QHash<QString, QString> finalData;
     m_currentPageType->save(finalData);
-    for (auto it = m_currentPageData.cbegin(); it != m_currentPageData.cend(); ++it) {
-        if (it.key().startsWith(QStringLiteral("__"))) {
-            finalData.insert(it.key(), it.value());
-        }
-    }
+    AbstractPageType::preservePageLevelKeys(m_currentPageData, finalData);
 
     // Normalize and store the translated permalink slug if one was provided.
     if (translations.contains(QStringLiteral("_permalink_slug"))) {
@@ -1238,22 +1284,7 @@ void PageTranslator::_finalizeTextTranslations(const QHash<QString, QString> &tr
                           translations.value(QStringLiteral("_permalink_slug")).left(120)),
                  true);
         } else {
-            static const QRegularExpression reInvalidSlugChars(QStringLiteral("[^a-z0-9-]"));
-            static const QRegularExpression reMultiHyphen(QStringLiteral("-{2,}"));
-            static const QRegularExpression reCombining(QStringLiteral("[\\x{0300}-\\x{036F}]"));
-            // NFD decomposition maps accented letters to ASCII base (é→e, ü→u).
-            // Non-Latin scripts (Japanese kanji, Arabic, etc.) produce no ASCII base
-            // and are removed by reInvalidSlugChars — the empty result keeps the
-            // English URL.
-            QString trSlug = rawSlug
-                                 .toLower()
-                                 .normalized(QString::NormalizationForm_D);
-            trSlug.remove(reCombining);
-            trSlug.replace(QLatin1Char(' '), QLatin1Char('-'));
-            trSlug.replace(reInvalidSlugChars, QString{});
-            trSlug.replace(reMultiHyphen, QStringLiteral("-"));
-            while (trSlug.startsWith(QLatin1Char('-'))) { trSlug.remove(0, 1); }
-            while (trSlug.endsWith(QLatin1Char('-')))   { trSlug.chop(1); }
+            const QString trSlug = TranslationProtocol::normalizeSlug(rawSlug, bareSourceSlug);
             if (!trSlug.isEmpty()) {
                 const QString key = QStringLiteral("tr:")
                                     + m_currentJob.targetLang

@@ -94,10 +94,10 @@ QString PageTypeCategory::autoH1(const QString &langCode) const
 // buildHeadMetaTags
 // =============================================================================
 
-QString PageTypeCategory::buildHeadMetaTags(const QString &baseUrl, const QString &langCode) const
+QString PageTypeCategory::buildHeadMetaTags(const QString &baseUrl, const QString &langCode, const QString &canonicalPath) const
 {
     // Base emits: <title>, <meta name="description">, canonical, og:url.
-    QString result = AbstractPageType::buildHeadMetaTags(baseUrl, langCode);
+    QString result = AbstractPageType::buildHeadMetaTags(baseUrl, langCode, canonicalPath);
 
     result += QStringLiteral("<meta property=\"og:type\" content=\"website\">");
 

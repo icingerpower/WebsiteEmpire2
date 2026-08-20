@@ -50,7 +50,7 @@ public:
      * <title>, <meta name="description">, canonical, and og:url come from the
      * base via autoSeoTitle / autoSeoDescription / autoH1.
      */
-    QString buildHeadMetaTags(const QString &baseUrl, const QString &langCode) const override;
+    QString buildHeadMetaTags(const QString &baseUrl, const QString &langCode, const QString &canonicalPath) const override;
 
     /**
      * Returns the English SEO templates for category hub pages:

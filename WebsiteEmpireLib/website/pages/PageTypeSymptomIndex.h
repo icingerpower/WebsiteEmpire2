@@ -57,7 +57,7 @@ public:
      *   <meta name="description"> — from PageBlocMeta
      *   Canonical, og:url, social, JSON-LD WebPage
      */
-    QString buildHeadMetaTags(const QString &baseUrl, const QString &langCode) const override;
+    QString buildHeadMetaTags(const QString &baseUrl, const QString &langCode, const QString &canonicalPath) const override;
 
     /** Returns the social text bloc for the page generator. */
     const PageBlocSocial &socialTextBloc() const { return m_socialTextBloc; }

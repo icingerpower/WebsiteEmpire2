@@ -259,10 +259,11 @@ QString resolveDateForLang(const QHash<QString, QString> &byLang,
 } // namespace
 
 QString PageTypeArticle::buildHeadMetaTags(const QString &baseUrl,
-                                            const QString &langCode) const
+                                            const QString &langCode,
+                                            const QString &canonicalPath) const
 {
     // Base emits: <title>, <meta name="description">, canonical, og:url.
-    QString result = AbstractPageType::buildHeadMetaTags(baseUrl, langCode);
+    QString result = AbstractPageType::buildHeadMetaTags(baseUrl, langCode, canonicalPath);
 
     result += QStringLiteral("<meta property=\"og:type\" content=\"article\"/>\n");
     if (!langCode.isEmpty()) {
@@ -357,10 +358,10 @@ QString PageTypeArticle::buildHeadMetaTags(const QString &baseUrl,
             result += updated;
             result += QLatin1Char('"');
         }
-        if (!m_permalink.isEmpty() && !baseUrl.isEmpty()) {
+        if (!canonicalPath.isEmpty() && !baseUrl.isEmpty()) {
             result += QStringLiteral(",\"url\":\"");
             result += baseUrl;
-            result += m_permalink;
+            result += canonicalPath;
             result += QLatin1Char('"');
         }
 
@@ -445,7 +446,7 @@ QString PageTypeArticle::buildHeadMetaTags(const QString &baseUrl,
         result += (headline.isEmpty() ? m_permalink : headline).toHtmlEscaped();
         result += QStringLiteral("\",\"item\":\"");
         result += baseUrl;
-        result += m_permalink;
+        result += canonicalPath;
         result += QStringLiteral("\"}");
 
         result += QStringLiteral("]}</script>\n");

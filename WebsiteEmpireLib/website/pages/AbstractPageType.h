@@ -93,8 +93,39 @@ public:
     /**
      * Saves all blocs into a flat key→value map suitable for database storage.
      * Each bloc's keys are prefixed with "<i>_" where i is its position index.
+     *
+     * NOTE: save() only emits bloc-prefixed keys.  Page-level keys are dropped —
+     * see preservePageLevelKeys() before writing the result back to the repository.
      */
     void save(QHash<QString, QString> &values) const;
+
+    /**
+     * Returns true when key belongs to a bloc, i.e. it starts with "<digits>_"
+     * ("0_categories", "1_tr:fr:text", "10_text").  Every other key is
+     * "page-level": owned by no bloc and therefore invisible to load()/save().
+     *
+     * "__legal_def_id"        → false (leading underscore, no digits)
+     * "tr:fr:_permalink_slug" → false (first '_' is not preceded by digits only)
+     */
+    static bool isBlocKey(const QString &key);
+
+    /**
+     * Copies every page-level key (see isBlocKey()) from source into target.
+     *
+     * MUST be called by any caller that rebuilds page data via save() before
+     * handing it to IPageRepository::saveData(), because saveData() REPLACES the
+     * whole page_data row set (DELETE + INSERT).  A page-level key absent from
+     * the saved hash is destroyed, not merely left unchanged.
+     *
+     * Regression this guards (2026-08): PageTranslator rebuilt page data with
+     * save() and carried over only "__"-prefixed keys.  Translating a page into
+     * one language therefore wiped every previously stored
+     * tr:<other-lang>:_permalink_slug, so all translated URLs across the site
+     * silently reverted to the English slug — only the most recently translated
+     * language kept its slugs.
+     */
+    static void preservePageLevelKeys(const QHash<QString, QString> &source,
+                                      QHash<QString, QString>       &target);
 
     /**
      * Accumulates bloc output in temporary buffers then wraps the result in a
@@ -221,9 +252,16 @@ public:
      * Overrides should call AbstractPageType::buildHeadMetaTags() as their first
      * line to get these four tags for free, then append page-type-specific tags
      * (og:type, article dates, JSON-LD, etc.).
+     *
+     * canonicalPath is the language-prefixed path to use for canonical / og:url
+     * (e.g. "/fr/mon-article" for French, "/my-article" for the source language).
+     * It is computed once by addCode() via engine.resolveLinkHref() and forwarded
+     * here so that overrides can use it for JSON-LD url fields without re-deriving
+     * it.  Overrides MUST pass it unchanged to AbstractPageType::buildHeadMetaTags().
      */
     virtual QString buildHeadMetaTags(const QString &baseUrl,
-                                      const QString &langCode) const;
+                                      const QString &langCode,
+                                      const QString &canonicalPath) const;
 
     /**
      * Returns true when the page type requires an SVG image to be generated as

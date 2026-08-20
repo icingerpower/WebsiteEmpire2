@@ -66,6 +66,26 @@ public:
      * an empty string rather than saving a corrupted value.
      */
     static QString sanitizeShortName(const QString &raw, const QString &sourceText);
+
+    /**
+     * Normalizes an already-sanitized translated slug into a safe URL segment.
+     *
+     * - Lowercases, NFD-decomposes and strips combining marks so accented letters
+     *   fold to their ASCII base ("Santé" → "sante").
+     * - Replaces spaces with hyphens, drops every character outside [a-z0-9-],
+     *   collapses hyphen runs and trims leading/trailing hyphens.
+     * - Non-Latin scripts (kanji, Arabic, Devanagari…) leave no ASCII base and so
+     *   normalize to an empty string — callers keep the English slug in that case.
+     *
+     * sourceSlug is the untranslated slug (no leading '/').  Any file extension it
+     * carries is split off before sanitizing and re-appended afterwards: '.' is not
+     * a legal slug character, so "privacy-policy.html" would otherwise normalize to
+     * "politique-de-confidentialitehtml".  The extension comes from the source, so
+     * it is restored even when the AI omits it from its answer.
+     *
+     * Returns an empty string when nothing usable remains.
+     */
+    static QString normalizeSlug(const QString &rawSlug, const QString &sourceSlug);
 };
 
 #endif // TRANSLATIONPROTOCOL_H

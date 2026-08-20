@@ -22,6 +22,10 @@ int main(int argc, char *argv[])
     int port = 8080;
     std::string lang;
     std::string imagesDbPath = ImageDb::FILENAME;
+    // --path-prefix <lang>: strip this prefix from incoming request paths.
+    // For LOCAL browsing only — production leaves it unset because nginx already
+    // strips the prefix before proxying.  See PageController::setPathPrefix.
+    std::string pathPrefix;
     for (int i = 1; i < argc - 1; ++i) {
         if (std::string_view(argv[i]) == "--port") {
             port = std::atoi(argv[i + 1]);
@@ -29,6 +33,8 @@ int main(int argc, char *argv[])
             lang = argv[i + 1];
         } else if (std::string_view(argv[i]) == "--images-db") {
             imagesDbPath = argv[i + 1];
+        } else if (std::string_view(argv[i]) == "--path-prefix") {
+            pathPrefix = argv[i + 1];
         }
     }
 
@@ -47,6 +53,7 @@ int main(int argc, char *argv[])
     PageController::setMenuRepository(&menuRepo);
     PageController::setRedirectRepository(&redirectRepo);
     PageController::loadMenuCache(&menuRepo);  // populate in-memory menu cache
+    PageController::setPathPrefix(pathPrefix);  // empty = production behaviour
 
     // If --lang wasn't passed, derive from the working directory name.
     // The publish step starts each server inside deploy/<lang>/, so the

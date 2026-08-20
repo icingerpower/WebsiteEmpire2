@@ -74,7 +74,7 @@ public:
      * and a WebPage JSON-LD snippet.
      * Falls back to a computed title when PageBlocMeta has no stored value.
      */
-    QString buildHeadMetaTags(const QString &baseUrl, const QString &langCode) const override;
+    QString buildHeadMetaTags(const QString &baseUrl, const QString &langCode, const QString &canonicalPath) const override;
 
 protected:
     /**

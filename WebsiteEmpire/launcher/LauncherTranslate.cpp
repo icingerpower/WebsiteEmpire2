@@ -15,7 +15,9 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QSet>
 #include <QSettings>
+#include <QSqlQuery>
 #include <QStringList>
 
 #include <algorithm>
@@ -89,11 +91,13 @@ void LauncherTranslate::run(const QString & /*value*/)
     // Parse optional sub-options from raw args.
     const QStringList args = QCoreApplication::arguments();
 
-    // --language <code>: restrict to a single target language.
+    // --language <code|existing>: restrict to one target language, or "existing"
+    // to auto-detect every language that already has at least one translated page.
     const int langIdx = args.indexOf(QStringLiteral("--") + OPTION_LANGUAGE);
     const QString languageFilter = (langIdx >= 0 && langIdx + 1 < args.size())
                                    ? args.at(langIdx + 1)
                                    : QString();
+    const bool existingMode = (languageFilter == QLatin1String("existing"));
 
     // --limit <n>: cap the number of translation jobs for this run.
     int limitOverride = -1;
@@ -215,6 +219,44 @@ void LauncherTranslate::run(const QString & /*value*/)
     }
 
     // -------------------------------------------------------------------------
+    // Resolve --language existing to the set of languages already in the repo.
+    // langFilterSet: empty = no filter (all langs); non-empty = restrict to these.
+    // svgLangFilter: single-lang string forwarded to startSvgJobs (empty = all).
+    // -------------------------------------------------------------------------
+    QSet<QString> langFilterSet;
+    QString svgLangFilter = existingMode ? QString{} : languageFilter;
+
+    if (existingMode) {
+        // Translation data lives in page_data keys like "1_tr:fr:text".
+        // Extract the lang code between "_tr:" and the next ":" with a single query.
+        QSqlQuery q(pageDb->database());
+        q.exec(QStringLiteral("SELECT DISTINCT key FROM page_data WHERE key GLOB '*_tr:*:*'"));
+        while (q.next()) {
+            const QString key = q.value(0).toString();
+            const int trPos = key.indexOf(QLatin1String("_tr:"));
+            if (trPos < 0) {
+                continue;
+            }
+            const QString afterTr = key.mid(trPos + 4);
+            const int colonPos = afterTr.indexOf(QLatin1Char(':'));
+            if (colonPos > 0) {
+                langFilterSet.insert(afterTr.left(colonPos));
+            }
+        }
+        if (langFilterSet.isEmpty()) {
+            qDebug() << "[Translate] --language existing: no translated languages found — nothing to do.";
+            delete pageRepo;
+            delete pageDb;
+            holder->deleteLater();
+            QCoreApplication::quit();
+            return;
+        }
+        qDebug() << "[Translate] --language existing →" << QStringList(langFilterSet.values()).join(QStringLiteral(", "));
+    } else if (!languageFilter.isEmpty()) {
+        langFilterSet.insert(languageFilter);
+    }
+
+    // -------------------------------------------------------------------------
     // Build effective settings for the scheduler (may be synthetic when no file)
     // -------------------------------------------------------------------------
     TranslationSettings effectiveSettings;
@@ -223,20 +265,23 @@ void LauncherTranslate::run(const QString & /*value*/)
     effectiveSettings.priorityPageTypes = translationSettings.priorityPageTypes;
 
     auto *translator = new PageTranslator(*pageRepo, *categoryTable, workingDir, cli, holder);
+    // This launcher runs unattended from a terminal — pause on quota/auth
+    // errors instead of silently losing the job (see CliErrorPolicy.h).
+    translator->setErrorCallback(interactivePauseCliErrorCallback);
 
     QObject::connect(translator, &PageTranslator::logMessage, holder, [](const QString &msg) {
         qDebug() << "[Translate]" << qPrintable(msg);
     });
 
     QObject::connect(translator, &PageTranslator::finished, holder,
-        [holder, pageRepo, pageDb, translator, editingLang, languageFilter, limitOverride, runBoth]
+        [holder, pageRepo, pageDb, translator, editingLang, svgLangFilter, limitOverride, runBoth]
         (int translated, int errors) mutable {
             qDebug() << "[Translate] Done. Translated:" << translated
                      << " Errors:" << errors;
             if (runBoth) {
                 runBoth = false;
                 qDebug() << "[Translate] Starting SVG back-fill phase…";
-                translator->startSvgJobs(editingLang, languageFilter, limitOverride);
+                translator->startSvgJobs(editingLang, svgLangFilter, limitOverride);
                 return;
             }
             delete pageRepo;
@@ -247,19 +292,19 @@ void LauncherTranslate::run(const QString & /*value*/)
 
     if (svgOnly) {
         qDebug() << "[Translate] SVG-only mode — back-filling untranslated SVG images.";
-        translator->startSvgJobs(editingLang, languageFilter, limitOverride);
+        translator->startSvgJobs(editingLang, svgLangFilter, limitOverride, engine);
     } else {
         QList<PageTranslator::TranslationJob> jobs =
             TranslationScheduler::buildJobs(*pageRepo, *categoryTable,
                                             effectiveSettings, editingLang);
 
-        if (!languageFilter.isEmpty()) {
+        if (!langFilterSet.isEmpty()) {
             jobs.erase(std::remove_if(jobs.begin(), jobs.end(),
-                           [&languageFilter](const PageTranslator::TranslationJob &j) {
-                               return j.targetLang != languageFilter;
+                           [&langFilterSet](const PageTranslator::TranslationJob &j) {
+                               return !langFilterSet.contains(j.targetLang);
                            }),
                        jobs.end());
-            qDebug() << "[Translate] Language filter:" << languageFilter
+            qDebug() << "[Translate] Language filter:" << QStringList(langFilterSet.values()).join(QStringLiteral(", "))
                      << "→" << jobs.size() << "job(s).";
         }
 

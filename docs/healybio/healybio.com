@@ -1,10 +1,8 @@
 # nginx site config for healybio.com — separate from biomarky.com.
-# HTTP-only version (pre-certbot). After `certbot --nginx -d healybio.com -d www.healybio.com`
-# certbot will inject the SSL lines and the HTTP->HTTPS redirect automatically.
 #
 # Canonical domain: https://healybio.com/ (non-www). www redirects to non-www.
 #
-# Local port map (must match the systemd units) — 8 qualifying languages:
+# Local port map (must match the systemd units) — 12 qualifying languages:
 #   en = 8090 (default / catch-all)
 #   it = 8091
 #   ko = 8092
@@ -13,12 +11,15 @@
 #   ja = 8095
 #   de = 8096
 #   fr = 8097
+#   hi = 8098
+#   pl = 8099
+#   tr = 8100
+#   ar = 8101
 # Add a `location /<lang>/` block above `location /` for each new language that
 # later qualifies, pointing at its assigned port.
 
 server {
     server_name healybio.com www.healybio.com;
-    listen 80;
 
     location = / {
         if ($http_accept_language ~* "^it") {
@@ -41,6 +42,18 @@ server {
         }
         if ($http_accept_language ~* "^fr") {
             return 302 /fr/index.html;
+        }
+        if ($http_accept_language ~* "^hi") {
+            return 302 /hi/index.html;
+        }
+        if ($http_accept_language ~* "^pl") {
+            return 302 /pl/index.html;
+        }
+        if ($http_accept_language ~* "^tr") {
+            return 302 /tr/index.html;
+        }
+        if ($http_accept_language ~* "^ar") {
+            return 302 /ar/index.html;
         }
         return 302 /index.html;
     }
@@ -80,8 +93,57 @@ server {
         proxy_set_header Host $host;
     }
 
+    location /hi/ {
+        proxy_pass http://127.0.0.1:8098/;
+        proxy_set_header Host $host;
+    }
+
+    location /pl/ {
+        proxy_pass http://127.0.0.1:8099/;
+        proxy_set_header Host $host;
+    }
+
+    location /tr/ {
+        proxy_pass http://127.0.0.1:8100/;
+        proxy_set_header Host $host;
+    }
+
+    location /ar/ {
+        proxy_pass http://127.0.0.1:8101/;
+        proxy_set_header Host $host;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:8090;
         proxy_set_header Host $host;
     }
+
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/healybio.com/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/healybio.com/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+
+}
+
+
+server {
+    if ($host = www.healybio.com) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    if ($host = healybio.com) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    server_name healybio.com www.healybio.com;
+    listen 80;
+    return 404; # managed by Certbot
+
+
+
+
 }

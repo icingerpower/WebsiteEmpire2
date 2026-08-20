@@ -219,6 +219,31 @@ bool PageGenerator::_writePage(AbstractPageType &type,
     upsertVariant.bindValue(QStringLiteral(":etag"),    etag);
     upsertVariant.exec();
 
+    // The page moved to a language-specific path (translated slug, translated hub
+    // name).  The old URL — the English permalink under this language's prefix —
+    // stays in Google's index and would otherwise 404, so emit a 301 to the new
+    // location.  permalink_history only covers changes to the English permalink
+    // itself, so it never fires for a per-language slug change.
+    if (outPath != record.permalink) {
+        // old_path is stored WITHOUT the language prefix because nginx strips it
+        // before proxying — PageController looks the request up by the same bare
+        // path it stores in pages.path.
+        //
+        // new_path is the opposite: PageController copies it verbatim into the
+        // Location header, so it must be the URL the BROWSER should request and
+        // therefore has to carry the /<lang> prefix.  Emitting the bare path here
+        // would bounce every visitor to the English domain root.
+        const QString redirectTarget = engine.resolveLinkHref(outPath, websiteIndex);
+
+        QSqlQuery slugRedirect(db);
+        slugRedirect.prepare(QStringLiteral(
+            "INSERT OR REPLACE INTO redirects (old_path, new_path, status_code)"
+            " VALUES (:old_path, :new_path, 301)"));
+        slugRedirect.bindValue(QStringLiteral(":old_path"), record.permalink);
+        slugRedirect.bindValue(QStringLiteral(":new_path"), redirectTarget);
+        slugRedirect.exec();
+    }
+
     const QList<PermalinkHistoryEntry> &history = m_pageRepo.permalinkHistory(record.id);
     for (const PermalinkHistoryEntry &entry : std::as_const(history)) {
         if (entry.redirectType == QStringLiteral("none")) {
@@ -543,7 +568,19 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                 }
             }
 
-            if (!r.endPermalink.isEmpty() && !r.langCodesToTranslate.isEmpty()) {
+            // Build translated permalink map for all non-hub content pages, not just
+            // strategy-suffix pages (endPermalink).  The translator stores
+            // tr:<lang>:_permalink_slug for every content page; without this mapping
+            // resolveLinkHref() returns the English slug even when a translated slug
+            // exists, causing internal links and hreflang alternates to point to the
+            // wrong (English) path.  Hub/index types are excluded because they derive
+            // their translated URL from category/symptom name translations above.
+            const bool isHubOrIndex =
+                r.typeId == QStringLiteral("category_hub")
+                || r.typeId == QStringLiteral("symptom_hub")
+                || r.typeId == QStringLiteral("taxonomy_index")
+                || r.typeId == QStringLiteral("symptom_index");
+            if (!isHubOrIndex && !r.langCodesToTranslate.isEmpty()) {
                 const QHash<QString, QString> &data = m_pageRepo.loadData(r.id);
                 for (const QString &lang : std::as_const(r.langCodesToTranslate)) {
                     const QString trSlugKey = QStringLiteral("tr:") + lang
@@ -603,17 +640,27 @@ int PageGenerator::generateAll(const QDir     &workingDir,
             continue;
         }
 
-        // For translated pages of strategies that carry an endPermalink suffix,
-        // use the AI-translated slug stored in page data as the output path.
-        // Falls back to the source permalink when not set.
-        PageRecord effectiveRecord = record;
-        if (isTargetLang && !record.endPermalink.isEmpty()) {
+        // A page may be written at a language-specific path while the record KEEPS
+        // its English permalink.  Never mutate record.permalink to do this:
+        // _writePage uses record.permalink for hreflang alternates and for the
+        // redirect from the old URL, and BOTH the availability map and the
+        // translated-permalink map are keyed by the English permalink.  A record
+        // carrying an already-translated permalink matches neither, so every
+        // hreflang alternate is silently dropped and no redirect can be emitted
+        // (regression: translated articles shipped with zero hreflang tags).
+        // outputPath therefore carries the translated location, record stays English.
+        QString outPathOverride;
+
+        // Translated real-content pages: use the AI-translated slug from page data.
+        // Hub/taxonomy types are excluded — they derive their translated URL from
+        // category/symptom name translations below instead.
+        if (isTargetLang && type->isCountedInTranslationStats()) {
             const QString trSlugKey = QStringLiteral("tr:")
                                       + currentLang
                                       + QStringLiteral(":_permalink_slug");
             const QString &trSlug = data.value(trSlugKey);
             if (!trSlug.isEmpty()) {
-                effectiveRecord.permalink = QLatin1Char('/') + trSlug;
+                outPathOverride = QLatin1Char('/') + trSlug;
             }
         }
         // Hub pages: generate at translated URL when the category has a
@@ -630,30 +677,23 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                 if (translatedName != catRow->name) {
                     const QString trPermalink = categoryHubSlug(translatedName);
                     if (!trPermalink.isEmpty()) {
-                        effectiveRecord.permalink = trPermalink;
+                        outPathOverride = trPermalink;
                     }
                 }
                 break;
             }
         }
-        // Symptom hub pages: write at the translated URL but pass the original
-        // English record to setGenerationContext so slug-based lookups
-        // (PageBlocConditionList) keep working with English aspire DB slugs.
+        // Symptom hub pages: write at the translated URL.  The English record is
+        // kept (like every other type above) so slug-based lookups inside
+        // PageBlocConditionList keep working against English aspire DB slugs.
         if (record.typeId == QStringLiteral("symptom_hub")) {
             const QString resolved = engine.resolvePermalink(record.permalink, websiteIndex);
             if (!resolved.isEmpty() && resolved != record.permalink) {
-                if (_writePage(*type, record, connName, domain, engine, websiteIndex, resolved)) {
-                    ++count;
-                    if (record.id > 0 && record.sourcePageId == 0) {
-                        m_pageRepo.setGeneratedAt(record.id,
-                            QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
-                    }
-                }
-                continue;
+                outPathOverride = resolved;
             }
         }
 
-        if (_writePage(*type, effectiveRecord, connName, domain, engine, websiteIndex)) {
+        if (_writePage(*type, record, connName, domain, engine, websiteIndex, outPathOverride)) {
             ++count;
             // Stamp generated_at so findGeneratedByTypeId() can see this page
             // as "content-filled" (used by category/symptom index blocs).
@@ -743,7 +783,7 @@ int PageGenerator::generateSubset(const QList<int> &pageIds,
         }
 
         PageRecord effectiveRecord = record;
-        if (isTargetLang && !record.endPermalink.isEmpty()) {
+        if (isTargetLang && type->isCountedInTranslationStats()) {
             const QString trSlugKey = QStringLiteral("tr:")
                                       + currentLang
                                       + QStringLiteral(":_permalink_slug");

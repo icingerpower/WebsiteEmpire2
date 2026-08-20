@@ -249,15 +249,11 @@ void PageEditorDialog::_onAccepted()
         m_repo.saveData(newId, data);
     } else {
         m_repo.updatePermalink(m_pageId, permalink);
-        // Preserve internal system keys (__ prefix) that blocs do not manage
-        // (e.g. __legal_def_id).  saveData() replaces the entire page_data set,
-        // so we must merge them back in or they would be silently lost.
+        // Preserve page-level keys that blocs do not manage (e.g. __legal_def_id,
+        // tr:<lang>:_permalink_slug).  saveData() replaces the entire page_data
+        // set, so we must merge them back in or they would be silently lost.
         const QHash<QString, QString> &existing = m_repo.loadData(m_pageId);
-        for (auto it = existing.cbegin(); it != existing.cend(); ++it) {
-            if (it.key().startsWith(QStringLiteral("__"))) {
-                data.insert(it.key(), it.value());
-            }
-        }
+        AbstractPageType::preservePageLevelKeys(existing, data);
         m_repo.saveData(m_pageId, data);
     }
 

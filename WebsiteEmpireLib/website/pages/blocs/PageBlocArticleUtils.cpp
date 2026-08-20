@@ -50,6 +50,24 @@ QString extractH1Title(const QString &text)
 // extractExcerpt
 // =============================================================================
 
+// Truncates text to at most limit characters, cutting on a word boundary when a
+// usable one exists, and marks the cut with an ellipsis.  Shared by the trailing
+// fragment and the final hard cap so neither can slice a word in half
+// ("...adrenal" becoming "...adre" on a card).  The limit/2 guard keeps a single
+// enormous word from collapsing the excerpt to almost nothing.
+static QString truncateOnWordBoundary(const QString &text, qsizetype limit)
+{
+    if (limit <= 0 || text.size() <= limit) {
+        return text;
+    }
+    QString cut = text.left(limit);
+    const qsizetype lastSpace = cut.lastIndexOf(QLatin1Char(' '));
+    if (lastSpace > limit / 2) {
+        cut.truncate(lastSpace);
+    }
+    return cut.trimmed() + QStringLiteral("…");
+}
+
 QString extractExcerpt(const QString &rawText,
                         qsizetype      maxSentences,
                         qsizetype      targetChars)
@@ -96,8 +114,18 @@ QString extractExcerpt(const QString &rawText,
     for (qsizetype i = 0; i < len; ++i) {
         const QChar c = plain.at(i);
         const bool isAscii = c == QLatin1Char('.') || c == QLatin1Char('!') || c == QLatin1Char('?');
-        const bool isCjk   = c == QChar(0x3002) || c == QChar(0xFF01) || c == QChar(0xFF1F);
-        if (!isAscii && !isCjk) {
+        // Scripts whose sentence terminator is not ASCII.  A missing terminator here
+        // is not cosmetic: the splitter then finds no boundary at all and the excerpt
+        // swallows the entire article body (Hindi regression — 225 dandas per article
+        // and zero ". " sequences, so every hub card rendered the whole page).
+        const bool isCjk    = c == QChar(0x3002)    // 。 ideographic full stop
+                           || c == QChar(0xFF01)    // ！ fullwidth exclamation mark
+                           || c == QChar(0xFF1F);   // ？ fullwidth question mark
+        const bool isIndic  = c == QChar(0x0964)    // । danda (Hindi, Marathi, Nepali)
+                           || c == QChar(0x0965);   // ॥ double danda
+        const bool isArabic = c == QChar(0x061F)    // ؟ Arabic question mark
+                           || c == QChar(0x06D4);   // ۔ Urdu full stop
+        if (!isAscii && !isCjk && !isIndic && !isArabic) {
             continue;
         }
         if (isAscii && i + 1 < len && plain.at(i + 1) != QLatin1Char(' ')) {
@@ -117,13 +145,23 @@ QString extractExcerpt(const QString &rawText,
         QString tail = plain.mid(start).trimmed();
         if (!tail.isEmpty()) {
             if (targetChars > 0 && totalChars + tail.size() > targetChars * 2) {
-                tail = tail.left(targetChars - totalChars).trimmed()
-                       + QStringLiteral("…");
+                tail = truncateOnWordBoundary(tail, targetChars - totalChars);
             }
             sentences.append(tail);
         }
     }
-    return sentences.join(QStringLiteral(" "));
+    QString result = sentences.join(QStringLiteral(" "));
+
+    // Hard cap, independent of sentence structure.  The loop above stops *after*
+    // appending a sentence that crosses targetChars, so one long sentence can carry
+    // the excerpt far past the limit — and if no terminator is recognised at all the
+    // whole body arrives here as a single "sentence".  Only the tail branch was
+    // capped before, which left that path unbounded.  Cutting on a space keeps words
+    // intact; targetChars * 2 matches the threshold the tail branch already used.
+    if (targetChars > 0 && result.size() > targetChars * 2) {
+        result = truncateOnWordBoundary(result, targetChars * 2);
+    }
+    return result;
 }
 
 // =============================================================================

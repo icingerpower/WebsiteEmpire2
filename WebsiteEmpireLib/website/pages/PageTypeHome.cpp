@@ -22,7 +22,8 @@ const QList<const AbstractPageBloc *> &PageTypeHome::getPageBlocs() const
 }
 
 QString PageTypeHome::buildHeadMetaTags(const QString &baseUrl,
-                                         const QString &/*langCode*/) const
+                                         const QString &/*langCode*/,
+                                         const QString &/*canonicalPath*/) const
 {
     if (m_websiteName.isEmpty() || baseUrl.isEmpty()) {
         return {};

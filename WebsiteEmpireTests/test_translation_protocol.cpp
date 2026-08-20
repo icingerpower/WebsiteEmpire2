@@ -7,6 +7,18 @@ class Test_TranslationProtocol : public QObject
     Q_OBJECT
 
 private slots:
+    // normalizeSlug -------------------------------------------------------
+
+    void test_protocol_slug_lowercases_and_hyphenates();
+    void test_protocol_slug_folds_accents_to_ascii();
+    void test_protocol_slug_strips_invalid_characters();
+    void test_protocol_slug_collapses_and_trims_hyphens();
+    void test_protocol_slug_non_latin_script_returns_empty();
+    void test_protocol_slug_preserves_html_extension_from_source();
+    void test_protocol_slug_restores_extension_when_ai_omits_it();
+    void test_protocol_slug_no_extension_when_source_has_none();
+    void test_protocol_slug_dotted_source_does_not_fuse_extension();
+
     // parseResponse -------------------------------------------------------
 
     void test_protocol_parse_single_field();
@@ -406,6 +418,86 @@ void Test_TranslationProtocol::test_protocol_sanitize_verbose_translation_within
     const QString verboseButPlausible = QStringLiteral("goutte-articulaire-chronique");
     const QString result = TranslationProtocol::sanitizeShortName(verboseButPlausible, source);
     QCOMPARE(result, verboseButPlausible);
+}
+
+// ---------------------------------------------------------------------------
+// normalizeSlug
+// ---------------------------------------------------------------------------
+
+void Test_TranslationProtocol::test_protocol_slug_lowercases_and_hyphenates()
+{
+    QCOMPARE(TranslationProtocol::normalizeSlug(QStringLiteral("Maitriser Le Sommeil"),
+                                                 QStringLiteral("master-sleep")),
+             QStringLiteral("maitriser-le-sommeil"));
+}
+
+void Test_TranslationProtocol::test_protocol_slug_folds_accents_to_ascii()
+{
+    QCOMPARE(TranslationProtocol::normalizeSlug(QStringLiteral("Santé mentale"),
+                                                 QStringLiteral("mental-health")),
+             QStringLiteral("sante-mentale"));
+}
+
+void Test_TranslationProtocol::test_protocol_slug_strips_invalid_characters()
+{
+    QCOMPARE(TranslationProtocol::normalizeSlug(QStringLiteral("qu'est-ce que c'est ?"),
+                                                 QStringLiteral("what-is-it")),
+             QStringLiteral("quest-ce-que-cest"));
+}
+
+void Test_TranslationProtocol::test_protocol_slug_collapses_and_trims_hyphens()
+{
+    QCOMPARE(TranslationProtocol::normalizeSlug(QStringLiteral("--a---b--"),
+                                                 QStringLiteral("a-b")),
+             QStringLiteral("a-b"));
+}
+
+void Test_TranslationProtocol::test_protocol_slug_non_latin_script_returns_empty()
+{
+    // No ASCII base survives, so the caller keeps the English slug.
+    QVERIFY(TranslationProtocol::normalizeSlug(QStringLiteral("マスタースリープ"),
+                                                QStringLiteral("master-sleep")).isEmpty());
+}
+
+void Test_TranslationProtocol::test_protocol_slug_preserves_html_extension_from_source()
+{
+    // Regression: '.' is not a legal slug character, so sanitizing in place fused
+    // the extension onto the slug and shipped
+    // /fr/politique-de-confidentialitehtml for every legal page in every language.
+    QCOMPARE(TranslationProtocol::normalizeSlug(
+                 QStringLiteral("politique-de-confidentialite.html"),
+                 QStringLiteral("privacy-policy.html")),
+             QStringLiteral("politique-de-confidentialite.html"));
+}
+
+void Test_TranslationProtocol::test_protocol_slug_restores_extension_when_ai_omits_it()
+{
+    // The extension comes from the source, so it is restored even if the AI
+    // answers without one.
+    QCOMPARE(TranslationProtocol::normalizeSlug(
+                 QStringLiteral("conditions-d-utilisation"),
+                 QStringLiteral("terms-of-service.html")),
+             QStringLiteral("conditions-d-utilisation.html"));
+}
+
+void Test_TranslationProtocol::test_protocol_slug_no_extension_when_source_has_none()
+{
+    // Ordinary articles must not gain an extension.
+    const QString out = TranslationProtocol::normalizeSlug(
+        QStringLiteral("polyarthrite-rhumatoide"), QStringLiteral("rheumatoid-arthritis"));
+    QCOMPARE(out, QStringLiteral("polyarthrite-rhumatoide"));
+    QVERIFY(!out.contains(QLatin1Char('.')));
+}
+
+void Test_TranslationProtocol::test_protocol_slug_dotted_source_does_not_fuse_extension()
+{
+    // The exact production failure: the fused form must never come back.
+    const QString out = TranslationProtocol::normalizeSlug(
+        QStringLiteral("politique de confidentialité.html"),
+        QStringLiteral("privacy-policy.html"));
+    QVERIFY2(!out.endsWith(QStringLiteral("html")) || out.endsWith(QStringLiteral(".html")),
+             "extension must stay separated by a dot");
+    QCOMPARE(out, QStringLiteral("politique-de-confidentialite.html"));
 }
 
 QTEST_MAIN(Test_TranslationProtocol)

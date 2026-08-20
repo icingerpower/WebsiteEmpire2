@@ -10,6 +10,8 @@ IRedirectRepository *PageController::s_redirectRepo = nullptr;
 
 std::map<std::string, std::vector<uint8_t>> PageController::s_menuCache;
 
+std::string PageController::s_pathPrefix;
+
 void PageController::setPageRepository(IPageRepository *repo)
 {
     s_pageRepo = repo;
@@ -23,6 +25,38 @@ void PageController::setMenuRepository(IMenuRepository *repo)
 void PageController::setRedirectRepository(IRedirectRepository *repo)
 {
     s_redirectRepo = repo;
+}
+
+void PageController::setPathPrefix(const std::string &prefix)
+{
+    s_pathPrefix.clear();
+    // Accept "fr", "/fr" and "/fr/" — store the normalised "/fr".
+    std::string p = prefix;
+    while (!p.empty() && p.back() == '/') {
+        p.pop_back();
+    }
+    if (p.empty()) {
+        return;
+    }
+    s_pathPrefix = (p.front() == '/') ? p : ("/" + p);
+}
+
+std::string PageController::_stripPathPrefix(const std::string &path)
+{
+    if (s_pathPrefix.empty() || path.size() < s_pathPrefix.size()) {
+        return path;
+    }
+    if (path.compare(0, s_pathPrefix.size(), s_pathPrefix) != 0) {
+        return path;
+    }
+    // Require a boundary so "/fr" and "/fr/x" match while "/france" does not.
+    if (path.size() == s_pathPrefix.size()) {
+        return "/";
+    }
+    if (path[s_pathPrefix.size()] != '/') {
+        return path;
+    }
+    return path.substr(s_pathPrefix.size());
 }
 
 void PageController::loadMenuCache(IMenuRepository *repo)
@@ -94,7 +128,9 @@ void PageController::servePage(const drogon::HttpRequestPtr                     
                                 std::function<void(const drogon::HttpResponsePtr &)> &&callback,
                                 const std::string                                     &path)
 {
-    const std::string fullPath = "/" + path;
+    // Strip the language prefix when configured (local browsing without nginx —
+    // see setPathPrefix).  No-op in production, where nginx has already removed it.
+    const std::string fullPath = _stripPathPrefix("/" + path);
 
     // 1. Look up page metadata.
     const auto pageOpt = s_pageRepo->findByPath(fullPath);

@@ -51,6 +51,23 @@ public:
      */
     static void loadMenuCache(IMenuRepository *repo);
 
+    /**
+     * Sets a URL path prefix to strip from every incoming request, e.g. "fr"
+     * (leading/trailing slashes optional — stored normalised as "/fr").
+     *
+     * Generated pages link to "/fr/some-page" because production serves all
+     * languages from one domain and nginx strips the "/fr" before proxying to
+     * this language's instance — content.db therefore stores paths bare
+     * ("/some-page").  Hitting this server directly there is no nginx, so every
+     * prefixed link 404s and the site cannot be clicked through locally.
+     *
+     * Setting the prefix makes this server strip it itself, so local browsing
+     * behaves exactly like production.  Leave it UNSET in production: nginx has
+     * already removed the prefix by the time the request arrives, and stripping
+     * twice would break a page whose own slug starts with the language code.
+     */
+    static void setPathPrefix(const std::string &prefix);
+
     METHOD_LIST_BEGIN
     ADD_METHOD_VIA_REGEX(PageController::serveFile, "^/(robots\\.txt|sitemap[\\w-]*\\.xml)$", drogon::Get);
     ADD_METHOD_VIA_REGEX(PageController::servePage, "^/(.+\\.html|[^.]+)$", drogon::Get);
@@ -68,6 +85,16 @@ private:
     static IPageRepository    *s_pageRepo;
     static IMenuRepository    *s_menuRepo;
     static IRedirectRepository *s_redirectRepo;
+
+    /** Normalised as "/fr"; empty = strip nothing (production default). */
+    static std::string s_pathPrefix;
+
+    /**
+     * Removes s_pathPrefix from path when present.  Only strips when the prefix
+     * is followed by "/" or ends the path, so "/fr" and "/fr/x" match but
+     * "/france" does not.  Returns path unchanged when no prefix is configured.
+     */
+    static std::string _stripPathPrefix(const std::string &path);
 
     /** key: "domain:lang" → gzip menu bytes */
     static std::map<std::string, std::vector<uint8_t>> s_menuCache;

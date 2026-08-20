@@ -2,6 +2,7 @@
 #define PAGETRANSLATOR_H
 
 #include "website/WebCodeAdder.h"
+#include "website/translation/CliErrorPolicy.h"
 
 #include <QDir>
 #include <QHash>
@@ -119,10 +120,16 @@ public:
     /**
      * languageFilter  when non-empty, only jobs for that target lang are queued.
      * limit           when >= 1, at most that many jobs are processed.
+     * engine          when non-null, used to resolve the source domain; falls
+     *                 back to the engine stored by start() — MUST be supplied
+     *                 when startSvgJobs() is called without a prior start() call
+     *                 (i.e. SVG-only mode), otherwise source SVGs stored under
+     *                 the editing domain are misclassified as translated pairs.
      */
-    void startSvgJobs(const QString &editingLang,
-                      const QString &languageFilter = {},
-                      int            limit          = -1);
+    void startSvgJobs(const QString  &editingLang,
+                      const QString  &languageFilter = {},
+                      int             limit          = -1,
+                      AbstractEngine *engine         = nullptr);
 
     /**
      * Returns all pending translation jobs as a human-readable string of
@@ -130,6 +137,15 @@ public:
      * Does not launch any process.
      */
     QString buildPrompts(AbstractEngine *engine, const QString &editingLang);
+
+    /**
+     * Overrides how a failed CLI invocation is handled (default: log it,
+     * skip the job, move on — unchanged from before this hook existed).
+     * Callers running unattended in a terminal (see LauncherTranslate) can
+     * pass interactivePauseCliErrorCallback to pause on quota/auth errors
+     * instead of losing the job.
+     */
+    void setErrorCallback(CliErrorCallback callback);
 
 signals:
     void logMessage(const QString &msg);              ///< progress / info
@@ -184,6 +200,7 @@ private:
     AbstractEngine  *m_engine          = nullptr; ///< stored from start(); used for render validation
     QString          m_sourceDomain;              ///< editing-lang domain (e.g. "biomarky.com"); SVGs stored under this domain are treated as source
     QString          m_currentPermalink;           ///< permalink of the page currently being translated
+    CliErrorCallback m_errorCallback = defaultCliErrorCallback; ///< see setErrorCallback()
 
     QProcess                  *m_process   = nullptr;
     QByteArray                 m_processOutput; // accumulated stdout from running process

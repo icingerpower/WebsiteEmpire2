@@ -40,12 +40,15 @@ TranslationScheduler::buildJobs(IPageRepository           &repo,
             type->setAuthorLang(editingLang);
 
             if (type->isTranslationComplete(QStringView{}, targetLang)) {
-                // Content is complete, but also verify the permalink slug is set
-                // when the page type uses per-language URL slugs (endPermalink != "").
-                // The slug is injected dynamically by PageTranslator and is invisible
-                // to isTranslationComplete(), so we must check it explicitly here.
-                if (page.endPermalink.isEmpty()) {
-                    continue; // fully done — no slug needed
+                // Content is complete, but also verify the permalink slug is set —
+                // every real content page gets a per-language URL slug, not just
+                // ones with an endPermalink suffix. Hub/taxonomy types are excluded:
+                // they compute their translated URL from category/symptom names via
+                // a separate mechanism and never read this slug. The slug is injected
+                // dynamically by PageTranslator and is invisible to
+                // isTranslationComplete(), so we must check it explicitly here.
+                if (!type->isCountedInTranslationStats()) {
+                    continue; // fully done — hub/taxonomy types don't use this slug
                 }
                 const QString slugKey = QStringLiteral("tr:") + targetLang
                                         + QStringLiteral(":_permalink_slug");

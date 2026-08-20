@@ -1,0 +1,13 @@
+[Unit]
+Description=WebsiteEmpire IT
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/websiteempire/deploy/it
+ExecStart=/opt/websiteempire/StaticWebsiteServe --port 8086 --lang it --images-db /opt/websiteempire/deploy/images.db
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

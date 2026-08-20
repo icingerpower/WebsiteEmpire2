@@ -112,7 +112,8 @@ public:
      * hreflang output; tags that depend on missing data are silently omitted.
      */
     QString buildHeadMetaTags(const QString &baseUrl,
-                               const QString &langCode) const override;
+                               const QString &langCode,
+                               const QString &canonicalPath) const override;
 
     /**
      * Rasterizes the article's primary SVG illustration to a 1200×630 WebP and

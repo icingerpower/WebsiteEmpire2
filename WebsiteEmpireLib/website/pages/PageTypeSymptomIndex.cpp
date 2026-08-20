@@ -207,7 +207,8 @@ void PageTypeSymptomIndex::addInnerTopCode(AbstractEngine &engine,
 // =============================================================================
 
 QString PageTypeSymptomIndex::buildHeadMetaTags(const QString &baseUrl,
-                                                 const QString &langCode) const
+                                                 const QString &langCode,
+                                                 const QString &canonicalPath) const
 {
     QString result;
 
@@ -239,15 +240,15 @@ QString PageTypeSymptomIndex::buildHeadMetaTags(const QString &baseUrl,
         result += QStringLiteral("\">");
     }
 
-    if (!m_permalink.isEmpty() && !baseUrl.isEmpty()) {
+    if (!canonicalPath.isEmpty() && !baseUrl.isEmpty()) {
         result += QStringLiteral("<link rel=\"canonical\" href=\"");
         result += baseUrl;
-        result += m_permalink;
+        result += canonicalPath;
         result += QStringLiteral("\">");
 
         result += QStringLiteral("<meta property=\"og:url\" content=\"");
         result += baseUrl;
-        result += m_permalink;
+        result += canonicalPath;
         result += QStringLiteral("\">");
     }
 
@@ -283,10 +284,10 @@ QString PageTypeSymptomIndex::buildHeadMetaTags(const QString &baseUrl,
                                   "\"dateModified\":\"");
         result += updated;
         result += QLatin1Char('"');
-        if (!m_permalink.isEmpty() && !baseUrl.isEmpty()) {
+        if (!canonicalPath.isEmpty() && !baseUrl.isEmpty()) {
             result += QStringLiteral(",\"url\":\"");
             result += baseUrl;
-            result += m_permalink;
+            result += canonicalPath;
             result += QLatin1Char('"');
         }
         if (!title.isEmpty()) {

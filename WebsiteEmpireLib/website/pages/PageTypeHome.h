@@ -46,7 +46,8 @@ public:
      * with a named entity without any additional per-page markup.
      */
     QString buildHeadMetaTags(const QString &baseUrl,
-                              const QString &langCode) const override;
+                              const QString &langCode,
+                              const QString &canonicalPath) const override;
 
 private:
     PageBlocText                     m_textBlocTop;

@@ -306,7 +306,8 @@ QString AbstractPageType::autoH1(const QString & /*langCode*/) const
 // =============================================================================
 
 QString AbstractPageType::buildHeadMetaTags(const QString &baseUrl,
-                                             const QString &langCode) const
+                                             const QString &langCode,
+                                             const QString &canonicalPath) const
 {
     QString result;
 
@@ -324,14 +325,14 @@ QString AbstractPageType::buildHeadMetaTags(const QString &baseUrl,
         result += QStringLiteral("\">");
     }
 
-    if (!m_permalink.isEmpty() && !baseUrl.isEmpty()) {
+    if (!canonicalPath.isEmpty() && !baseUrl.isEmpty()) {
         result += QStringLiteral("<link rel=\"canonical\" href=\"");
         result += baseUrl;
-        result += m_permalink;
+        result += canonicalPath;
         result += QStringLiteral("\">");
         result += QStringLiteral("<meta property=\"og:url\" content=\"");
         result += baseUrl;
-        result += m_permalink;
+        result += canonicalPath;
         result += QStringLiteral("\">");
     }
 
@@ -394,6 +395,30 @@ void AbstractPageType::save(QHash<QString, QString> &values) const
         blocs.at(i)->save(sub);
         for (auto it = sub.cbegin(); it != sub.cend(); ++it) {
             values.insert(prefix + it.key(), it.value());
+        }
+    }
+}
+
+bool AbstractPageType::isBlocKey(const QString &key)
+{
+    const qsizetype sep = key.indexOf(QLatin1Char('_'));
+    if (sep <= 0) {
+        return false;  // no '_' at all, or a leading '_' (e.g. "__legal_def_id")
+    }
+    for (qsizetype i = 0; i < sep; ++i) {
+        if (!key.at(i).isDigit()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void AbstractPageType::preservePageLevelKeys(const QHash<QString, QString> &source,
+                                              QHash<QString, QString>       &target)
+{
+    for (auto it = source.cbegin(); it != source.cend(); ++it) {
+        if (!isBlocKey(it.key())) {
+            target.insert(it.key(), it.value());
         }
     }
 }
@@ -585,7 +610,8 @@ void AbstractPageType::addCode(QStringView     origContent,
         html += QStringLiteral("</style>");
     }
     if (!baseUrl.isEmpty()) {
-        html += buildHeadMetaTags(baseUrl, langCode);
+        const QString canonicalPath = engine.resolveLinkHref(m_permalink, websiteIndex);
+        html += buildHeadMetaTags(baseUrl, langCode, canonicalPath);
     }
     html += _buildHreflangTags(engine, websiteIndex);
     html += QStringLiteral("</head><body>");
