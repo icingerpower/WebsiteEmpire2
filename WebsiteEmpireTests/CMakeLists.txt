@@ -62,6 +62,7 @@ add_empire_test(Test_Website_PageStateFormatter              test_website_page_s
 add_empire_test(Test_Website_SitemapChunkWriter              test_website_sitemap_chunk_writer.cpp)
 add_empire_test(Test_Website_SitemapIndexWriter              test_website_sitemap_index_writer.cpp)
 add_empire_test(Test_Website_RobotsWriter                    test_website_robots_writer.cpp)
+target_link_libraries(Test_Website_RobotsWriter PRIVATE ZLIB::ZLIB)
 add_empire_test(Test_Website_SitemapOrchestrator             test_website_sitemap_orchestrator.cpp)
 
 # LauncherTranslate modes test compiles launcher code directly (no app binary needed).

@@ -4,6 +4,7 @@
 #include <QTemporaryDir>
 
 #include <atomic>
+#include <zlib.h>
 
 #include "website/sitemap/RobotsWriter.h"
 
@@ -80,6 +81,38 @@ void insertPage(const QString &connName, const QString &path, const QString &lan
     q.exec();
 }
 
+// Decompresses the stored /robots.txt blob so tests can assert on its text
+// rather than only on blob size.
+QString readRobots(const QString &connName)
+{
+    QSqlQuery q(QSqlDatabase::database(connName));
+    q.exec(QStringLiteral(
+        "SELECT pv.html_gz FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id WHERE p.path = '/robots.txt'"));
+    if (!q.next()) {
+        return {};
+    }
+    const QByteArray gz = q.value(0).toByteArray();
+
+    z_stream strm = {};
+    if (inflateInit2(&strm, 15 + 32) != Z_OK) {
+        return {};
+    }
+    strm.avail_in = static_cast<uInt>(gz.size());
+    strm.next_in  = reinterpret_cast<Bytef *>(const_cast<char *>(gz.constData()));
+    QByteArray out;
+    char buf[4096];
+    int ret;
+    do {
+        strm.avail_out = sizeof(buf);
+        strm.next_out  = reinterpret_cast<Bytef *>(buf);
+        ret = inflate(&strm, Z_NO_FLUSH);
+        out.append(buf, static_cast<int>(sizeof(buf) - strm.avail_out));
+    } while (ret == Z_OK);
+    inflateEnd(&strm);
+    return QString::fromUtf8(out);
+}
+
 } // namespace
 
 // =============================================================================
@@ -108,6 +141,12 @@ private slots:
     void test_robots_disallow_emitted_when_legal_page_exists();
     void test_robots_disallow_not_emitted_when_legal_page_absent();
     void test_robots_disallow_skips_sentinel_lang_rows();
+
+    // --- Sitemap: multilingual discoverability ---
+    void test_robots_always_lists_own_sitemap();
+    void test_robots_lists_sitemap_for_every_additional_language();
+    void test_robots_no_additional_languages_emits_single_sitemap_line();
+    void test_robots_skips_empty_additional_sitemap_urls();
 };
 
 // =============================================================================
@@ -327,6 +366,67 @@ void Test_Website_RobotsWriter::test_robots_disallow_skips_sentinel_lang_rows()
     q2.next();
 
     QCOMPARE(q1.value(0).toInt(), q2.value(0).toInt());
+}
+
+// =============================================================================
+// Sitemap: multilingual discoverability
+//
+// Crawlers fetch robots.txt ONLY from the domain root, so /fr/robots.txt is
+// never read.  With one "Sitemap:" line the root file advertises English alone
+// and every other language's sitemap is undiscoverable — on healybio.com that
+// hid 2692 French URLs (and the same for 10 more languages) behind a root index
+// that listed only sitemap-en-1.xml.
+// =============================================================================
+
+void Test_Website_RobotsWriter::test_robots_always_lists_own_sitemap()
+{
+    Fixture f;
+    RobotsWriter::write(f.connName, QStringLiteral("example.com"),
+                        QStringLiteral("https://example.com"));
+
+    const QString txt = readRobots(f.connName);
+    QVERIFY2(txt.contains(QStringLiteral("Sitemap: https://example.com/sitemap.xml")),
+             qPrintable(txt));
+}
+
+void Test_Website_RobotsWriter::test_robots_lists_sitemap_for_every_additional_language()
+{
+    Fixture f;
+    RobotsWriter::write(f.connName, QStringLiteral("example.com"),
+                        QStringLiteral("https://example.com"),
+                        {QStringLiteral("https://example.com/fr/sitemap.xml"),
+                         QStringLiteral("https://example.com/de/sitemap.xml")});
+
+    const QString txt = readRobots(f.connName);
+    QVERIFY2(txt.contains(QStringLiteral("Sitemap: https://example.com/sitemap.xml")),
+             qPrintable(txt));
+    QVERIFY2(txt.contains(QStringLiteral("Sitemap: https://example.com/fr/sitemap.xml")),
+             qPrintable(txt));
+    QVERIFY2(txt.contains(QStringLiteral("Sitemap: https://example.com/de/sitemap.xml")),
+             qPrintable(txt));
+    QCOMPARE(txt.count(QStringLiteral("Sitemap: ")), 3);
+}
+
+void Test_Website_RobotsWriter::test_robots_no_additional_languages_emits_single_sitemap_line()
+{
+    // Single-language site must not gain spurious lines.
+    Fixture f;
+    RobotsWriter::write(f.connName, QStringLiteral("example.com"),
+                        QStringLiteral("https://example.com"));
+
+    QCOMPARE(readRobots(f.connName).count(QStringLiteral("Sitemap: ")), 1);
+}
+
+void Test_Website_RobotsWriter::test_robots_skips_empty_additional_sitemap_urls()
+{
+    Fixture f;
+    RobotsWriter::write(f.connName, QStringLiteral("example.com"),
+                        QStringLiteral("https://example.com"),
+                        {QString(), QStringLiteral("https://example.com/fr/sitemap.xml"), QString()});
+
+    const QString txt = readRobots(f.connName);
+    QCOMPARE(txt.count(QStringLiteral("Sitemap: ")), 2);
+    QVERIFY(!txt.contains(QStringLiteral("Sitemap: \n")));
 }
 
 QTEST_MAIN(Test_Website_RobotsWriter)

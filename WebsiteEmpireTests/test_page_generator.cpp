@@ -231,6 +231,9 @@ private slots:
     void test_pagegen_translated_slug_emits_redirect_from_english_permalink();
     void test_pagegen_redirect_target_includes_lang_prefix_on_subpath_deployment();
 
+    // --- robots.txt advertises every deployed language's sitemap ---
+    void test_pagegen_robots_lists_sitemap_for_every_deployed_language();
+
     // --- symptom hub availability gating ---
     void test_pagegen_symptom_hub_excluded_when_no_articles_translated_for_lang();
     void test_pagegen_symptom_hub_included_when_article_translated_for_lang();
@@ -1606,6 +1609,55 @@ void Test_PageGenerator::test_pagegen_redirect_target_includes_lang_prefix_on_su
     QVERIFY2(q.next(), "no redirect recorded for the old English permalink");
     QCOMPARE(q.value(0).toString(), QStringLiteral("/fr/maitriser-le-sommeil"));
     f.closeContentDb(conn);
+}
+
+void Test_PageGenerator::test_pagegen_robots_lists_sitemap_for_every_deployed_language()
+{
+    // Regression: robots.txt advertised only the generating language's sitemap.
+    // Crawlers read robots.txt solely from the domain root, so /fr/robots.txt is
+    // never fetched — on healybio.com that left 2692 French URLs (and 10 more
+    // languages) undiscoverable behind a root index listing only English.
+    Fixture f;
+    f.addArticle(QStringLiteral("/some-article"), QStringLiteral("<p>Body.</p>"));
+
+    // One domain, several languages, each with a deploy/<lang>/content.db so
+    // isLangDeployed() sees them.
+    int enIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        const QString lang = f.engine.getLangCode(i);
+        if (lang != QStringLiteral("en") && lang != QStringLiteral("fr")
+                && lang != QStringLiteral("de")) {
+            continue;
+        }
+        if (lang == QStringLiteral("en")) {
+            enIndex = i;
+        }
+        f.engine.setData(f.engine.index(i, AbstractEngine::COL_DOMAIN),
+                         QStringLiteral("example.com"));
+        QDir(f.dir.path()).mkpath(QStringLiteral("deploy/") + lang);
+        QFile marker(QDir(f.dir.path()).filePath(
+            QStringLiteral("deploy/") + lang + QStringLiteral("/content.db")));
+        marker.open(QIODevice::WriteOnly);
+        marker.close();
+    }
+    QVERIFY2(enIndex >= 0, "No English engine row found");
+
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, enIndex);
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT pv.html_gz FROM page_variants pv"
+        " JOIN pages p ON pv.page_id = p.id WHERE p.path = '/robots.txt'"));
+    QVERIFY2(q.next(), "robots.txt not written");
+    const QByteArray robots = gzipDecompress(q.value(0).toByteArray());
+    f.closeContentDb(conn);
+
+    QVERIFY2(robots.contains("Sitemap: https://example.com/sitemap.xml"), robots.constData());
+    QVERIFY2(robots.contains("Sitemap: https://example.com/fr/sitemap.xml"), robots.constData());
+    QVERIFY2(robots.contains("Sitemap: https://example.com/de/sitemap.xml"), robots.constData());
+    // English lives at the root, so it must not also appear under /en.
+    QVERIFY2(!robots.contains("Sitemap: https://example.com/en/sitemap.xml"), robots.constData());
 }
 
 QTEST_MAIN(Test_PageGenerator)

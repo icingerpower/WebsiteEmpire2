@@ -709,7 +709,30 @@ int PageGenerator::generateAll(const QDir     &workingDir,
         const QString &effectiveSitemapBase = sitemapBaseUrl.isEmpty()
             ? QStringLiteral("https://") + domain
             : sitemapBaseUrl;
-        SitemapOrchestrator::generate(connName, domain, effectiveSitemapBase);
+
+        // Collect every deployed language's sitemap so robots.txt can advertise
+        // them all.  Crawlers read robots.txt only from the domain root, so a
+        // language listed nowhere but its own /<lang>/robots.txt is invisible to
+        // sitemap discovery.  URL shape mirrors _buildHreflangTags: shared domain
+        // → English at the root, others under /<lang>; separate domain → its root.
+        QStringList allSitemapUrls;
+        for (int i = 0; i < engine.rowCount(); ++i) {
+            const QString rowLang   = engine.getLangCode(i);
+            const QString rowDomain =
+                engine.data(engine.index(i, AbstractEngine::COL_DOMAIN)).toString();
+            if (rowLang.isEmpty() || rowDomain.isEmpty() || !engine.isLangDeployed(rowLang)) {
+                continue;
+            }
+            QString url = QStringLiteral("https://") + rowDomain;
+            if (rowDomain == domain && rowLang != QStringLiteral("en")) {
+                url += QLatin1Char('/') + rowLang;
+            }
+            url += QStringLiteral("/sitemap.xml");
+            allSitemapUrls.append(url);
+        }
+
+        SitemapOrchestrator::generate(connName, domain, effectiveSitemapBase,
+                                      {}, allSitemapUrls);
     }
 
     {

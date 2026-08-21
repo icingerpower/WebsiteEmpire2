@@ -4,6 +4,7 @@
 #include "SitemapConfig.h"
 
 #include <QString>
+#include <QStringList>
 
 /**
  * Drives the full sitemap + robots.txt generation pass.
@@ -28,10 +29,17 @@
 class SitemapOrchestrator
 {
 public:
+    /**
+     * additionalSitemapUrls is forwarded to RobotsWriter: the sitemap URLs of the
+     * other languages in a multilingual deployment.  Crawlers only read
+     * robots.txt from the domain root, so without them every non-root language
+     * is undiscoverable via sitemaps.
+     */
     static void generate(const QString      &connName,
                          const QString      &domain,
                          const QString      &baseUrl,
-                         const SitemapConfig &config = {});
+                         const SitemapConfig &config = {},
+                         const QStringList  &additionalSitemapUrls = {});
 };
 
 #endif // SITEMAPORCHESTRATOR_H

@@ -12,7 +12,8 @@
 void SitemapOrchestrator::generate(const QString       &connName,
                                     const QString       &domain,
                                     const QString       &baseUrl,
-                                    const SitemapConfig &config)
+                                    const SitemapConfig &config,
+                                    const QStringList   &additionalSitemapUrls)
 {
     if (baseUrl.isEmpty()) {
         return;
@@ -103,5 +104,5 @@ void SitemapOrchestrator::generate(const QString       &connName,
     }
 
     SitemapIndexWriter::write(connName, domain, baseUrl, indexEntries);
-    RobotsWriter::write(connName, domain, baseUrl);
+    RobotsWriter::write(connName, domain, baseUrl, additionalSitemapUrls);
 }

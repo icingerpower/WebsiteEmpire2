@@ -3,12 +3,14 @@
 #include "website/pages/PageGenerator.h"
 
 #include <QDateTime>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 
-void RobotsWriter::write(const QString &connName,
-                          const QString &domain,
-                          const QString &baseUrl)
+void RobotsWriter::write(const QString     &connName,
+                          const QString     &domain,
+                          const QString     &baseUrl,
+                          const QStringList &additionalSitemapUrls)
 {
     // Paths that waste crawl budget — disallowed only when they exist in the DB.
     static const QStringList kLegalPaths = {
@@ -41,9 +43,32 @@ void RobotsWriter::write(const QString &connName,
         txt += path;
         txt += QLatin1Char('\n');
     }
+    // This deployment's own sitemap, then one line per other language.
+    //
+    // Crawlers fetch robots.txt only from the domain root, so /fr/robots.txt is
+    // never read and this file is the only place a language's sitemap can be
+    // advertised.  Listing English alone left every other language reachable
+    // only through hreflang and internal links.
+    const QString ownSitemap = baseUrl + QStringLiteral("/sitemap.xml");
+    QSet<QString> emitted;
+
     txt += QStringLiteral("Sitemap: ");
-    txt += baseUrl;
-    txt += QStringLiteral("/sitemap.xml\n");
+    txt += ownSitemap;
+    txt += QLatin1Char('\n');
+    emitted.insert(ownSitemap);
+
+    for (const QString &url : additionalSitemapUrls) {
+        const QString trimmed = url.trimmed();
+        // Skip blanks, and the own URL when the caller passes every language
+        // without filtering out the current one.
+        if (trimmed.isEmpty() || emitted.contains(trimmed)) {
+            continue;
+        }
+        emitted.insert(trimmed);
+        txt += QStringLiteral("Sitemap: ");
+        txt += trimmed;
+        txt += QLatin1Char('\n');
+    }
 
     const QByteArray gz   = PageGenerator::gzipCompress(txt.toUtf8());
     const QString    etag = PageGenerator::computeEtag(gz);

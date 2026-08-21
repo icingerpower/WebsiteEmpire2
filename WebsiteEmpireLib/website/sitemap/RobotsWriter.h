@@ -2,6 +2,7 @@
 #define ROBOTSWRITER_H
 
 #include <QString>
+#include <QStringList>
 
 /**
  * Writes /robots.txt to the content database.
@@ -27,9 +28,19 @@
 class RobotsWriter
 {
 public:
-    static void write(const QString &connName,
-                      const QString &domain,
-                      const QString &baseUrl);
+    /**
+     * additionalSitemapUrls: absolute sitemap URLs for the OTHER languages of a
+     * multilingual deployment, e.g. "https://example.com/fr/sitemap.xml".  One
+     * "Sitemap:" line is emitted per entry, after this deployment's own.
+     *
+     * Crawlers only read robots.txt at the domain root, so /fr/robots.txt is
+     * never fetched and a language whose sitemap is listed nowhere else is
+     * undiscoverable — the root file has to advertise every language.
+     */
+    static void write(const QString     &connName,
+                      const QString     &domain,
+                      const QString     &baseUrl,
+                      const QStringList &additionalSitemapUrls = {});
 };
 
 #endif // ROBOTSWRITER_H
