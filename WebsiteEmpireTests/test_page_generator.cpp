@@ -1618,7 +1618,20 @@ void Test_PageGenerator::test_pagegen_robots_lists_sitemap_for_every_deployed_la
     // never fetched — on healybio.com that left 2692 French URLs (and 10 more
     // languages) undiscoverable behind a root index listing only English.
     Fixture f;
-    f.addArticle(QStringLiteral("/some-article"), QStringLiteral("<p>Body.</p>"));
+    // Article translated into fr only.  de gets a deploy folder but NO
+    // translation, standing in for a language abandoned long ago whose stale
+    // deploy/<lang>/content.db is still on disk but was never uploaded.
+    const QString enText = QStringLiteral("<p>Body.</p>");
+    const int id = f.repo.create(QStringLiteral("article"),
+                                  QStringLiteral("/some-article"),
+                                  QStringLiteral("en"));
+    f.repo.saveData(id, {
+        {QStringLiteral("1_text"),             enText},
+        {QStringLiteral("0_categories"),        QString()},
+        {QStringLiteral("1_tr:fr:text"),        QStringLiteral("<p>Corps.</p>")},
+        {QStringLiteral("1_tr:fr:text:hash"),   Fixture::sha1(enText)},
+    });
+    f.repo.setLangCodesToTranslate(id, {QStringLiteral("fr"), QStringLiteral("de")});
 
     // One domain, several languages, each with a deploy/<lang>/content.db so
     // isLangDeployed() sees them.
@@ -1655,9 +1668,13 @@ void Test_PageGenerator::test_pagegen_robots_lists_sitemap_for_every_deployed_la
 
     QVERIFY2(robots.contains("Sitemap: https://example.com/sitemap.xml"), robots.constData());
     QVERIFY2(robots.contains("Sitemap: https://example.com/fr/sitemap.xml"), robots.constData());
-    QVERIFY2(robots.contains("Sitemap: https://example.com/de/sitemap.xml"), robots.constData());
     // English lives at the root, so it must not also appear under /en.
     QVERIFY2(!robots.contains("Sitemap: https://example.com/en/sitemap.xml"), robots.constData());
+    // de has a deploy folder but no translated page, so its sitemap does not
+    // exist — advertising it would send crawlers to a 404.  This is the
+    // biomarky.com regression: 25 dead sitemap URLs in the root robots.txt
+    // because stale deploy/<lang>/ folders made isLangDeployed() return true.
+    QVERIFY2(!robots.contains("Sitemap: https://example.com/de/sitemap.xml"), robots.constData());
 }
 
 QTEST_MAIN(Test_PageGenerator)

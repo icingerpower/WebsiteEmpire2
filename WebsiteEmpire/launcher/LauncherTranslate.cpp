@@ -220,11 +220,13 @@ void LauncherTranslate::run(const QString & /*value*/)
 
     // -------------------------------------------------------------------------
     // Resolve --language existing to the set of languages already in the repo.
-    // langFilterSet: empty = no filter (all langs); non-empty = restrict to these.
-    // svgLangFilter: single-lang string forwarded to startSvgJobs (empty = all).
+    // langFilterSet drives BOTH phases: empty = no filter (all langs), non-empty
+    // = restrict to these.  The SVG phase previously took a single-code string
+    // and received an empty one in existing mode, which it read as "all
+    // languages" — so SVGs were translated into languages the site has no text
+    // for while the text phase was correctly filtered.
     // -------------------------------------------------------------------------
     QSet<QString> langFilterSet;
-    QString svgLangFilter = existingMode ? QString{} : languageFilter;
 
     if (existingMode) {
         // Translation data lives in page_data keys like "1_tr:fr:text".
@@ -274,14 +276,14 @@ void LauncherTranslate::run(const QString & /*value*/)
     });
 
     QObject::connect(translator, &PageTranslator::finished, holder,
-        [holder, pageRepo, pageDb, translator, editingLang, svgLangFilter, limitOverride, runBoth]
+        [holder, pageRepo, pageDb, translator, editingLang, langFilterSet, limitOverride, runBoth]
         (int translated, int errors) mutable {
             qDebug() << "[Translate] Done. Translated:" << translated
                      << " Errors:" << errors;
             if (runBoth) {
                 runBoth = false;
                 qDebug() << "[Translate] Starting SVG back-fill phase…";
-                translator->startSvgJobs(editingLang, svgLangFilter, limitOverride);
+                translator->startSvgJobs(editingLang, langFilterSet, limitOverride);
                 return;
             }
             delete pageRepo;
@@ -292,7 +294,7 @@ void LauncherTranslate::run(const QString & /*value*/)
 
     if (svgOnly) {
         qDebug() << "[Translate] SVG-only mode — back-filling untranslated SVG images.";
-        translator->startSvgJobs(editingLang, svgLangFilter, limitOverride, engine);
+        translator->startSvgJobs(editingLang, langFilterSet, limitOverride, engine);
     } else {
         QList<PageTranslator::TranslationJob> jobs =
             TranslationScheduler::buildJobs(*pageRepo, *categoryTable,

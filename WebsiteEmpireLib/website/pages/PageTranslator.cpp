@@ -122,10 +122,10 @@ void PageTranslator::startWithJobs(const QList<TranslationJob> &jobs)
 // startSvgJobs
 // =============================================================================
 
-void PageTranslator::startSvgJobs(const QString  &editingLang,
-                                   const QString  &languageFilter,
-                                   int             limit,
-                                   AbstractEngine *engine)
+void PageTranslator::startSvgJobs(const QString       &editingLang,
+                                   const QSet<QString> &langFilter,
+                                   int                  limit,
+                                   AbstractEngine      *engine)
 {
     _openLogFile();
 
@@ -198,9 +198,10 @@ void PageTranslator::startSvgJobs(const QString  &editingLang,
     const QList<PageRecord> &sources = m_repo.findSourcePages(editingLang);
     _log(QStringLiteral("SVG jobs: scanning %1 source page(s)%2…")
              .arg(sources.size())
-             .arg(languageFilter.isEmpty()
+             .arg(langFilter.isEmpty()
                  ? QString{}
-                 : QStringLiteral(" (language filter: %1)").arg(languageFilter)));
+                 : QStringLiteral(" (language filter: %1)")
+                       .arg(QStringList(langFilter.values()).join(QStringLiteral(", ")))));
 
     for (const PageRecord &src : std::as_const(sources)) {
         if (src.langCodesToTranslate.isEmpty()) {
@@ -228,7 +229,7 @@ void PageTranslator::startSvgJobs(const QString  &editingLang,
 
         for (const QString &fn : std::as_const(svgFns)) {
             for (const QString &targetLang : std::as_const(src.langCodesToTranslate)) {
-                if (!languageFilter.isEmpty() && targetLang != languageFilter) {
+                if (!langFilter.isEmpty() && !langFilter.contains(targetLang)) {
                     continue;
                 }
                 if (translatedPairs.contains(targetLang + QLatin1Char('\n') + fn)) {
@@ -285,7 +286,7 @@ void PageTranslator::startSvgJobs(const QString  &editingLang,
             if (!src || src->langCodesToTranslate.isEmpty()) { continue; }
 
             for (const QString &targetLang : std::as_const(src->langCodesToTranslate)) {
-                if (!languageFilter.isEmpty() && targetLang != languageFilter) { continue; }
+                if (!langFilter.isEmpty() && !langFilter.contains(targetLang)) { continue; }
                 if (translatedPairs.contains(targetLang + QLatin1Char('\n') + svgFn)) { continue; }
                 TranslationJob job;
                 job.pageId      = src->id;

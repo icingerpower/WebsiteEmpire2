@@ -317,6 +317,12 @@ int PageGenerator::generateAll(const QDir     &workingDir,
     const QList<PageRecord> &pages = m_pageRepo.findAll();
     const QString &currentLang = engine.getLangCode(websiteIndex);
 
+    // Languages that actually have at least one page available (i.e. real
+    // translation data), captured out of the pre-pass below.  Used to decide
+    // which sitemaps robots.txt may advertise — see the sitemap block further
+    // down for why deploy/<lang>/content.db existing is not sufficient.
+    QSet<QString> langsWithContent;
+
     // Pre-pass: build available-pages index and translated-permalink map.
     {
         // Collect every category ID covered by at least one article so we can
@@ -594,6 +600,8 @@ int PageGenerator::generateAll(const QDir     &workingDir,
             }
         }
 
+        langsWithContent = QSet<QString>(availablePages.keyBegin(), availablePages.keyEnd());
+
         engine.setAvailablePages(availablePages);
         engine.setTranslatedPermalinks(translatedPermalinks);
     }
@@ -720,7 +728,14 @@ int PageGenerator::generateAll(const QDir     &workingDir,
             const QString rowLang   = engine.getLangCode(i);
             const QString rowDomain =
                 engine.data(engine.index(i, AbstractEngine::COL_DOMAIN)).toString();
-            if (rowLang.isEmpty() || rowDomain.isEmpty() || !engine.isLangDeployed(rowLang)) {
+            // isLangDeployed() only checks that deploy/<lang>/content.db exists
+            // locally, which stays true for languages abandoned long ago — those
+            // folders linger and are never uploaded, so advertising them points
+            // crawlers at sitemap URLs that 404.  Require actual translated
+            // content as well.
+            if (rowLang.isEmpty() || rowDomain.isEmpty()
+                    || !engine.isLangDeployed(rowLang)
+                    || !langsWithContent.contains(rowLang)) {
                 continue;
             }
             QString url = QStringLiteral("https://") + rowDomain;

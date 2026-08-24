@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QSet>
 #include <QString>
 
 #include <memory>
@@ -118,7 +119,16 @@ public:
      * Returns immediately; progress is reported via the same signals as start().
      */
     /**
-     * languageFilter  when non-empty, only jobs for that target lang are queued.
+     * langFilter      when non-empty, only jobs whose target lang is in the set
+     *                 are queued; an EMPTY set means every language listed in
+     *                 each page's langCodesToTranslate.
+     *
+     *                 A set rather than a single code because --language existing
+     *                 resolves to several languages at once.  Passing an empty
+     *                 set for that case is the bug this signature replaces: the
+     *                 text phase filtered correctly while the SVG phase silently
+     *                 fell back to "all languages" and translated SVGs into
+     *                 languages the site has no text for.
      * limit           when >= 1, at most that many jobs are processed.
      * engine          when non-null, used to resolve the source domain; falls
      *                 back to the engine stored by start() — MUST be supplied
@@ -126,10 +136,10 @@ public:
      *                 (i.e. SVG-only mode), otherwise source SVGs stored under
      *                 the editing domain are misclassified as translated pairs.
      */
-    void startSvgJobs(const QString  &editingLang,
-                      const QString  &languageFilter = {},
-                      int             limit          = -1,
-                      AbstractEngine *engine         = nullptr);
+    void startSvgJobs(const QString        &editingLang,
+                      const QSet<QString>  &langFilter = {},
+                      int                   limit      = -1,
+                      AbstractEngine       *engine     = nullptr);
 
     /**
      * Returns all pending translation jobs as a human-readable string of
