@@ -41,4 +41,24 @@ set(ASPIRE_ATTRIBUTES_FASHION_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboColorColor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboProductPattern.h
     ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboProductPattern.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboStyleProduct.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboStyleProduct.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboProductEvent.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboProductEvent.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboColorSeason.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboColorSeason.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboProductDemographic.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboProductDemographic.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboStyleEvent.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboStyleEvent.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboMaterialProduct.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboMaterialProduct.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboStyleProductEvent.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboStyleProductEvent.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboColorProductDemographic.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboColorProductDemographic.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboProductDemographicEvent.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboProductDemographicEvent.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboPatternProductSeason.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageAttributesFashionComboPatternProductSeason.cpp
 )

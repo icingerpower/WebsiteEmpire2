@@ -76,6 +76,16 @@ const QList<QPair<QString, QString>> &comboKeysAndAttrIds()
         {QStringLiteral("style_season"), QStringLiteral("PageAttributesFashionComboStyleSeason")},
         {QStringLiteral("color_color"), QStringLiteral("PageAttributesFashionComboColorColor")},
         {QStringLiteral("product_pattern"), QStringLiteral("PageAttributesFashionComboProductPattern")},
+        {QStringLiteral("style_product"), QStringLiteral("PageAttributesFashionComboStyleProduct")},
+        {QStringLiteral("product_event"), QStringLiteral("PageAttributesFashionComboProductEvent")},
+        {QStringLiteral("color_season"), QStringLiteral("PageAttributesFashionComboColorSeason")},
+        {QStringLiteral("product_demographic"), QStringLiteral("PageAttributesFashionComboProductDemographic")},
+        {QStringLiteral("style_event"), QStringLiteral("PageAttributesFashionComboStyleEvent")},
+        {QStringLiteral("material_product"), QStringLiteral("PageAttributesFashionComboMaterialProduct")},
+        {QStringLiteral("style_product_event"), QStringLiteral("PageAttributesFashionComboStyleProductEvent")},
+        {QStringLiteral("color_product_demographic"), QStringLiteral("PageAttributesFashionComboColorProductDemographic")},
+        {QStringLiteral("product_demographic_event"), QStringLiteral("PageAttributesFashionComboProductDemographicEvent")},
+        {QStringLiteral("pattern_product_season"), QStringLiteral("PageAttributesFashionComboPatternProductSeason")},
     };
     return table;
 }
@@ -142,17 +152,46 @@ private slots:
         QCOMPARE(GeneratorFashionTaxonomy::pageFromJobId(QStringLiteral("combo/season_event/0")), 0);
     }
 
-    void test_fashion_build_initial_job_ids_has_nine_combo_jobs()
+    void test_fashion_build_initial_job_ids_has_nineteen_combo_jobs()
     {
         Fixture fx;
         QVERIFY(fx.tmpDir.isValid());
         QScopedPointer<GeneratorFashionTaxonomy> gen(fx.makeGen());
         const QStringList ids = gen->getAllJobIds();
-        QCOMPARE(ids.size(), 9);
+        QCOMPARE(ids.size(), comboKeysAndAttrIds().size());
         for (const QString &id : ids) {
             QVERIFY(id.startsWith(QStringLiteral("combo/")));
             QVERIFY(id.endsWith(QStringLiteral("/0")));
         }
+    }
+
+    // Every initial job id must embed the current vocabulary round suffix —
+    // this is what keeps a grown vocabulary from silently re-using the
+    // previous round's Done pages (which describe the WRONG cross-product
+    // slices after any seed-list change re-orders the alphabetical walk).
+    void test_fashion_initial_job_ids_carry_vocab_round_suffix()
+    {
+        QVERIFY(GeneratorFashionTaxonomy::VOCAB_ROUND >= 2);
+        const QString suffix = QStringLiteral(".r")
+            + QString::number(GeneratorFashionTaxonomy::VOCAB_ROUND) + QStringLiteral("/0");
+
+        Fixture fx;
+        QVERIFY(fx.tmpDir.isValid());
+        QScopedPointer<GeneratorFashionTaxonomy> gen(fx.makeGen());
+        const QStringList ids = gen->getAllJobIds();
+        QVERIFY(!ids.isEmpty());
+        for (const QString &id : ids) {
+            QVERIFY2(id.endsWith(suffix), qPrintable(id));
+        }
+    }
+
+    void test_fashion_combo_key_from_job_id_keeps_round_suffix()
+    {
+        // The suffix stays part of the combo key so continuations discovered
+        // from a round-2 job remain round-2 jobs.
+        QCOMPARE(GeneratorFashionTaxonomy::comboKeyFromJobId(QStringLiteral("combo/color_product.r2/3")),
+                 QStringLiteral("color_product.r2"));
+        QCOMPARE(GeneratorFashionTaxonomy::pageFromJobId(QStringLiteral("combo/color_product.r2/3")), 3);
     }
 
     // ==== getTables() ========================================================
@@ -175,12 +214,13 @@ private slots:
         QCOMPARE(gen->getTables().category.size(), 11);
     }
 
-    void test_fashion_get_tables_referred_to_has_eight_other_combos()
+    void test_fashion_get_tables_referred_to_has_eighteen_other_combos()
     {
         Fixture fx;
         QVERIFY(fx.tmpDir.isValid());
         QScopedPointer<GeneratorFashionTaxonomy> gen(fx.makeGen());
-        QCOMPARE(gen->getTables().referredTo.size(), 8);
+        // All combo tables except the primary (ColorProductEvent).
+        QCOMPARE(gen->getTables().referredTo.size(), comboKeysAndAttrIds().size() - 1);
     }
 
     // ==== seedStaticVocabulary() =============================================
@@ -232,9 +272,9 @@ private slots:
         gen->openResultsTable();
         gen->seedStaticVocabulary();
 
-        // Find the color_product_event job among the 9 initial jobs.
+        // Find the color_product_event job among the initial jobs.
         QJsonObject job;
-        for (int i = 0; i < 9; ++i) {
+        for (int i = 0; i < comboKeysAndAttrIds().size(); ++i) {
             const QString jsonStr = gen->getNextJob();
             if (jsonStr.isEmpty()) {
                 break;
@@ -287,12 +327,12 @@ private slots:
         QVERIFY(recordedCultures.contains(QStringLiteral("Western/Mainstream,East Asian")));
     }
 
-    // ==== Flagship acceptance test: sweep ALL 9 combo tables ================
+    // ==== Flagship acceptance test: sweep ALL 19 combo tables ===============
     //
     // Proves the goal the whole feature exists for: after generation, every
     // combination table contains ONLY rows the AI tagged with at least one
     // applicable culture — nothing with an empty/blank culture list ever
-    // reaches the database, across every one of the 9 combo tables.
+    // reaches the database, across every one of the 19 combo tables.
 
     void test_fashion_all_combo_tables_never_contain_empty_culture_rows()
     {
@@ -309,7 +349,7 @@ private slots:
 
         QHash<QString, int> expectedRecordedCount;
 
-        for (int i = 0; i < 9; ++i) {
+        for (int i = 0; i < comboKeysAndAttrIds().size(); ++i) {
             const QString jsonStr = gen->getNextJob();
             QVERIFY(!jsonStr.isEmpty());
             const QJsonObject job = QJsonDocument::fromJson(jsonStr.toUtf8()).object();
@@ -389,14 +429,17 @@ private slots:
         gen->seedStaticVocabulary();
 
         // combo/season_event has a small, exactly-known cross product:
-        // 8 seasons x 20 events x 1 formula = 160 -> exactly 4 pages of 40.
-        const int expectedTotal = 160;
-        const int expectedPages = 4;
+        // 12 seasons x 55 events x 1 formula = 660 -> 16 full pages of 40
+        // plus a final partial page of 20 = 17 pages.
+        const int expectedTotal = 660;
+        const int expectedPages = 17;
 
         QSet<QString> seenPairs;
         QSet<int> seenPages;
         int guard = 0;
 
+        // 19 combo tables round-robin their pages, so covering season_event's
+        // 17 pages costs at most ~19*17 jobs — well under the guard.
         while (seenPages.size() < expectedPages && guard < 500) {
             ++guard;
             const QString jsonStr = gen->getNextJob();
@@ -420,7 +463,7 @@ private slots:
             reply[QStringLiteral("results")] = results;
             QVERIFY(gen->recordReply(QString::fromUtf8(QJsonDocument(reply).toJson(QJsonDocument::Compact))));
 
-            if (GeneratorFashionTaxonomy::comboKeyFromJobId(jobId) != QStringLiteral("season_event")) {
+            if (!GeneratorFashionTaxonomy::comboKeyFromJobId(jobId).startsWith(QStringLiteral("season_event"))) {
                 continue;
             }
             const int page = GeneratorFashionTaxonomy::pageFromJobId(jobId);
@@ -440,7 +483,7 @@ private slots:
         QCOMPARE(seenPages.size(), expectedPages);
         QCOMPARE(seenPairs.size(), expectedTotal);
 
-        // And it actually stopped — no 5th season_event page ever gets
+        // And it actually stopped — no 18th season_event page ever gets
         // discovered once the space is fully covered.
         DownloadedPagesTable *table = gen->resultsTable(QStringLiteral("PageAttributesFashionComboSeasonEvent"));
         QVERIFY(table != nullptr);
@@ -467,7 +510,7 @@ private slots:
         gen->seedStaticVocabulary();
 
         QJsonObject job;
-        for (int i = 0; i < 9; ++i) {
+        for (int i = 0; i < comboKeysAndAttrIds().size(); ++i) {
             const QString jsonStr = gen->getNextJob();
             if (jsonStr.isEmpty()) {
                 break;
@@ -481,15 +524,27 @@ private slots:
         QVERIFY(!job.isEmpty());
         const QString jobId = job.value(QStringLiteral("jobId")).toString();
         const QJsonArray candidates = job.value(QStringLiteral("candidates")).toArray();
-        QVERIFY(candidates.size() >= 2);
+        QVERIFY(candidates.size() >= 3);
 
-        // Candidate 0 is always colorA == colorB == the first color
-        // alphabetically (see decodeCandidate()'s ordering) — guaranteed
-        // schema-invalid. Candidate 1 has a different colorB, guaranteed valid.
-        QCOMPARE(candidates.at(0).toObject().value(QStringLiteral("colorA")).toString(),
-                 candidates.at(0).toObject().value(QStringLiteral("colorB")).toString());
-        QVERIFY(candidates.at(1).toObject().value(QStringLiteral("colorA")).toString()
-                != candidates.at(1).toObject().value(QStringLiteral("colorB")).toString());
+        // decodeCandidate() orders the formula id fastest, so the first
+        // formula-count candidates are ALL the colorA == colorB self-pair of
+        // the alphabetically first color — guaranteed schema-invalid. The
+        // first candidate with a different colorB is guaranteed valid.
+        int firstBad = -1;
+        int firstValid = -1;
+        for (int idx = 0; idx < candidates.size(); ++idx) {
+            const QJsonObject co = candidates.at(idx).toObject();
+            const bool selfPair = co.value(QStringLiteral("colorA")).toString()
+                               == co.value(QStringLiteral("colorB")).toString();
+            if (selfPair && firstBad < 0) {
+                firstBad = idx;
+            }
+            if (!selfPair && firstValid < 0) {
+                firstValid = idx;
+            }
+        }
+        QCOMPARE(firstBad, 0);
+        QVERIFY(firstValid > 0);
 
         QJsonArray results;
         auto addResult = [&results](int index, const QStringList &cultures) {
@@ -500,10 +555,12 @@ private slots:
         };
         // The AI (incorrectly) tags the self-pair as making sense — must be
         // silently skipped, not thrown, and must not take the valid one with it.
-        addResult(0, {QStringLiteral("Western/Mainstream")});
-        addResult(1, {QStringLiteral("Western/Mainstream")});
-        for (int i = 2; i < candidates.size(); ++i) {
-            addResult(i, {});
+        for (int i = 0; i < candidates.size(); ++i) {
+            if (i == firstBad || i == firstValid) {
+                addResult(i, {QStringLiteral("Western/Mainstream")});
+            } else {
+                addResult(i, {});
+            }
         }
 
         QJsonObject reply;

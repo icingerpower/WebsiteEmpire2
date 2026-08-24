@@ -27,11 +27,22 @@
 #include "aspire/attributes/fashion/PageAttributesFashionComboStyleSeason.h"
 #include "aspire/attributes/fashion/PageAttributesFashionComboColorColor.h"
 #include "aspire/attributes/fashion/PageAttributesFashionComboProductPattern.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboStyleProduct.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboProductEvent.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboColorSeason.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboProductDemographic.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboStyleEvent.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboMaterialProduct.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboStyleProductEvent.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboColorProductDemographic.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboProductDemographicEvent.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboPatternProductSeason.h"
 #include "aspire/downloader/DownloadedPagesTable.h"
 
 DECLARE_GENERATOR(GeneratorFashionTaxonomy)
 
 const int GeneratorFashionTaxonomy::MAX_CANDIDATES_PER_JOB = 40;
+const int GeneratorFashionTaxonomy::VOCAB_ROUND = 2;
 
 // =============================================================================
 // File-local: combination table metadata + seed vocabulary + shared helpers
@@ -165,14 +176,154 @@ const QList<ComboSpec> &comboSpecs()
              QStringLiteral("PageAttributesFashionPattern"), PageAttributesFashionPattern::ID_NAME,
              QStringLiteral("pattern")} }
         , {PageAttributesFashionComboProductPattern::FORMULA_PRINT_PATTERN_STYLING} },
+
+        // ---- Round-2 expansion tables (Google-Ads-volume keyword research) --
+
+        { QStringLiteral("style_product")
+        , QStringLiteral("PageAttributesFashionComboStyleProduct")
+        , { {PageAttributesFashionComboStyleProduct::ID_STYLE,
+             QStringLiteral("PageAttributesFashionStyleAesthetic"), PageAttributesFashionStyleAesthetic::ID_NAME,
+             QStringLiteral("style")}
+          , {PageAttributesFashionComboStyleProduct::ID_PRODUCT_TYPE,
+             QStringLiteral("PageAttributesFashionProductType"), PageAttributesFashionProductType::ID_NAME,
+             QStringLiteral("productType")} }
+        , {PageAttributesFashionComboStyleProduct::FORMULA_STYLE_PRODUCT_OUTFITS} },
+
+        { QStringLiteral("product_event")
+        , QStringLiteral("PageAttributesFashionComboProductEvent")
+        , { {PageAttributesFashionComboProductEvent::ID_PRODUCT_TYPE,
+             QStringLiteral("PageAttributesFashionProductType"), PageAttributesFashionProductType::ID_NAME,
+             QStringLiteral("productType")}
+          , {PageAttributesFashionComboProductEvent::ID_EVENT,
+             QStringLiteral("PageAttributesFashionEvent"), PageAttributesFashionEvent::ID_NAME,
+             QStringLiteral("event")} }
+        , {PageAttributesFashionComboProductEvent::FORMULA_WHAT_PRODUCT_TO_WEAR} },
+
+        { QStringLiteral("color_season")
+        , QStringLiteral("PageAttributesFashionComboColorSeason")
+        , { {PageAttributesFashionComboColorSeason::ID_COLOR,
+             QStringLiteral("PageAttributesFashionColor"), PageAttributesFashionColor::ID_NAME,
+             QStringLiteral("color")}
+          , {PageAttributesFashionComboColorSeason::ID_SEASON,
+             QStringLiteral("PageAttributesFashionSeason"), PageAttributesFashionSeason::ID_NAME,
+             QStringLiteral("season")} }
+        , {PageAttributesFashionComboColorSeason::FORMULA_COLOR_SEASON_FASHION} },
+
+        { QStringLiteral("product_demographic")
+        , QStringLiteral("PageAttributesFashionComboProductDemographic")
+        , { {PageAttributesFashionComboProductDemographic::ID_PRODUCT_TYPE,
+             QStringLiteral("PageAttributesFashionProductType"), PageAttributesFashionProductType::ID_NAME,
+             QStringLiteral("productType")}
+          , {PageAttributesFashionComboProductDemographic::ID_DEMOGRAPHIC,
+             QStringLiteral("PageAttributesFashionDemographic"), PageAttributesFashionDemographic::ID_NAME,
+             QStringLiteral("demographic")} }
+        , {PageAttributesFashionComboProductDemographic::FORMULA_BEST_PRODUCT_FOR_DEMOGRAPHIC} },
+
+        { QStringLiteral("style_event")
+        , QStringLiteral("PageAttributesFashionComboStyleEvent")
+        , { {PageAttributesFashionComboStyleEvent::ID_STYLE,
+             QStringLiteral("PageAttributesFashionStyleAesthetic"), PageAttributesFashionStyleAesthetic::ID_NAME,
+             QStringLiteral("style")}
+          , {PageAttributesFashionComboStyleEvent::ID_EVENT,
+             QStringLiteral("PageAttributesFashionEvent"), PageAttributesFashionEvent::ID_NAME,
+             QStringLiteral("event")} }
+        , {PageAttributesFashionComboStyleEvent::FORMULA_STYLE_EVENT_OUTFITS} },
+
+        { QStringLiteral("material_product")
+        , QStringLiteral("PageAttributesFashionComboMaterialProduct")
+        , { {PageAttributesFashionComboMaterialProduct::ID_MATERIAL,
+             QStringLiteral("PageAttributesFashionMaterial"), PageAttributesFashionMaterial::ID_NAME,
+             QStringLiteral("material")}
+          , {PageAttributesFashionComboMaterialProduct::ID_PRODUCT_TYPE,
+             QStringLiteral("PageAttributesFashionProductType"), PageAttributesFashionProductType::ID_NAME,
+             QStringLiteral("productType")} }
+        , {PageAttributesFashionComboMaterialProduct::FORMULA_HOW_TO_STYLE_MATERIAL_PRODUCT} },
+
+        { QStringLiteral("style_product_event")
+        , QStringLiteral("PageAttributesFashionComboStyleProductEvent")
+        , { {PageAttributesFashionComboStyleProductEvent::ID_STYLE,
+             QStringLiteral("PageAttributesFashionStyleAesthetic"), PageAttributesFashionStyleAesthetic::ID_NAME,
+             QStringLiteral("style")}
+          , {PageAttributesFashionComboStyleProductEvent::ID_PRODUCT_TYPE,
+             QStringLiteral("PageAttributesFashionProductType"), PageAttributesFashionProductType::ID_NAME,
+             QStringLiteral("productType")}
+          , {PageAttributesFashionComboStyleProductEvent::ID_EVENT,
+             QStringLiteral("PageAttributesFashionEvent"), PageAttributesFashionEvent::ID_NAME,
+             QStringLiteral("event")} }
+        , {PageAttributesFashionComboStyleProductEvent::FORMULA_STYLE_PRODUCT_FOR_EVENT} },
+
+        { QStringLiteral("color_product_demographic")
+        , QStringLiteral("PageAttributesFashionComboColorProductDemographic")
+        , { {PageAttributesFashionComboColorProductDemographic::ID_COLOR,
+             QStringLiteral("PageAttributesFashionColor"), PageAttributesFashionColor::ID_NAME,
+             QStringLiteral("color")}
+          , {PageAttributesFashionComboColorProductDemographic::ID_PRODUCT_TYPE,
+             QStringLiteral("PageAttributesFashionProductType"), PageAttributesFashionProductType::ID_NAME,
+             QStringLiteral("productType")}
+          , {PageAttributesFashionComboColorProductDemographic::ID_DEMOGRAPHIC,
+             QStringLiteral("PageAttributesFashionDemographic"), PageAttributesFashionDemographic::ID_NAME,
+             QStringLiteral("demographic")} }
+        , {PageAttributesFashionComboColorProductDemographic::FORMULA_COLOR_PRODUCT_FOR_DEMOGRAPHIC} },
+
+        { QStringLiteral("product_demographic_event")
+        , QStringLiteral("PageAttributesFashionComboProductDemographicEvent")
+        , { {PageAttributesFashionComboProductDemographicEvent::ID_PRODUCT_TYPE,
+             QStringLiteral("PageAttributesFashionProductType"), PageAttributesFashionProductType::ID_NAME,
+             QStringLiteral("productType")}
+          , {PageAttributesFashionComboProductDemographicEvent::ID_DEMOGRAPHIC,
+             QStringLiteral("PageAttributesFashionDemographic"), PageAttributesFashionDemographic::ID_NAME,
+             QStringLiteral("demographic")}
+          , {PageAttributesFashionComboProductDemographicEvent::ID_EVENT,
+             QStringLiteral("PageAttributesFashionEvent"), PageAttributesFashionEvent::ID_NAME,
+             QStringLiteral("event")} }
+        , {PageAttributesFashionComboProductDemographicEvent::FORMULA_PRODUCT_DEMOGRAPHIC_FOR_EVENT} },
+
+        { QStringLiteral("pattern_product_season")
+        , QStringLiteral("PageAttributesFashionComboPatternProductSeason")
+        , { {PageAttributesFashionComboPatternProductSeason::ID_PATTERN,
+             QStringLiteral("PageAttributesFashionPattern"), PageAttributesFashionPattern::ID_NAME,
+             QStringLiteral("pattern")}
+          , {PageAttributesFashionComboPatternProductSeason::ID_PRODUCT_TYPE,
+             QStringLiteral("PageAttributesFashionProductType"), PageAttributesFashionProductType::ID_NAME,
+             QStringLiteral("productType")}
+          , {PageAttributesFashionComboPatternProductSeason::ID_SEASON,
+             QStringLiteral("PageAttributesFashionSeason"), PageAttributesFashionSeason::ID_NAME,
+             QStringLiteral("season")} }
+        , {PageAttributesFashionComboPatternProductSeason::FORMULA_PATTERN_PRODUCT_FOR_SEASON} },
     };
     return specs;
 }
 
+// Suffix appended to every combo key in job ids for the current vocabulary
+// round, e.g. "combo/color_product.r2/0". Rationale: pages are fixed slices
+// of the cross product and vocabulary values are consumed in alphabetical
+// order (loadVocabValues ORDER BY), so ANY seed-list growth re-maps every
+// page of every combo table. Instead of surgically editing the .ini, bumping
+// GeneratorFashionTaxonomy::VOCAB_ROUND makes buildInitialJobIds() emit
+// fresh "<key>.r<round>/0" ids: the expanded space is re-walked completely
+// under new job ids while the old round's Done pages stay dormant.
+// Already-recorded rows are skipped by rowAlreadyRecorded(), so a re-walk
+// only re-asks the AI about previously rejected or brand-new tuples.
+QString roundSuffix()
+{
+    if (GeneratorFashionTaxonomy::VOCAB_ROUND < 2) {
+        return {};
+    }
+    return QStringLiteral(".r") + QString::number(GeneratorFashionTaxonomy::VOCAB_ROUND);
+}
+
 const ComboSpec *findSpec(const QString &key)
 {
+    // A job id's key may carry a round suffix (".r2", ".r3", ...) from any
+    // past or current round — strip it so stale in-flight replies from an
+    // older round still resolve to their spec.
+    QString baseKey = key;
+    const int dot = baseKey.indexOf(QStringLiteral(".r"));
+    if (dot >= 0) {
+        baseKey.truncate(dot);
+    }
     for (const ComboSpec &spec : comboSpecs()) {
-        if (spec.key == key) {
+        if (spec.key == baseKey) {
             return &spec;
         }
     }
@@ -388,6 +539,7 @@ struct NameFamily {
 QStringList seedProductTypes()
 {
     return {
+        // ---- Round-1 seeds (fashion taxonomy study) -------------------------
         QStringLiteral("Heels"), QStringLiteral("Boots"), QStringLiteral("Midi Dress"),
         QStringLiteral("Cargo Pants"), QStringLiteral("Trench Coat"), QStringLiteral("Slip Dress"),
         QStringLiteral("Leather Jacket"), QStringLiteral("Tote Bag"), QStringLiteral("Wide-Leg Trousers"),
@@ -396,6 +548,52 @@ QStringList seedProductTypes()
         QStringLiteral("Jumpsuit"), QStringLiteral("Suit"), QStringLiteral("Gown"),
         QStringLiteral("Cardigan"), QStringLiteral("Shirt"), QStringLiteral("Leggings"),
         QStringLiteral("Bra"), QStringLiteral("Swimsuit"), QStringLiteral("Sweater"), QStringLiteral("Coat"),
+        // ---- Round-2 seeds (Google-Ads-volume keyword research) -------------
+        // Footwear
+        QStringLiteral("Sneakers"), QStringLiteral("Loafers"), QStringLiteral("Sandals"),
+        QStringLiteral("Mules"), QStringLiteral("Ankle Boots"), QStringLiteral("Cowboy Boots"),
+        QStringLiteral("Knee-High Boots"), QStringLiteral("Ballet Flats"), QStringLiteral("Mary Janes"),
+        QStringLiteral("Chelsea Boots"), QStringLiteral("Espadrilles"), QStringLiteral("Clogs"),
+        QStringLiteral("Oxford Shoes"), QStringLiteral("Platform Shoes"), QStringLiteral("Wedges"),
+        QStringLiteral("Slide Sandals"), QStringLiteral("Stilettos"),
+        // Outerwear
+        QStringLiteral("Puffer Jacket"), QStringLiteral("Denim Jacket"), QStringLiteral("Bomber Jacket"),
+        QStringLiteral("Shacket"), QStringLiteral("Vest"), QStringLiteral("Duster Coat"),
+        QStringLiteral("Parka"), QStringLiteral("Pea Coat"), QStringLiteral("Kimono"),
+        QStringLiteral("Poncho"), QStringLiteral("Windbreaker"), QStringLiteral("Teddy Coat"),
+        QStringLiteral("Fleece Jacket"),
+        // Tops
+        QStringLiteral("Corset Top"), QStringLiteral("Bodysuit"), QStringLiteral("Crop Top"),
+        QStringLiteral("Blouse"), QStringLiteral("Button-Down Shirt"), QStringLiteral("Polo Shirt"),
+        QStringLiteral("Turtleneck"), QStringLiteral("Tube Top"), QStringLiteral("Halter Top"),
+        QStringLiteral("Camisole"), QStringLiteral("Peplum Top"), QStringLiteral("Tank Top"),
+        QStringLiteral("Hoodie"), QStringLiteral("Sweatshirt"),
+        // Bottoms
+        QStringLiteral("Joggers"), QStringLiteral("Sweatpants"), QStringLiteral("Cargo Shorts"),
+        QStringLiteral("Biker Shorts"), QStringLiteral("Denim Shorts"), QStringLiteral("Bermuda Shorts"),
+        QStringLiteral("Skort"), QStringLiteral("Palazzo Pants"), QStringLiteral("Culottes"),
+        QStringLiteral("Flare Pants"), QStringLiteral("Straight-Leg Jeans"), QStringLiteral("Mom Jeans"),
+        QStringLiteral("Boyfriend Jeans"), QStringLiteral("Skinny Jeans"),
+        // Skirts
+        QStringLiteral("Pencil Skirt"), QStringLiteral("Pleated Skirt"), QStringLiteral("Maxi Skirt"),
+        QStringLiteral("Mini Skirt"), QStringLiteral("Wrap Skirt"), QStringLiteral("Tennis Skirt"),
+        QStringLiteral("Denim Skirt"), QStringLiteral("Slip Skirt"), QStringLiteral("A-Line Skirt"),
+        // Dresses & one-pieces
+        QStringLiteral("Blazer Dress"), QStringLiteral("Maxi Dress"), QStringLiteral("Mini Dress"),
+        QStringLiteral("Sundress"), QStringLiteral("Wrap Dress"), QStringLiteral("Cocktail Dress"),
+        QStringLiteral("Shirt Dress"), QStringLiteral("Sweater Dress"), QStringLiteral("Bodycon Dress"),
+        QStringLiteral("T-Shirt Dress"), QStringLiteral("Romper"), QStringLiteral("Overalls"),
+        // Cultural garments (feed the per-culture SEO territories)
+        QStringLiteral("Saree"), QStringLiteral("Lehenga"), QStringLiteral("Abaya"),
+        QStringLiteral("Hijab"), QStringLiteral("Kaftan"), QStringLiteral("Qipao"),
+        QStringLiteral("Hanbok"), QStringLiteral("Kurti"), QStringLiteral("Salwar Kameez"),
+        QStringLiteral("Ankara Dress"),
+        // Bags
+        QStringLiteral("Crossbody Bag"), QStringLiteral("Clutch"), QStringLiteral("Shoulder Bag"),
+        QStringLiteral("Backpack"), QStringLiteral("Belt Bag"), QStringLiteral("Bucket Bag"),
+        // Swim & intimates
+        QStringLiteral("Bralette"), QStringLiteral("Bikini"), QStringLiteral("One-Piece Swimsuit"),
+        QStringLiteral("Swim Cover-Up"),
     };
 }
 
@@ -464,6 +662,43 @@ QList<NameFamily> seedColors()
         {QStringLiteral("Shimmering Champagne"), QStringLiteral("Metallics")},
         {QStringLiteral("Gold"), QStringLiteral("Metallics")},
         {QStringLiteral("Silver"), QStringLiteral("Metallics")},
+        // ---- Round-2 seeds (Google-Ads-volume keyword research) -------------
+        {QStringLiteral("Cream"), QStringLiteral("Neutrals")},
+        {QStringLiteral("Nude"), QStringLiteral("Neutrals")},
+        {QStringLiteral("Slate"), QStringLiteral("Neutrals")},
+        {QStringLiteral("Mocha"), QStringLiteral("Neutrals")},
+        {QStringLiteral("Caramel"), QStringLiteral("Neutrals")},
+        {QStringLiteral("Dusty Rose"), QStringLiteral("Pastels")},
+        {QStringLiteral("Baby Blue"), QStringLiteral("Pastels")},
+        {QStringLiteral("Lilac"), QStringLiteral("Pastels")},
+        {QStringLiteral("Blush Pink"), QStringLiteral("Pastels")},
+        {QStringLiteral("Peach"), QStringLiteral("Pastels")},
+        {QStringLiteral("Pale Yellow"), QStringLiteral("Pastels")},
+        {QStringLiteral("Sky Blue"), QStringLiteral("Pastels")},
+        {QStringLiteral("Mauve"), QStringLiteral("Pastels")},
+        {QStringLiteral("Periwinkle"), QStringLiteral("Pastels")},
+        {QStringLiteral("Apricot"), QStringLiteral("Pastels")},
+        {QStringLiteral("Ruby Red"), QStringLiteral("Jewel Tones")},
+        {QStringLiteral("Amethyst"), QStringLiteral("Jewel Tones")},
+        {QStringLiteral("Maroon"), QStringLiteral("Jewel Tones")},
+        {QStringLiteral("Wine"), QStringLiteral("Jewel Tones")},
+        {QStringLiteral("Indigo"), QStringLiteral("Jewel Tones")},
+        {QStringLiteral("Mustard Yellow"), QStringLiteral("Vibrant/Brights")},
+        {QStringLiteral("Cobalt Blue"), QStringLiteral("Vibrant/Brights")},
+        {QStringLiteral("Magenta"), QStringLiteral("Vibrant/Brights")},
+        {QStringLiteral("Neon Green"), QStringLiteral("Vibrant/Brights")},
+        {QStringLiteral("Fuchsia"), QStringLiteral("Vibrant/Brights")},
+        {QStringLiteral("Turquoise"), QStringLiteral("Vibrant/Brights")},
+        {QStringLiteral("Royal Blue"), QStringLiteral("Vibrant/Brights")},
+        {QStringLiteral("Lime Green"), QStringLiteral("Vibrant/Brights")},
+        {QStringLiteral("Violet"), QStringLiteral("Vibrant/Brights")},
+        {QStringLiteral("Salmon"), QStringLiteral("Vibrant/Brights")},
+        {QStringLiteral("Terracotta"), QStringLiteral("Earth Tones")},
+        {QStringLiteral("Chocolate Brown"), QStringLiteral("Earth Tones")},
+        {QStringLiteral("Forest Green"), QStringLiteral("Earth Tones")},
+        {QStringLiteral("Hunter Green"), QStringLiteral("Earth Tones")},
+        {QStringLiteral("Rose Gold"), QStringLiteral("Metallics")},
+        {QStringLiteral("Copper"), QStringLiteral("Metallics")},
     };
 }
 
@@ -473,6 +708,9 @@ QStringList seedSeasons()
         QStringLiteral("Spring"), QStringLiteral("Summer"), QStringLiteral("Autumn/Fall"),
         QStringLiteral("Winter"), QStringLiteral("Transition/Early Spring"), QStringLiteral("Resort/Cruise"),
         QStringLiteral("Heatwave"), QStringLiteral("Rainy Season"),
+        // ---- Round-2 seeds (Google-Ads-volume keyword research) -------------
+        QStringLiteral("Holiday Season"), QStringLiteral("Festival Season"),
+        QStringLiteral("Wedding Season"), QStringLiteral("Back to School"),
     };
 }
 
@@ -486,6 +724,19 @@ QStringList seedEvents()
         QStringLiteral("Holiday Party"), QStringLiteral("Birthday Party"), QStringLiteral("Office Work"),
         QStringLiteral("Rehearsal Dinner"), QStringLiteral("Engagement Photos"), QStringLiteral("Country Concert"),
         QStringLiteral("Brunch"), QStringLiteral("Wine Tasting"),
+        // ---- Round-2 seeds (Google-Ads-volume keyword research) -------------
+        QStringLiteral("Prom"), QStringLiteral("Homecoming"), QStringLiteral("Quinceanera"),
+        QStringLiteral("Eid"), QStringLiteral("Diwali"), QStringLiteral("Lunar New Year"),
+        QStringLiteral("Bachelorette Party"), QStringLiteral("Pool Party"), QStringLiteral("Rooftop Party"),
+        QStringLiteral("Dinner Party"), QStringLiteral("Yacht Party"), QStringLiteral("Nightclub"),
+        QStringLiteral("Winery Tour"), QStringLiteral("Safari Vacation"), QStringLiteral("Ski Trip"),
+        QStringLiteral("European Summer Vacation"), QStringLiteral("Cruise Vacation"),
+        QStringLiteral("Business Casual Event"), QStringLiteral("Corporate Gala"), QStringLiteral("High Tea"),
+        QStringLiteral("Baptism"), QStringLiteral("Bar Mitzvah"), QStringLiteral("Gender Reveal Party"),
+        QStringLiteral("Welcome Dinner"), QStringLiteral("Farewell Dinner"), QStringLiteral("Horse Race"),
+        QStringLiteral("Art Gallery Opening"), QStringLiteral("Fashion Show"), QStringLiteral("College Class"),
+        QStringLiteral("Court Appearance"), QStringLiteral("Airport Travel"), QStringLiteral("Spa Day"),
+        QStringLiteral("Casino Night"), QStringLiteral("Halloween Party"), QStringLiteral("Tailgate Party"),
     };
 }
 
@@ -496,6 +747,12 @@ QStringList seedStyles()
         QStringLiteral("Clean Girl Minimalist"), QStringLiteral("Streetwear"), QStringLiteral("Preppy"),
         QStringLiteral("Dark Academia"), QStringLiteral("Cottagecore"), QStringLiteral("Glam"),
         QStringLiteral("Coastal Grandmother"), QStringLiteral("Goth"), QStringLiteral("Minimalist"),
+        // ---- Round-2 seeds (Google-Ads-volume keyword research) -------------
+        QStringLiteral("Casual Chic"), QStringLiteral("Smart Casual"), QStringLiteral("Business Casual"),
+        QStringLiteral("Grunge"), QStringLiteral("Indie Sleaze"), QStringLiteral("Light Academia"),
+        QStringLiteral("Vintage"), QStringLiteral("Techwear"), QStringLiteral("Rocker Chic"),
+        QStringLiteral("Tomboy"), QStringLiteral("Coquette"), QStringLiteral("Equestrian Chic"),
+        QStringLiteral("Utilitarian"), QStringLiteral("Modest Fashion"), QStringLiteral("Athleisure"),
     };
 }
 
@@ -506,6 +763,11 @@ QStringList seedFits()
         QStringLiteral("Bodycon"), QStringLiteral("High-Waisted"), QStringLiteral("Cropped"),
         QStringLiteral("A-Line"), QStringLiteral("Wide-Leg"), QStringLiteral("Tailored"),
         QStringLiteral("Fit and Flare"), QStringLiteral("Off-the-Shoulder"), QStringLiteral("Strapless"),
+        // ---- Round-2 seeds (Google-Ads-volume keyword research) -------------
+        QStringLiteral("Slim Fit"), QStringLiteral("Relaxed Fit"), QStringLiteral("Corseted"),
+        QStringLiteral("Asymmetrical"), QStringLiteral("Empire Waist"), QStringLiteral("Wrap"),
+        QStringLiteral("Tiered"), QStringLiteral("Halter"), QStringLiteral("Ruched"),
+        QStringLiteral("Backless"),
     };
 }
 
@@ -515,6 +777,11 @@ QStringList seedMaterials()
         QStringLiteral("Silk"), QStringLiteral("Satin"), QStringLiteral("Leather"), QStringLiteral("Linen"),
         QStringLiteral("Cashmere"), QStringLiteral("Velvet"), QStringLiteral("Denim"), QStringLiteral("Wool"),
         QStringLiteral("Cotton"), QStringLiteral("Tweed"),
+        // ---- Round-2 seeds (Google-Ads-volume keyword research) -------------
+        QStringLiteral("Chiffon"), QStringLiteral("Tulle"), QStringLiteral("Corduroy"),
+        QStringLiteral("Organza"), QStringLiteral("Mesh"), QStringLiteral("Lace"),
+        QStringLiteral("Suede"), QStringLiteral("Fleece"), QStringLiteral("Crochet"),
+        QStringLiteral("Faux Fur"), QStringLiteral("Nylon"), QStringLiteral("Mohair"),
     };
 }
 
@@ -525,6 +792,11 @@ QStringList seedPatterns()
         QStringLiteral("Leopard Print"), QStringLiteral("Polka Dot"), QStringLiteral("Camo"),
         QStringLiteral("Striped"), QStringLiteral("Gingham"), QStringLiteral("Snake Print"),
         QStringLiteral("Zebra Print"),
+        // ---- Round-2 seeds (Google-Ads-volume keyword research) -------------
+        QStringLiteral("Pinstripe"), QStringLiteral("Argyle"), QStringLiteral("Paisley"),
+        QStringLiteral("Tie-Dye"), QStringLiteral("Geometric Print"), QStringLiteral("Abstract Print"),
+        QStringLiteral("Cow Print"), QStringLiteral("Tiger Print"), QStringLiteral("Toile de Jouy"),
+        QStringLiteral("Chevron"), QStringLiteral("Marble Print"), QStringLiteral("Herringbone"),
     };
 }
 
@@ -534,6 +806,10 @@ QStringList seedDemographics()
         QStringLiteral("Petite"), QStringLiteral("Plus Size"), QStringLiteral("Tall"),
         QStringLiteral("Hourglass"), QStringLiteral("Pear Shape"), QStringLiteral("Apple Shape"),
         QStringLiteral("Rectangle"), QStringLiteral("Maternity"),
+        // ---- Round-2 seeds (Google-Ads-volume keyword research) -------------
+        QStringLiteral("Over 50"), QStringLiteral("Over 40"), QStringLiteral("Mid-Size"),
+        QStringLiteral("Broad Shoulders"), QStringLiteral("Inverted Triangle"),
+        QStringLiteral("Long Torso"), QStringLiteral("Short Torso"),
     };
 }
 
@@ -598,6 +874,16 @@ QMap<QString, AbstractPageAttributes *> GeneratorFashionTaxonomy::createResultPa
         {tr("Combo: Style + Season"),                 new PageAttributesFashionComboStyleSeason()},
         {tr("Combo: Color + Color"),                  new PageAttributesFashionComboColorColor()},
         {tr("Combo: Product + Pattern"),              new PageAttributesFashionComboProductPattern()},
+        {tr("Combo: Style + Product"),                new PageAttributesFashionComboStyleProduct()},
+        {tr("Combo: Product + Event"),                new PageAttributesFashionComboProductEvent()},
+        {tr("Combo: Color + Season"),                 new PageAttributesFashionComboColorSeason()},
+        {tr("Combo: Product + Demographic"),          new PageAttributesFashionComboProductDemographic()},
+        {tr("Combo: Style + Event"),                  new PageAttributesFashionComboStyleEvent()},
+        {tr("Combo: Material + Product"),             new PageAttributesFashionComboMaterialProduct()},
+        {tr("Combo: Style + Product + Event"),        new PageAttributesFashionComboStyleProductEvent()},
+        {tr("Combo: Color + Product + Demographic"),  new PageAttributesFashionComboColorProductDemographic()},
+        {tr("Combo: Product + Demographic + Event"),  new PageAttributesFashionComboProductDemographicEvent()},
+        {tr("Combo: Pattern + Product + Season"),     new PageAttributesFashionComboPatternProductSeason()},
     };
 }
 
@@ -631,7 +917,7 @@ AbstractGenerator::GeneratorTables GeneratorFashionTaxonomy::getTables() const
         tables.category.insert(d.id, d);
     }
 
-    // ReferredTo: the remaining 8 combination tables.
+    // ReferredTo: the remaining 18 combination tables.
     const QList<QPair<QString, QString>> otherCombos = {
         {QStringLiteral("PageAttributesFashionComboColorProduct"), tr("Combo: Color + Product")},
         {QStringLiteral("PageAttributesFashionComboSeasonEvent"), tr("Combo: Season + Event")},
@@ -641,6 +927,16 @@ AbstractGenerator::GeneratorTables GeneratorFashionTaxonomy::getTables() const
         {QStringLiteral("PageAttributesFashionComboStyleSeason"), tr("Combo: Style + Season")},
         {QStringLiteral("PageAttributesFashionComboColorColor"), tr("Combo: Color + Color")},
         {QStringLiteral("PageAttributesFashionComboProductPattern"), tr("Combo: Product + Pattern")},
+        {QStringLiteral("PageAttributesFashionComboStyleProduct"), tr("Combo: Style + Product")},
+        {QStringLiteral("PageAttributesFashionComboProductEvent"), tr("Combo: Product + Event")},
+        {QStringLiteral("PageAttributesFashionComboColorSeason"), tr("Combo: Color + Season")},
+        {QStringLiteral("PageAttributesFashionComboProductDemographic"), tr("Combo: Product + Demographic")},
+        {QStringLiteral("PageAttributesFashionComboStyleEvent"), tr("Combo: Style + Event")},
+        {QStringLiteral("PageAttributesFashionComboMaterialProduct"), tr("Combo: Material + Product")},
+        {QStringLiteral("PageAttributesFashionComboStyleProductEvent"), tr("Combo: Style + Product + Event")},
+        {QStringLiteral("PageAttributesFashionComboColorProductDemographic"), tr("Combo: Color + Product + Demographic")},
+        {QStringLiteral("PageAttributesFashionComboProductDemographicEvent"), tr("Combo: Product + Demographic + Event")},
+        {QStringLiteral("PageAttributesFashionComboPatternProductSeason"), tr("Combo: Pattern + Product + Season")},
     };
     for (const auto &c : otherCombos) {
         const TableDescriptor d = _makeDescriptor(c.first, c.second);
@@ -721,7 +1017,7 @@ QStringList GeneratorFashionTaxonomy::buildInitialJobIds() const
 {
     QStringList ids;
     for (const ComboSpec &spec : comboSpecs()) {
-        ids << QStringLiteral("combo/") + spec.key + QStringLiteral("/0");
+        ids << QStringLiteral("combo/") + spec.key + roundSuffix() + QStringLiteral("/0");
     }
     return ids;
 }
@@ -833,6 +1129,9 @@ void GeneratorFashionTaxonomy::processReply(const QString &jobId, const QJsonObj
              << (pendingCount() - 1) << "pending";
 
     if (batch.size() >= MAX_CANDIDATES_PER_JOB) {
-        addDiscoveredJob(QStringLiteral("combo/") + spec->key + QLatin1Char('/') + QString::number(page + 1));
+        // Re-derive the key from the incoming job id (NOT spec->key) so the
+        // continuation keeps the same round suffix as the job it extends.
+        addDiscoveredJob(QStringLiteral("combo/") + comboKeyFromJobId(jobId)
+                         + QLatin1Char('/') + QString::number(page + 1));
     }
 }

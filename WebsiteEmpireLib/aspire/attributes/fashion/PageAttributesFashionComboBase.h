@@ -22,7 +22,7 @@
 //                       invariant).
 //   • ID_MSV / ID_PEAK_SEASON_START / ID_PEAK_SEASON_END — AI-estimated
 //                       search-volume tier and peak months; optional since
-//                       most of the 78,000+ combinations have no directly
+//                       most of the 1.3M+ combinations have no directly
 //                       researched keyword data.
 //   • ID_SOURCE_QUERY — the literal example query from the study, when this
 //                       row corresponds to one of the ~120 researched

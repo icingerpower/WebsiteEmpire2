@@ -6,10 +6,11 @@
 // Generator that builds a fashion outfit-combination database for
 // programmatic SEO, covering the 8 taxonomy dimensions (product type,
 // color, season, event, style/aesthetic, fit/silhouette, material/pattern,
-// demographic) and the 9 combination tables derived from the study's 12
+// demographic) and 19 combination tables: 9 derived from the study's 12
 // query formulas (several formulas share an identical slot signature and
 // are folded into one table, distinguished by their formula id — see
-// PageAttributesFashionCombo* headers).
+// PageAttributesFashionCombo* headers) plus 10 round-2 expansion tables
+// derived from a Google-Ads-volume keyword research pass.
 //
 // Unlike GeneratorHealth, the 11 vocabulary tables are NOT discovered via
 // AI jobs: the study enumerates a small, closed set of values per dimension
@@ -42,6 +43,18 @@ public:
     // assess exactly this many, a continuation job for the next page is
     // discovered automatically.
     static const int MAX_CANDIDATES_PER_JOB;
+
+    // Vocabulary round. Pages are fixed slices of the cross product and
+    // vocabulary values are consumed in alphabetical order, so ANY change to
+    // the seed lists re-maps every page of every combo table — an existing
+    // .ini's Done pages would then describe the wrong slices. Whenever the
+    // seed vocabulary changes after a round has been dispatched, bump this
+    // constant: job ids gain a ".r<round>" key suffix (e.g.
+    // "combo/color_product.r2/0"), so the expanded space is re-walked
+    // completely under fresh ids while the previous round's Done state stays
+    // dormant. rowAlreadyRecorded() skips rows recorded in earlier rounds,
+    // so a re-walk only costs re-assessment, never duplicates.
+    static const int VOCAB_ROUND;
 
     explicit GeneratorFashionTaxonomy(const QDir &workingDir = QDir(), QObject *parent = nullptr);
 

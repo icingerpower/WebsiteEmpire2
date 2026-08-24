@@ -8,7 +8,8 @@ DECLARE_PAGE_ATTRIBUTES(PageAttributesFashionComboColorColor);
 const QString PageAttributesFashionComboColorColor::ID_COLOR_A = QStringLiteral("ccc_color_a");
 const QString PageAttributesFashionComboColorColor::ID_COLOR_B = QStringLiteral("ccc_color_b");
 
-const QString PageAttributesFashionComboColorColor::FORMULA_COLOR_PAIRING = QStringLiteral("color_pairing");
+const QString PageAttributesFashionComboColorColor::FORMULA_COLOR_PAIRING      = QStringLiteral("color_pairing");
+const QString PageAttributesFashionComboColorColor::FORMULA_DOES_COLOR_GO_WITH = QStringLiteral("does_color_go_with");
 
 QString PageAttributesFashionComboColorColor::getId() const
 {
@@ -22,12 +23,12 @@ QString PageAttributesFashionComboColorColor::getName() const
 
 QString PageAttributesFashionComboColorColor::getDescription() const
 {
-    return QObject::tr("{color} and {color} outfit combination");
+    return QObject::tr("{color} and {color} outfit combination / does {color} go with {color}");
 }
 
 QStringList PageAttributesFashionComboColorColor::allowedFormulaIds() const
 {
-    return {FORMULA_COLOR_PAIRING};
+    return {FORMULA_COLOR_PAIRING, FORMULA_DOES_COLOR_GO_WITH};
 }
 
 QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesFashionComboColorColor::getAttributes() const
