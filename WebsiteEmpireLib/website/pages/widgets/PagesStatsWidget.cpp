@@ -1,6 +1,8 @@
 #include "PagesStatsWidget.h"
 #include "ui_PagesStatsWidget.h"
 
+#include "website/perf/StatsDbMerger.h"
+
 #include <QDateTime>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -32,7 +34,8 @@ PagesStatsWidget::PagesStatsWidget(const QDir &workingDir, QWidget *parent)
         "  id         INTEGER PRIMARY KEY AUTOINCREMENT,"
         "  page_id    TEXT    NOT NULL,"
         "  display_at TEXT    NOT NULL,"
-        "  clicked_at TEXT"
+        "  clicked_at TEXT,"
+        "  is_bot     INTEGER NOT NULL DEFAULT 0 CHECK(is_bot IN (0,1))"
         ")"));
     q.exec(QStringLiteral(
         "CREATE TABLE IF NOT EXISTS page_session ("
@@ -40,11 +43,17 @@ PagesStatsWidget::PagesStatsWidget(const QDir &workingDir, QWidget *parent)
         "  page_id              TEXT    NOT NULL,"
         "  scrolling_percentage INTEGER NOT NULL CHECK(scrolling_percentage BETWEEN 0 AND 100),"
         "  time_on_page         INTEGER NOT NULL,"
-        "  is_final_page        INTEGER NOT NULL CHECK(is_final_page IN (0,1))"
+        "  is_final_page        INTEGER NOT NULL CHECK(is_final_page IN (0,1)),"
+        "  is_bot               INTEGER NOT NULL DEFAULT 0 CHECK(is_bot IN (0,1))"
         ")"));
+    // Migrate a stats.db created before bot tracking (the "Exclude bot
+    // traffic" filter needs the column to exist for its WHERE clause).
+    QSqlDatabase existingDb = QSqlDatabase::database(m_connectionName);
+    StatsDbMerger::ensureIsBotColumns(existingDb);
 
     ui->tableView->setModel(m_model);
     connect(ui->btnRefresh, &QPushButton::clicked, this, &PagesStatsWidget::refresh);
+    connect(ui->checkExcludeBots, &QCheckBox::toggled, this, &PagesStatsWidget::refresh);
 
     refresh();
 }
@@ -61,20 +70,35 @@ PagesStatsWidget::~PagesStatsWidget()
 
 void PagesStatsWidget::refresh()
 {
-    // One SQL query aggregates both tables in a single pass.
+    // Bot rows (is_bot = 1, classified from the User-Agent by the server) are
+    // excluded by default; rows recorded before bot tracking are unclassified
+    // (is_bot = 0) and always count as human.
+    const QString botFilter = ui->checkExcludeBots->isChecked()
+                                  ? QStringLiteral(" WHERE is_bot = 0")
+                                  : QString();
+
+    // Aggregate each table SEPARATELY before joining.  Joining the raw rows
+    // and then grouping (the obvious single-pass query) fans out: every
+    // display row pairs with every session row of the same page, so Displays
+    // becomes displays × sessions and the averages get display-weighted.
     m_model->setQuery(
         QStringLiteral(
             "SELECT"
-            "  d.page_id                                    AS Permalink,"
-            "  COUNT(d.id)                                  AS Displays,"
-            "  SUM(CASE WHEN d.clicked_at IS NOT NULL THEN 1 ELSE 0 END) AS Clicks,"
-            "  ROUND(100.0 * SUM(CASE WHEN d.clicked_at IS NOT NULL THEN 1 ELSE 0 END)"
-            "        / MAX(COUNT(d.id), 1), 1)              AS CTR,"
-            "  COALESCE(ROUND(AVG(s.scrolling_percentage),1), 0) AS AvgScroll,"
-            "  COALESCE(ROUND(AVG(s.time_on_page),1), 0)    AS AvgTime"
-            " FROM displays_clicks d"
-            " LEFT JOIN page_session s ON s.page_id = d.page_id"
-            " GROUP BY d.page_id"
+            "  d.page_id             AS Permalink,"
+            "  d.displays            AS Displays,"
+            "  d.clicks              AS Clicks,"
+            "  ROUND(100.0 * d.clicks / MAX(d.displays, 1), 1) AS CTR,"
+            "  COALESCE(s.avg_scroll, 0) AS AvgScroll,"
+            "  COALESCE(s.avg_time, 0)   AS AvgTime"
+            " FROM (SELECT page_id,"
+            "              COUNT(*) AS displays,"
+            "              SUM(CASE WHEN clicked_at IS NOT NULL THEN 1 ELSE 0 END) AS clicks"
+            "       FROM displays_clicks") + botFilter + QStringLiteral(" GROUP BY page_id) d"
+            " LEFT JOIN (SELECT page_id,"
+            "                   ROUND(AVG(scrolling_percentage), 1) AS avg_scroll,"
+            "                   ROUND(AVG(time_on_page), 1)         AS avg_time"
+            "            FROM page_session") + botFilter + QStringLiteral(" GROUP BY page_id) s"
+            "   ON s.page_id = d.page_id"
             " ORDER BY Displays DESC"),
         QSqlDatabase::database(m_connectionName));
 

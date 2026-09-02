@@ -49,6 +49,20 @@ target_include_directories(Test_StaticServe_StatsWriter
 
 add_test(NAME Test_StaticServe_StatsWriter COMMAND Test_StaticServe_StatsWriter)
 
+add_executable(Test_StaticServe_BotDetector
+    test_bot_detector.cpp
+)
+
+target_link_libraries(Test_StaticServe_BotDetector
+    PRIVATE Drogon::Drogon StaticWebsiteServeLib
+)
+
+target_include_directories(Test_StaticServe_BotDetector
+    PRIVATE ../StaticWebsiteServeLib
+)
+
+add_test(NAME Test_StaticServe_BotDetector COMMAND Test_StaticServe_BotDetector)
+
 add_executable(Test_StaticServe_VariantSelector
     test_variant_selector.cpp
 )

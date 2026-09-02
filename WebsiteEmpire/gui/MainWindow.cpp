@@ -69,6 +69,7 @@ void MainWindow::_init()
     ui->tabGeneration->setup(workingDir, m_engine.data(), m_settingsTable.data());
     ui->tabUpdate->setup(workingDir, m_engine.data(), m_settingsTable.data());
     ui->tabTheme->setTheme(m_theme.data());
+    ui->tabPageStats->setWorkingDir(workingDir);
     ui->tabSettings->setWorkingDir(workingDir);
     ui->tabSettings->setTheme(m_theme.data());
     ui->tabTranslations->setup(workingDir, m_engine.data(), m_theme.data());

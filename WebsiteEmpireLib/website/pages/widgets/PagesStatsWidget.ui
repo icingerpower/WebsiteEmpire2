@@ -28,6 +28,19 @@
    <item>
     <layout class="QHBoxLayout" name="bottomLayout">
      <item>
+      <widget class="QCheckBox" name="checkExcludeBots">
+       <property name="text">
+        <string>Exclude bot traffic</string>
+       </property>
+       <property name="toolTip">
+        <string>Hide displays and sessions recorded with a crawler User-Agent (Googlebot, Bingbot, headless browsers…). Rows recorded before bot tracking was deployed are unclassified and always count as human.</string>
+       </property>
+       <property name="checked">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QLabel" name="lblRefreshed">
        <property name="text">
         <string/>

@@ -6,4 +6,6 @@ set(PERF_FILES
     ${CMAKE_CURRENT_LIST_DIR}/GscDataSource.cpp
     ${CMAKE_CURRENT_LIST_DIR}/StatsDbDataSource.h
     ${CMAKE_CURRENT_LIST_DIR}/StatsDbDataSource.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/StatsDbMerger.h
+    ${CMAKE_CURRENT_LIST_DIR}/StatsDbMerger.cpp
 )

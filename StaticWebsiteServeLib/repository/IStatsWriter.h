@@ -18,10 +18,13 @@ public:
 
     /**
      * Inserts a new row in displays_clicks for a page view.
+     * isBot marks crawler traffic (classified from the User-Agent by
+     * BotDetector) so readers can exclude it.
      * Returns the rowid so the caller can later record a click against it.
      */
     virtual int64_t recordDisplay(const std::string &pageId,
-                                  const std::string &displayAt) = 0;
+                                  const std::string &displayAt,
+                                  bool               isBot) = 0;
 
     /**
      * Sets clicked_at on the displays_clicks row identified by displayRowId.
@@ -34,9 +37,11 @@ public:
      * Inserts a row in page_session.
      * scrollingPercentage must be 0–100; timeOnPage is in seconds.
      * isFinalPage is true when the user left the site (browser unload without internal navigation).
+     * isBot marks crawler traffic (classified from the User-Agent by BotDetector).
      */
     virtual void recordSession(const std::string &pageId,
                                int                scrollingPercentage,
                                int                timeOnPage,
-                               bool               isFinalPage) = 0;
+                               bool               isFinalPage,
+                               bool               isBot) = 0;
 };

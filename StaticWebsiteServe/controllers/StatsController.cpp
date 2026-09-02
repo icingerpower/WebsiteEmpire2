@@ -1,5 +1,7 @@
 #include "StatsController.h"
 
+#include "BotDetector.h"
+
 #include <drogon/HttpResponse.h>
 #include <trantor/utils/Date.h>
 
@@ -23,7 +25,8 @@ void StatsController::recordDisplay(const drogon::HttpRequestPtr                
 
     const std::string pageId    = (*json)["page_id"].asString();
     const std::string displayAt = trantor::Date::now().toFormattedString(false);
-    const int64_t     rowId     = s_statsWriter->recordDisplay(pageId, displayAt);
+    const bool        isBot     = BotDetector::isBot(req->getHeader("user-agent"));
+    const int64_t     rowId     = s_statsWriter->recordDisplay(pageId, displayAt, isBot);
 
     Json::Value result;
     result["id"] = rowId;
@@ -64,8 +67,9 @@ void StatsController::recordSession(const drogon::HttpRequestPtr                
     const int         scrollingPercentage = (*json)["scrolling_percentage"].asInt();
     const int         timeOnPage          = (*json)["time_on_page"].asInt();
     const bool        isFinalPage         = (*json)["is_final_page"].asBool();
+    const bool        isBot               = BotDetector::isBot(req->getHeader("user-agent"));
 
-    s_statsWriter->recordSession(pageId, scrollingPercentage, timeOnPage, isFinalPage);
+    s_statsWriter->recordSession(pageId, scrollingPercentage, timeOnPage, isFinalPage, isBot);
 
     auto resp = drogon::HttpResponse::newHttpResponse();
     resp->setStatusCode(drogon::k204NoContent);

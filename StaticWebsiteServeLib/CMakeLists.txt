@@ -25,6 +25,7 @@ add_library(StaticWebsiteServeLib STATIC
     repository/RedirectRepositorySQLite.cpp
     repository/ImageRepositorySQLite.cpp
     VariantSelector.cpp
+    BotDetector.cpp
 )
 
 target_include_directories(StaticWebsiteServeLib

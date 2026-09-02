@@ -55,7 +55,7 @@ DROGON_TEST(test_statswriter_record_display_inserts_row)
 {
     StatsFixture f("test_sw_display_insert.db");
 
-    const int64_t rowId = f.writer.recordDisplay("page-abc", "2026-04-01T10:00:00Z");
+    const int64_t rowId = f.writer.recordDisplay("page-abc", "2026-04-01T10:00:00Z", false);
 
     SQLite::Statement q(f.db.database(),
         "SELECT COUNT(*) FROM displays_clicks WHERE id = ?");
@@ -68,7 +68,7 @@ DROGON_TEST(test_statswriter_record_display_stores_page_id)
 {
     StatsFixture f("test_sw_display_page_id.db");
 
-    const int64_t rowId = f.writer.recordDisplay("my-page", "2026-04-01T10:00:00Z");
+    const int64_t rowId = f.writer.recordDisplay("my-page", "2026-04-01T10:00:00Z", false);
 
     CHECK(displayColumn(f.db.database(), rowId, "page_id") == std::string("my-page"));
 }
@@ -78,7 +78,7 @@ DROGON_TEST(test_statswriter_record_display_stores_display_at)
     StatsFixture f("test_sw_display_at.db");
     const std::string ts = "2026-04-01T10:00:00Z";
 
-    const int64_t rowId = f.writer.recordDisplay("p", ts);
+    const int64_t rowId = f.writer.recordDisplay("p", ts, false);
 
     CHECK(displayColumn(f.db.database(), rowId, "display_at") == ts);
 }
@@ -87,7 +87,7 @@ DROGON_TEST(test_statswriter_record_display_clicked_at_initially_null)
 {
     StatsFixture f("test_sw_display_null_click.db");
 
-    const int64_t rowId = f.writer.recordDisplay("p", "2026-04-01T10:00:00Z");
+    const int64_t rowId = f.writer.recordDisplay("p", "2026-04-01T10:00:00Z", false);
 
     SQLite::Statement q(f.db.database(),
         "SELECT clicked_at FROM displays_clicks WHERE id = ?");
@@ -100,8 +100,8 @@ DROGON_TEST(test_statswriter_record_display_returns_distinct_rowids)
 {
     StatsFixture f("test_sw_display_distinct_ids.db");
 
-    const int64_t id1 = f.writer.recordDisplay("p", "2026-04-01T10:00:00Z");
-    const int64_t id2 = f.writer.recordDisplay("p", "2026-04-01T10:01:00Z");
+    const int64_t id1 = f.writer.recordDisplay("p", "2026-04-01T10:00:00Z", false);
+    const int64_t id2 = f.writer.recordDisplay("p", "2026-04-01T10:01:00Z", false);
 
     CHECK(id1 != id2);
 }
@@ -113,7 +113,7 @@ DROGON_TEST(test_statswriter_record_display_returns_distinct_rowids)
 DROGON_TEST(test_statswriter_record_click_sets_clicked_at)
 {
     StatsFixture f("test_sw_click_sets.db");
-    const int64_t rowId = f.writer.recordDisplay("p", "2026-04-01T10:00:00Z");
+    const int64_t rowId = f.writer.recordDisplay("p", "2026-04-01T10:00:00Z", false);
     const std::string clickTs = "2026-04-01T10:00:05Z";
 
     f.writer.recordClick(rowId, clickTs);
@@ -125,7 +125,7 @@ DROGON_TEST(test_statswriter_record_click_does_not_touch_display_at)
 {
     StatsFixture f("test_sw_click_keeps_display_at.db");
     const std::string displayTs = "2026-04-01T10:00:00Z";
-    const int64_t rowId = f.writer.recordDisplay("p", displayTs);
+    const int64_t rowId = f.writer.recordDisplay("p", displayTs, false);
 
     f.writer.recordClick(rowId, "2026-04-01T10:00:05Z");
 
@@ -144,8 +144,8 @@ DROGON_TEST(test_statswriter_record_click_unknown_id_is_noop)
 DROGON_TEST(test_statswriter_record_click_only_updates_target_row)
 {
     StatsFixture f("test_sw_click_target_only.db");
-    const int64_t id1 = f.writer.recordDisplay("p", "2026-04-01T10:00:00Z");
-    const int64_t id2 = f.writer.recordDisplay("p", "2026-04-01T10:01:00Z");
+    const int64_t id1 = f.writer.recordDisplay("p", "2026-04-01T10:00:00Z", false);
+    const int64_t id2 = f.writer.recordDisplay("p", "2026-04-01T10:01:00Z", false);
 
     f.writer.recordClick(id1, "2026-04-01T10:00:05Z");
 
@@ -165,7 +165,7 @@ DROGON_TEST(test_statswriter_record_session_inserts_row)
 {
     StatsFixture f("test_sw_session_insert.db");
 
-    f.writer.recordSession("page-xyz", 75, 30, false);
+    f.writer.recordSession("page-xyz", 75, 30, false, false);
 
     CHECK(sessionCount(f.db.database()) == 1);
 }
@@ -174,7 +174,7 @@ DROGON_TEST(test_statswriter_record_session_stores_page_id)
 {
     StatsFixture f("test_sw_session_page_id.db");
 
-    f.writer.recordSession("my-page", 50, 10, false);
+    f.writer.recordSession("my-page", 50, 10, false, false);
 
     SQLite::Statement q(f.db.database(),
         "SELECT page_id FROM page_session LIMIT 1");
@@ -186,7 +186,7 @@ DROGON_TEST(test_statswriter_record_session_stores_scrolling_percentage)
 {
     StatsFixture f("test_sw_session_scroll.db");
 
-    f.writer.recordSession("p", 42, 10, false);
+    f.writer.recordSession("p", 42, 10, false, false);
 
     SQLite::Statement q(f.db.database(),
         "SELECT scrolling_percentage FROM page_session LIMIT 1");
@@ -198,7 +198,7 @@ DROGON_TEST(test_statswriter_record_session_stores_time_on_page)
 {
     StatsFixture f("test_sw_session_time.db");
 
-    f.writer.recordSession("p", 10, 120, false);
+    f.writer.recordSession("p", 10, 120, false, false);
 
     SQLite::Statement q(f.db.database(),
         "SELECT time_on_page FROM page_session LIMIT 1");
@@ -210,7 +210,7 @@ DROGON_TEST(test_statswriter_record_session_stores_is_final_page_true)
 {
     StatsFixture f("test_sw_session_final_true.db");
 
-    f.writer.recordSession("p", 100, 60, true);
+    f.writer.recordSession("p", 100, 60, true, false);
 
     SQLite::Statement q(f.db.database(),
         "SELECT is_final_page FROM page_session LIMIT 1");
@@ -222,7 +222,7 @@ DROGON_TEST(test_statswriter_record_session_stores_is_final_page_false)
 {
     StatsFixture f("test_sw_session_final_false.db");
 
-    f.writer.recordSession("p", 0, 5, false);
+    f.writer.recordSession("p", 0, 5, false, false);
 
     SQLite::Statement q(f.db.database(),
         "SELECT is_final_page FROM page_session LIMIT 1");
@@ -234,9 +234,9 @@ DROGON_TEST(test_statswriter_record_session_multiple_rows)
 {
     StatsFixture f("test_sw_session_multi.db");
 
-    f.writer.recordSession("p1", 10, 5,  false);
-    f.writer.recordSession("p2", 90, 60, true);
-    f.writer.recordSession("p1", 50, 30, true);
+    f.writer.recordSession("p1", 10, 5,  false, false);
+    f.writer.recordSession("p2", 90, 60, true, false);
+    f.writer.recordSession("p1", 50, 30, true, false);
 
     CHECK(sessionCount(f.db.database()) == 3);
 }
@@ -246,7 +246,7 @@ DROGON_TEST(test_statswriter_record_session_scrolling_boundary_zero)
     StatsFixture f("test_sw_session_scroll_zero.db");
 
     // CHECK constraint: 0 is valid.
-    f.writer.recordSession("p", 0, 1, false);
+    f.writer.recordSession("p", 0, 1, false, false);
 
     CHECK(sessionCount(f.db.database()) == 1);
 }
@@ -256,9 +256,108 @@ DROGON_TEST(test_statswriter_record_session_scrolling_boundary_hundred)
     StatsFixture f("test_sw_session_scroll_hundred.db");
 
     // CHECK constraint: 100 is valid.
-    f.writer.recordSession("p", 100, 1, false);
+    f.writer.recordSession("p", 100, 1, false, false);
 
     CHECK(sessionCount(f.db.database()) == 1);
+}
+
+// ---------------------------------------------------------------------------
+// is_bot
+// ---------------------------------------------------------------------------
+
+DROGON_TEST(test_statswriter_record_display_stores_is_bot_true)
+{
+    StatsFixture f("test_sw_display_bot_true.db");
+
+    const int64_t rowId = f.writer.recordDisplay("p", "2026-04-01T10:00:00Z", true);
+
+    SQLite::Statement q(f.db.database(),
+        "SELECT is_bot FROM displays_clicks WHERE id = ?");
+    q.bind(1, rowId);
+    q.executeStep();
+    CHECK(q.getColumn(0).getInt() == 1);
+}
+
+DROGON_TEST(test_statswriter_record_display_stores_is_bot_false)
+{
+    StatsFixture f("test_sw_display_bot_false.db");
+
+    const int64_t rowId = f.writer.recordDisplay("p", "2026-04-01T10:00:00Z", false);
+
+    SQLite::Statement q(f.db.database(),
+        "SELECT is_bot FROM displays_clicks WHERE id = ?");
+    q.bind(1, rowId);
+    q.executeStep();
+    CHECK(q.getColumn(0).getInt() == 0);
+}
+
+DROGON_TEST(test_statswriter_record_session_stores_is_bot_true)
+{
+    StatsFixture f("test_sw_session_bot_true.db");
+
+    f.writer.recordSession("p", 50, 10, false, true);
+
+    SQLite::Statement q(f.db.database(),
+        "SELECT is_bot FROM page_session LIMIT 1");
+    q.executeStep();
+    CHECK(q.getColumn(0).getInt() == 1);
+}
+
+DROGON_TEST(test_statswriter_record_session_stores_is_bot_false)
+{
+    StatsFixture f("test_sw_session_bot_false.db");
+
+    f.writer.recordSession("p", 50, 10, false, false);
+
+    SQLite::Statement q(f.db.database(),
+        "SELECT is_bot FROM page_session LIMIT 1");
+    q.executeStep();
+    CHECK(q.getColumn(0).getInt() == 0);
+}
+
+// ---------------------------------------------------------------------------
+// is_bot migration of pre-bot-tracking databases
+// ---------------------------------------------------------------------------
+
+DROGON_TEST(test_statsdb_migration_adds_is_bot_to_old_file)
+{
+    const std::string path =
+        (std::filesystem::temp_directory_path() / "test_sw_migration.db").string();
+    std::filesystem::remove(path);
+
+    // Create a stats.db with the pre-bot-tracking schema (no is_bot).
+    {
+        SQLite::Database old(path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
+        old.exec("CREATE TABLE displays_clicks ("
+                 "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                 "  page_id TEXT NOT NULL,"
+                 "  display_at TEXT NOT NULL,"
+                 "  clicked_at TEXT)");
+        old.exec("CREATE TABLE page_session ("
+                 "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                 "  page_id TEXT NOT NULL,"
+                 "  scrolling_percentage INTEGER NOT NULL,"
+                 "  time_on_page INTEGER NOT NULL,"
+                 "  is_final_page INTEGER NOT NULL)");
+        old.exec("INSERT INTO displays_clicks (page_id, display_at) VALUES ('/p', 't')");
+    }
+
+    // Re-opening through StatsDb must add the column; old rows default to 0.
+    StatsDb db(path);
+    SQLite::Statement q(db.database(),
+        "SELECT is_bot FROM displays_clicks LIMIT 1");
+    q.executeStep();
+    CHECK(q.getColumn(0).getInt() == 0);
+
+    StatsWriterSQLite writer(db);
+    const int64_t rowId = writer.recordDisplay("/p2", "t2", true);
+    SQLite::Statement q2(db.database(),
+        "SELECT is_bot FROM displays_clicks WHERE id = ?");
+    q2.bind(1, rowId);
+    q2.executeStep();
+    CHECK(q2.getColumn(0).getInt() == 1);
+
+    std::filesystem::remove(path);
 }
 
 int main(int argc, char *argv[])

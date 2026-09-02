@@ -3,6 +3,8 @@
 
 #include "../dialogs/DialogEditHosts.h"
 #include "../dialogs/DialogShowCommand.h"
+#include "../dialogs/DialogTransferLog.h"
+#include "website/perf/StatsDbMerger.h"
 #include "website/AbstractEngine.h"
 #include "website/HostTable.h"
 #include "website/WebsiteSettingsTable.h"
@@ -23,6 +25,8 @@
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QDir>
+#include <QEventLoop>
+#include <QTimer>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -587,25 +591,98 @@ void PaneDomains::download()
         return;
     }
 
-    const QString localStatsDb = m_workingDir.filePath(QStringLiteral("stats.db"));
+    // Each Drogon instance runs inside deploy/<lang>/ on the server and writes
+    // its own stats.db there, so there is one remote file per host row (per
+    // language).  Pull each into a scratch folder, then rebuild the single
+    // local stats.db that all consumers read (PagesStatsWidget,
+    // StatsDbDataSource, PageBlocHubGrid, CategoryHubSyncer) by merging them —
+    // the old code rsynced every language onto the same local file, so only
+    // the last language survived.
+    DialogTransferLog dialog(tr("Download Statistics"), this);
+    dialog.setTotalSteps(hosts.size() + 1); // +1 for the merge step
+    dialog.show();
+
+    const QString scratchName = QStringLiteral("stats_download");
+    QDir scratchDir(m_workingDir.filePath(scratchName));
+    scratchDir.removeRecursively();
+    if (!m_workingDir.mkpath(scratchName)) {
+        dialog.appendLine(tr("Cannot create scratch folder %1 — aborting.")
+                              .arg(scratchDir.absolutePath()));
+        dialog.markFinished(false);
+        dialog.exec();
+        return;
+    }
+
+    QStringList downloadedDbs;
     bool anyError = false;
+    int  hostIndex = 0;
 
     for (const auto &host : std::as_const(hosts)) {
+        ++hostIndex;
+        const QString &lang  = QFileInfo(host.hostFolder).fileName();
+        const QString  label = host.name + QStringLiteral(" [") + lang + QStringLiteral("]");
+        const QString  remotePath = host.hostFolder + QStringLiteral("/stats.db");
+
+        // Best effort: fold rows still sitting in stats.db-wal into stats.db
+        // before pulling it — rsync only transfers the main file.  Fails
+        // harmlessly (missing folder, missing sqlite3) for undeployed langs.
+        dialog.appendLine(tr("%1: checkpointing WAL on the server…").arg(label));
+        QString checkpointError;
+        _runSshCommand(host,
+                       QStringLiteral("sqlite3 '") + remotePath
+                           + QStringLiteral("' 'PRAGMA wal_checkpoint(TRUNCATE);'"),
+                       checkpointError);
+
+        const QString localFile = scratchDir.filePath(
+            QStringLiteral("stats-%1-%2.db").arg(QString::number(hostIndex), lang));
         const QString remoteStats = host.username + QStringLiteral("@") + host.url
-                                    + QStringLiteral(":") + host.hostFolder
-                                    + QStringLiteral("/stats.db");
-        QString errorOutput;
-        if (!_runRsync(host, remoteStats, localStatsDb, errorOutput)) {
-            QMessageBox::critical(this, tr("Download"),
-                                  tr("Failed to download stats.db from %1:\n%2")
-                                      .arg(host.name, errorOutput));
+                                    + QStringLiteral(":") + remotePath;
+
+        dialog.appendLine(tr("%1: downloading %2…").arg(label, remotePath));
+        QString authMode;
+        QString output;
+        int     exitCode = -1;
+        if (!_execRsync(host, remoteStats, localFile, authMode, output, exitCode, true)) {
+            dialog.appendLine(tr("%1: rsync timed out. Auth: %2").arg(label, authMode));
+            anyError = true;
+        } else if (exitCode == 0) {
+            const QFileInfo downloadedInfo(localFile);
+            dialog.appendLine(tr("%1: OK (%2 bytes)").arg(label).arg(downloadedInfo.size()));
+            downloadedDbs.append(localFile);
+        } else if (output.contains(QStringLiteral("No such file or directory"))) {
+            dialog.appendLine(tr("%1: skipped — no stats.db on the server "
+                                 "(language not deployed yet).").arg(label));
+        } else {
+            dialog.appendLine(tr("%1: FAILED (rsync exit code %2)").arg(label).arg(exitCode));
+            dialog.appendLine(tr("Auth: %1\n%2").arg(authMode, output));
             anyError = true;
         }
+        dialog.advanceStep();
     }
 
-    if (!anyError) {
-        QMessageBox::information(this, tr("Download"), tr("Download completed."));
+    if (downloadedDbs.isEmpty()) {
+        dialog.appendLine(tr("Nothing was downloaded — the local stats.db was left untouched."));
+        dialog.markFinished(!anyError);
+        dialog.exec();
+        return;
     }
+
+    dialog.appendLine(tr("Merging %n downloaded database(s) into stats.db…",
+                         nullptr, static_cast<int>(downloadedDbs.size())));
+    try {
+        const StatsDbMerger::MergeResult merged = StatsDbMerger::merge(
+            downloadedDbs, m_workingDir.filePath(QStringLiteral("stats.db")));
+        dialog.appendLine(tr("Merged %1 display/click rows and %2 session rows.")
+                              .arg(merged.displaysClicks)
+                              .arg(merged.pageSessions));
+        scratchDir.removeRecursively();
+    } catch (const ExceptionWithTitleText &ex) {
+        dialog.appendLine(ex.errorTitle() + QStringLiteral(": ") + ex.errorText());
+        anyError = true;
+    }
+    dialog.advanceStep();
+    dialog.markFinished(!anyError);
+    dialog.exec();
 }
 
 void PaneDomains::viewCommands()
@@ -1292,10 +1369,27 @@ bool PaneDomains::_verifyRemoteDbIntegrity(const HostInfo &host, const QString &
 bool PaneDomains::_runRsync(const HostInfo &host, const QString &src, const QString &dst,
                              QString &errorOutput) const
 {
+    QString authMode;
+    QString output;
+    int     exitCode = -1;
+    if (!_execRsync(host, src, dst, authMode, output, exitCode, false)) {
+        errorOutput = tr("rsync timed out. Auth: %1").arg(authMode);
+        return false;
+    }
+    if (exitCode != 0) {
+        errorOutput = tr("Auth: %1\n%2").arg(authMode, output);
+        return false;
+    }
+    return true;
+}
+
+bool PaneDomains::_execRsync(const HostInfo &host, const QString &src, const QString &dst,
+                              QString &authMode, QString &output, int &exitCode,
+                              bool pumpEvents) const
+{
     QProcess process;
     process.setProcessChannelMode(QProcess::MergedChannels);
 
-    QString authMode;
     if (host.password.isEmpty()) {
         authMode = QStringLiteral("SSH key (no password in host table)");
         const QString sshCmd = QStringLiteral("ssh -p ") + host.port
@@ -1326,14 +1420,33 @@ bool PaneDomains::_runRsync(const HostInfo &host, const QString &src, const QStr
         });
     }
 
-    if (!process.waitForFinished(120000)) {
-        errorOutput = tr("rsync timed out. Auth: %1").arg(authMode);
+    bool finished = false;
+    if (pumpEvents) {
+        // Wait via the event loop so the caller's progress dialog stays
+        // responsive (repaints, log scrolling) instead of freezing the GUI.
+        QEventLoop loop;
+        QTimer     timeout;
+        timeout.setSingleShot(true);
+        connect(&process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                &loop, &QEventLoop::quit);
+        connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+        timeout.start(120000);
+        if (process.state() != QProcess::NotRunning) {
+            loop.exec();
+        }
+        finished = (process.state() == QProcess::NotRunning);
+        if (!finished) {
+            process.kill();
+            process.waitForFinished(5000);
+        }
+    } else {
+        finished = process.waitForFinished(120000);
+    }
+
+    if (!finished) {
         return false;
     }
-    if (process.exitCode() != 0) {
-        errorOutput = tr("Auth: %1\n%2").arg(authMode,
-                         QString::fromUtf8(process.readAll()));
-        return false;
-    }
+    exitCode = process.exitCode();
+    output   = QString::fromUtf8(process.readAll());
     return true;
 }

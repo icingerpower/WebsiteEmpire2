@@ -124,6 +124,23 @@ private:
                    QString &errorOutput) const;
 
     /**
+     * Lower-level rsync runner shared by _runRsync() and download().
+     * Returns false only on timeout (120 s); otherwise exitCode and the merged
+     * stdout/stderr output tell the caller what happened — rsync exit code 23
+     * with "No such file or directory" in the output means the remote file
+     * does not exist (e.g. a language that was never deployed), which
+     * download() treats as a skip rather than an error.
+     *
+     * When pumpEvents is true the wait runs through a QEventLoop instead of
+     * QProcess::waitForFinished(), so an application-modal progress dialog
+     * stays responsive; callers must guard against re-entrancy (the download
+     * flow does so via the dialog's application modality).
+     */
+    bool _execRsync(const HostInfo &host, const QString &src, const QString &dst,
+                    QString &authMode, QString &output, int &exitCode,
+                    bool pumpEvents) const;
+
+    /**
      * Runs a single command on the remote host over SSH.
      * Uses sshpass when host.password is set, direct SSH otherwise.
      * Returns true on success; on failure errorOutput is populated.

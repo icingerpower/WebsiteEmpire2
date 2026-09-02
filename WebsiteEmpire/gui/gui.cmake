@@ -74,4 +74,7 @@ set(GUI_FILES
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPreviewPage.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPreviewPage.h
     ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogPreviewPage.ui
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogTransferLog.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogTransferLog.h
+    ${CMAKE_CURRENT_LIST_DIR}/dialogs/DialogTransferLog.ui
 )

@@ -13,7 +13,8 @@ public:
     explicit StatsWriterSQLite(StatsDb &statsDb);
 
     int64_t recordDisplay(const std::string &pageId,
-                          const std::string &displayAt) override;
+                          const std::string &displayAt,
+                          bool               isBot) override;
 
     void recordClick(int64_t            displayRowId,
                      const std::string &clickedAt) override;
@@ -21,7 +22,8 @@ public:
     void recordSession(const std::string &pageId,
                        int                scrollingPercentage,
                        int                timeOnPage,
-                       bool               isFinalPage) override;
+                       bool               isFinalPage,
+                       bool               isBot) override;
 
 private:
     StatsDb &m_statsDb;

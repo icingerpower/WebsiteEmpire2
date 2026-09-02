@@ -6,12 +6,14 @@ StatsWriterSQLite::StatsWriterSQLite(StatsDb &statsDb)
 }
 
 int64_t StatsWriterSQLite::recordDisplay(const std::string &pageId,
-                                          const std::string &displayAt)
+                                          const std::string &displayAt,
+                                          bool               isBot)
 {
     SQLite::Statement stmt(m_statsDb.database(),
-        "INSERT INTO displays_clicks (page_id, display_at) VALUES (?, ?)");
+        "INSERT INTO displays_clicks (page_id, display_at, is_bot) VALUES (?, ?, ?)");
     stmt.bind(1, pageId);
     stmt.bind(2, displayAt);
+    stmt.bind(3, static_cast<int>(isBot));
     stmt.exec();
     return m_statsDb.database().getLastInsertRowid();
 }
@@ -29,14 +31,16 @@ void StatsWriterSQLite::recordClick(int64_t            displayRowId,
 void StatsWriterSQLite::recordSession(const std::string &pageId,
                                        int                scrollingPercentage,
                                        int                timeOnPage,
-                                       bool               isFinalPage)
+                                       bool               isFinalPage,
+                                       bool               isBot)
 {
     SQLite::Statement stmt(m_statsDb.database(),
-        "INSERT INTO page_session (page_id, scrolling_percentage, time_on_page, is_final_page)"
-        " VALUES (?, ?, ?, ?)");
+        "INSERT INTO page_session (page_id, scrolling_percentage, time_on_page, is_final_page, is_bot)"
+        " VALUES (?, ?, ?, ?, ?)");
     stmt.bind(1, pageId);
     stmt.bind(2, scrollingPercentage);
     stmt.bind(3, timeOnPage);
     stmt.bind(4, static_cast<int>(isFinalPage));
+    stmt.bind(5, static_cast<int>(isBot));
     stmt.exec();
 }
