@@ -60,11 +60,16 @@ public:
 
     // Typed grouping of all result tables declared by a generator, keyed by
     // TableDescriptor::id, for empire-layer article generation.
-    //   primary    — exactly one entry when non-empty: one row = one article/page
+    //   primary    — 0..N entries, each INDEPENDENTLY usable as a
+    //                one-row-per-article source (most generators expose
+    //                exactly one; a generator with several independent
+    //                combination tables — e.g. GeneratorFashionTaxonomy —
+    //                may expose many, letting a generation strategy pick
+    //                which one it sources articles from)
     //   category   — 0..N controlled-vocabulary / lookup tables
     //   referredTo — 0..N child/detail tables (multiple rows may belong to one Primary row)
     struct GeneratorTables {
-        QHash<QString, TableDescriptor> primary;    // Q_ASSERT: size == 1 when non-empty
+        QHash<QString, TableDescriptor> primary;
         QHash<QString, TableDescriptor> category;
         QHash<QString, TableDescriptor> referredTo;
     };
@@ -125,9 +130,10 @@ public:
     virtual QMap<QString, AbstractPageAttributes *> createResultPageAttributes() const;
 
     // Returns table-role metadata for empire-layer article generation.
-    // Generators that produce articles must override this.  When any field is
-    // non-empty, primary must contain exactly one entry (Q_ASSERT enforced in
-    // each override — violation signals a dev correction is needed).
+    // Generators that produce articles must override this. Each override
+    // asserts its own known-good table counts (Q_ASSERT) so a future edit
+    // that silently drops or duplicates a table entry fails loudly at
+    // startup instead of surfacing as a missing GUI item.
     // Default: returns an empty GeneratorTables{} (no article tables).
     virtual GeneratorTables getTables() const;
 

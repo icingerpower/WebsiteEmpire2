@@ -31,6 +31,11 @@ QStringList PageAttributesFashionComboProductPattern::allowedFormulaIds() const
     return {FORMULA_PRINT_PATTERN_STYLING};
 }
 
+QString PageAttributesFashionComboProductPattern::composeArticleTopic(const QHash<QString, QString> &rowValues) const
+{
+    return QStringLiteral("Outfit with ") + rowValues.value(ID_PATTERN) + QLatin1Char(' ') + rowValues.value(ID_PRODUCT_TYPE);
+}
+
 QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesFashionComboProductPattern::getAttributes() const
 {
     auto attributes = PageAttributesFashionComboBase::getAttributes();

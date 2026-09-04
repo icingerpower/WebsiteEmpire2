@@ -31,6 +31,12 @@ QStringList PageAttributesFashionComboColorSeason::allowedFormulaIds() const
     return {FORMULA_COLOR_SEASON_FASHION};
 }
 
+QString PageAttributesFashionComboColorSeason::composeArticleTopic(const QHash<QString, QString> &rowValues) const
+{
+    return QStringLiteral("Best ") + rowValues.value(ID_COLOR) + QStringLiteral(" outfits for ")
+         + rowValues.value(ID_SEASON);
+}
+
 QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesFashionComboColorSeason::getAttributes() const
 {
     auto attributes = PageAttributesFashionComboBase::getAttributes();

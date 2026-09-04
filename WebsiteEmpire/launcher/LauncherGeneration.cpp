@@ -1,5 +1,6 @@
 #include "LauncherGeneration.h"
 
+#include "aspire/attributes/AbstractPageAttributes.h"
 #include "gui/panes/GenStrategyTable.h"
 #include "website/AbstractEngine.h"
 #include "website/HostTable.h"
@@ -28,6 +29,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QImage>
 #include <QPainter>
 #include <QProcess>
@@ -35,6 +37,7 @@
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QSqlRecord>
 #include <QSvgRenderer>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -248,6 +251,317 @@ static QCoro::Task<QString> runWithPolicyRetry(const QString &prompt,
 }
 
 // ---------------------------------------------------------------------------
+// Raster (non-SVG) image generation — bounded-timeout generate/review/retry.
+//
+// Unlike runClaudePrompt() above (used for content and SVG generation, where
+// waitForFinished(-1) never times out), every CLI call here is bounded and
+// kills the process on timeout.  A page can request 8-12 raster images, each
+// needing up to kRasterMaxAttempts x 2 CLI calls (generate + review) — an
+// unbounded wait on any single one of those calls would hang the whole
+// session, and the risk compounds with image count.  This is the direct fix
+// for "asking for many images leads to job not finished."
+// ---------------------------------------------------------------------------
+
+static constexpr int kRasterImageTimeoutMs = 5 * 60 * 1000; // 5 min per CLI call
+static constexpr int kRasterMaxAttempts    = 3;
+
+enum class CliCallOutcome { Ok, QuotaOrAuth, OtherError };
+
+// Pure classification of a runBoundedClaudePrompt() result — no I/O, no
+// process, unit-testable in isolation.  A quota/auth hit is not a content
+// failure: the caller must pause rather than burn a retry attempt on it, so
+// that "usage limit reached" leaves the image queue untouched for the next run.
+static CliCallOutcome classifyCliResponse(const QString &response, AbstractCli *cli)
+{
+    if (!response.startsWith(QStringLiteral("__ERROR__"))) {
+        return CliCallOutcome::Ok;
+    }
+    const CliErrorKind kind = cli->classifyError(response);
+    if (kind == CliErrorKind::QuotaExceeded || kind == CliErrorKind::AuthRequired) {
+        return CliCallOutcome::QuotaOrAuth;
+    }
+    return CliCallOutcome::OtherError;
+}
+
+// Spawns cli with preparedPrompt (caller decides whether to route through
+// cli->preparePrompt() or supply custom instructions), bounded by timeoutMs.
+// Returns raw stdout, or "__ERROR__: <detail>" on failure/timeout.  Unlike
+// runClaudePrompt(), this kills the process when it does not finish in time
+// instead of waiting forever.
+static QCoro::Task<QString> runBoundedClaudePrompt(QString      preparedPrompt,
+                                                    AbstractCli *cli,
+                                                    int          timeoutMs,
+                                                    QString      workDir)
+{
+    QString result;
+    QDir().mkpath(workDir);
+    const QString promptSubdir = workDir + QStringLiteral("/prompt");
+    QDir().mkdir(promptSubdir);
+    const QString promptPath = promptSubdir + QStringLiteral("/prompt.txt");
+    {
+        QFile f(promptPath);
+        if (!f.open(QIODevice::WriteOnly)) {
+            co_return QStringLiteral("__ERROR__: cannot write prompt file");
+        }
+        f.write(preparedPrompt.toUtf8());
+    }
+    const QString outputPath = workDir + QStringLiteral("/output.txt");
+
+    QProcess process;
+    process.setWorkingDirectory(workDir);
+    process.setProgram(cli->getExecutable());
+    cli->configurePromptProcess(&process, cli->promptArgs(), preparedPrompt, promptPath);
+    process.setStandardOutputFile(outputPath);
+
+    co_await qCoro(process).start();
+    const bool finished = co_await qCoro(process).waitForFinished(timeoutMs);
+    if (!finished && process.state() != QProcess::NotRunning) {
+        // Still running past the deadline — kill it. A stuck call must never
+        // block the rest of the page/session (see kRasterImageTimeoutMs doc above).
+        process.kill();
+        co_await qCoro(process).waitForFinished(5000);
+        co_return QStringLiteral("__ERROR__: timed out after %1s").arg(timeoutMs / 1000);
+    }
+
+    if (process.error() == QProcess::FailedToStart) {
+        co_return QStringLiteral("__ERROR__: %1 executable not found in PATH")
+                     .arg(cli->getExecutable());
+    }
+    if (process.exitCode() != 0) {
+        const QString errMsg = QString::fromUtf8(process.readAllStandardError()).trimmed();
+        QString detail = errMsg;
+        if (detail.isEmpty()) {
+            QFile f(outputPath);
+            if (f.open(QIODevice::ReadOnly)) {
+                detail = QString::fromUtf8(f.readAll()).trimmed().left(300);
+            }
+        }
+        if (detail.isEmpty()) {
+            detail = QStringLiteral("exit code %1").arg(process.exitCode());
+        }
+        co_return QStringLiteral("__ERROR__: ") + detail;
+    }
+
+    QFile f(outputPath);
+    if (f.open(QIODevice::ReadOnly)) {
+        result = QString::fromUtf8(f.readAll()).trimmed();
+    }
+    co_return result;
+}
+
+// Builds the prompt asking a CLI to open/inspect a just-generated image file
+// and grade it OK / FAIL — the raster-image equivalent of LauncherUpdate's
+// runSvgReview().  Deliberately NOT routed through cli->preparePrompt(): that
+// function's branches are tuned for "write a new file" (raster generation) vs
+// "pure text output" (article/SVG text), neither of which fits "read an
+// existing file and describe it" — the instructions here are explicit and
+// self-contained instead.
+static QString buildRasterImageReviewPrompt(const QString &imagePath,
+                                             const QString &description,
+                                             const QString &styleInstructions)
+{
+    QString prompt = QStringLiteral(
+        "You are reviewing an AI-generated image for a web article.\n\n"
+        "Open and inspect the image file at this exact path using your file-reading "
+        "or vision tool: %1\n\n"
+        "The image should show: %2\n")
+        .arg(imagePath, description);
+    if (!styleInstructions.isEmpty()) {
+        prompt += QStringLiteral("\nStyle requirements the image must follow:\n%1\n")
+                     .arg(styleInstructions);
+    }
+    prompt += QStringLiteral(
+        "\nTo respond OK, ALL of the following must be true:\n"
+        "1. The image file opens correctly and is not blank, corrupted, or a placeholder.\n"
+        "2. The subject described above is clearly visible and correctly depicted.\n"
+        "3. The image follows the style requirements above (when given).\n"
+        "4. The image contains no text, watermark, or logo.\n\n"
+        "Respond with ONLY one of:\n"
+        "- \"OK\" — if all conditions above are met.\n"
+        "- \"FAIL: <reason>\" — if any condition is not met. Be specific.\n"
+        "Do not write anything else.");
+    return prompt;
+}
+
+enum class RasterAttemptResult { Success, RetryableFailure, QuotaOrAuthPause };
+
+// One full generate-then-review cycle for a single raster image ref.
+// tempDir must outlive the returned QImage's use — the caller loads the file
+// on success and stores it via ImageWriter before this function's own
+// temporary directory (owned by the caller) is destroyed.
+static QCoro::Task<RasterAttemptResult> runOneRasterAttempt(
+    const GenPageQueue::ImgFixRef &ref,
+    const QString                 &articleText,
+    const QString                 &imageInstructions,
+    const QString                 &lang,
+    const QString                 &domain,
+    const QString                 &reviewFeedback, // empty on the first attempt
+    GenPageQueue                  *queue,
+    AbstractCli                   *cli,
+    ImageWriter                   &imageWriter,
+    QTextStream                   *out,
+    int                             sNum,
+    QString                        *lastError)
+{
+    QTemporaryDir tempDir;
+    if (!tempDir.isValid()) {
+        *lastError = QStringLiteral("could not create temp dir");
+        co_return RasterAttemptResult::RetryableFailure;
+    }
+
+    // The AI is expected to have given a non-.svg fileName already (callers
+    // filter .svg refs out before reaching this function) — normalize just in
+    // case so the output path always has an extension QImage::load() can sniff.
+    QString ext = QFileInfo(ref.fileName).suffix().toLower();
+    static const QSet<QString> validExts = {QStringLiteral("jpg"), QStringLiteral("jpeg"),
+                                            QStringLiteral("png"), QStringLiteral("webp")};
+    if (!validExts.contains(ext)) {
+        ext = QStringLiteral("png");
+    }
+    const QString outputPath = tempDir.path() + QStringLiteral("/output.") + ext;
+
+    QString prompt = queue->buildRasterImagePrompt(ref, articleText, lang, outputPath);
+    if (!reviewFeedback.isEmpty()) {
+        prompt += QStringLiteral(
+            "\n\nA previous attempt at this image failed review for this reason: %1\n"
+            "Fix this specific issue in the new image.").arg(reviewFeedback);
+    }
+    const QString prepared = cli->preparePrompt(prompt);
+
+    *out << QStringLiteral("[S%1] Generating raster image: %2...\n").arg(sNum).arg(ref.fileName);
+    out->flush();
+
+    const QString genResponse = co_await runBoundedClaudePrompt(
+        prepared, cli, kRasterImageTimeoutMs, tempDir.path() + QStringLiteral("/gen"));
+
+    if (classifyCliResponse(genResponse, cli) == CliCallOutcome::QuotaOrAuth) {
+        *lastError = genResponse;
+        co_return RasterAttemptResult::QuotaOrAuthPause;
+    }
+    if (genResponse.startsWith(QStringLiteral("__ERROR__"))) {
+        *lastError = genResponse;
+        *out << QStringLiteral("[S%1] WARN (raster gen): %2 — %3\n")
+                    .arg(sNum).arg(ref.fileName, genResponse);
+        out->flush();
+        co_return RasterAttemptResult::RetryableFailure;
+    }
+
+    QImage image(outputPath);
+    if (image.isNull()) {
+        *lastError = QStringLiteral("no valid image file produced at the expected path");
+        *out << QStringLiteral("[S%1] WARN (raster gen): %2 — %3\n")
+                    .arg(sNum).arg(ref.fileName, *lastError);
+        out->flush();
+        co_return RasterAttemptResult::RetryableFailure;
+    }
+
+    *out << QStringLiteral("[S%1] Reviewing raster image: %2...\n").arg(sNum).arg(ref.fileName);
+    out->flush();
+    const QString reviewPrompt =
+        buildRasterImageReviewPrompt(outputPath, ref.alt, imageInstructions);
+    const QString reviewResponse = co_await runBoundedClaudePrompt(
+        reviewPrompt, cli, kRasterImageTimeoutMs, tempDir.path() + QStringLiteral("/review"));
+
+    if (classifyCliResponse(reviewResponse, cli) == CliCallOutcome::QuotaOrAuth) {
+        *lastError = reviewResponse;
+        co_return RasterAttemptResult::QuotaOrAuthPause;
+    }
+    if (reviewResponse.startsWith(QStringLiteral("__ERROR__"))
+        || !reviewResponse.startsWith(QStringLiteral("OK"), Qt::CaseInsensitive)) {
+        *lastError = reviewResponse.startsWith(QStringLiteral("FAIL:"), Qt::CaseInsensitive)
+                        ? reviewResponse.mid(5).trimmed()
+                        : reviewResponse;
+        *out << QStringLiteral("[S%1] WARN (raster review): %2 — %3\n")
+                    .arg(sNum).arg(ref.fileName, *lastError);
+        out->flush();
+        co_return RasterAttemptResult::RetryableFailure;
+    }
+
+    // image was loaded from a file inside tempDir, which is still alive here
+    // (destructs when this function returns) — safe to hand to ImageWriter now.
+    imageWriter.writeQImage(image, domain, ref.fileName);
+    *out << QStringLiteral("[S%1] Raster image saved: %2\n").arg(sNum).arg(ref.fileName);
+    out->flush();
+    co_return RasterAttemptResult::Success;
+}
+
+// Drives up to kRasterMaxAttempts attempts for one image ref, recording the
+// outcome via pageRepo after every attempt.  This durability is what makes
+// generation resumable: a crash mid-loop leaves the last recorded attempt
+// count/status intact in page_raster_images, so the next --generation run
+// continues from there instead of losing progress, repeating forever, or
+// (via PageGenerator's publish-time gate) ever letting a page with unresolved
+// images go live.
+//
+// Returns false when a CLI usage-limit/auth error means the WHOLE session
+// should stop attempting further images/pages now — the caller must check
+// this and break out, exactly like the existing g_stopRequested convention.
+static QCoro::Task<bool> runRasterImageGeneration(
+    const GenPageQueue::ImgFixRef &ref,
+    const QString                 &articleText,
+    const QString                 &imageInstructions,
+    const QString                 &lang,
+    const QString                 &domain,
+    GenPageQueue                  *queue,
+    AbstractCli                   *cli,
+    ImageWriter                   &imageWriter,
+    IPageRepository               &pageRepo,
+    int                             pageId,
+    QTextStream                   *out,
+    int                             sNum)
+{
+    pageRepo.ensureRasterImagePending(pageId, ref.id, ref.fileName);
+
+    if (pageRepo.rasterImageStatus(pageId, ref.id) != RasterImageStatus::Pending) {
+        co_return true; // already resolved by a previous run
+    }
+
+    QString reviewFeedback;
+    for (int attempt = pageRepo.rasterImageAttempts(pageId, ref.id) + 1;
+         attempt <= kRasterMaxAttempts; ++attempt) {
+        if (g_stopRequested) {
+            co_return true; // external stop request, not a quota/auth pause
+        }
+
+        QString lastError;
+        const RasterAttemptResult outcome = co_await runOneRasterAttempt(
+            ref, articleText, imageInstructions, lang, domain, reviewFeedback,
+            queue, cli, imageWriter, out, sNum, &lastError);
+
+        if (outcome == RasterAttemptResult::QuotaOrAuthPause) {
+            *out << QStringLiteral(
+                "[S%1] Usage limit hit or auth required (%2) — pausing raster "
+                "image generation for %3; will resume on next run.\n")
+                .arg(sNum).arg(lastError, ref.fileName);
+            out->flush();
+            // Not recorded as a failed attempt: status stays Pending, attempts
+            // unchanged, so the next run retries this exact image without
+            // burning one of its kRasterMaxAttempts on a transient condition.
+            co_return false;
+        }
+
+        if (outcome == RasterAttemptResult::Success) {
+            pageRepo.recordRasterImageAttempt(pageId, ref.id,
+                                              RasterImageStatus::Success, QString());
+            co_return true;
+        }
+
+        reviewFeedback = lastError;
+        const bool exhausted = (attempt >= kRasterMaxAttempts);
+        pageRepo.recordRasterImageAttempt(
+            pageId, ref.id,
+            exhausted ? RasterImageStatus::FailedFinal : RasterImageStatus::Pending,
+            lastError);
+        if (exhausted) {
+            *out << QStringLiteral("[S%1] Raster image FAILED after %2 attempts: %3 — %4\n")
+                        .arg(sNum).arg(kRasterMaxAttempts).arg(ref.fileName, lastError);
+            out->flush();
+        }
+    }
+    co_return true;
+}
+
+// ---------------------------------------------------------------------------
 // Per-session coroutine
 // ---------------------------------------------------------------------------
 
@@ -271,7 +585,13 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
     PageRepositoryDb pageRepo(pageDb);
     ImageWriter      imageWriter(workDir);
 
-    while (!g_stopRequested && queue->hasNext()) {
+    // Set when a raster-image CLI call hits a quota/auth error — stops this
+    // session from attempting further pages too, not just the current page's
+    // remaining images, since the same CLI/account will likely fail again
+    // immediately.  See runRasterImageGeneration()'s return value.
+    bool sessionRasterPaused = false;
+
+    while (!g_stopRequested && !sessionRasterPaused && queue->hasNext()) {
         // Honour --limit if set.
         if (state->jobsLimit >= 0
             && state->jobsCompleted.load() >= state->jobsLimit) {
@@ -688,17 +1008,72 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                                      && pageType
                                      && pageType->hasSvg();
 
-            const QList<GenPageQueue::ImgFixRef> imgRefs =
+            const QList<GenPageQueue::ImgFixRef> parsedImgRefs =
                 GenPageQueue::parseImgFixRefs(articleText);
             const QString domain = engine->data(
                 engine->index(websiteIndex, AbstractEngine::COL_DOMAIN)).toString();
             const QString lang = engine->getLangCode(websiteIndex);
+
+            // Raster generation requires an image-capable CLI (Codex/Antigravity).
+            // Warn once per page rather than once per image, and never fabricate
+            // a failure for a CLI that was simply never asked to try — the page
+            // just stays ContentReady until a capable CLI processes it.
+            const bool rasterWanted    = queue->wantsRasterImage();
+            const bool rasterCliReady  = rasterWanted && cli->canGenImages();
+            if (rasterWanted && !rasterCliReady) {
+                *(state->out) << QStringLiteral(
+                    "[S%1] WARN: %2 — strategy requests raster images but %3 cannot "
+                    "generate images; skipping this run, will retry with a capable CLI\n")
+                    .arg(sNum).arg(page.permalink, cli->getName());
+                state->out->flush();
+            }
+
+            // Cap the raster refs attempted at imageCountMax() (when set) so an
+            // AI response that over-produces images (e.g. 20 when 8-12 were
+            // asked for) doesn't multiply this page's CLI-call cost unbounded.
+            // SVG refs are never trimmed — only the new non-SVG raster count is
+            // strategy-configurable.
+            QList<GenPageQueue::ImgFixRef> imgRefs;
+            int rasterRefCount = 0;
+            for (const auto &ref : std::as_const(parsedImgRefs)) {
+                const bool isSvg = ref.fileName.endsWith(QStringLiteral(".svg"), Qt::CaseInsensitive);
+                if (isSvg) {
+                    imgRefs.append(ref);
+                    continue;
+                }
+                ++rasterRefCount;
+                if (queue->imageCountMax() > 0 && rasterRefCount > queue->imageCountMax()) {
+                    continue; // drop the excess — logged once below, not per ref
+                }
+                imgRefs.append(ref);
+            }
+            if (queue->imageCountMax() > 0 && rasterRefCount > queue->imageCountMax()) {
+                *(state->out) << QStringLiteral(
+                    "[S%1] %2 — article included %3 raster image(s), capping at %4\n")
+                    .arg(sNum).arg(page.permalink).arg(rasterRefCount).arg(queue->imageCountMax());
+                state->out->flush();
+            }
+
             QString sourceSvgForSocialMedia; // first SVG content — seed for second pass
+            bool    rasterPaused = false;     // true on a quota/auth pause for THIS page
             for (const auto &ref : std::as_const(imgRefs)) {
-                if (g_stopRequested) {
+                if (g_stopRequested || rasterPaused) {
                     break;
                 }
                 if (!ref.fileName.endsWith(QStringLiteral(".svg"), Qt::CaseInsensitive)) {
+                    if (!rasterCliReady) {
+                        continue; // not expected, or no capable CLI this run
+                    }
+                    const bool ok = co_await runRasterImageGeneration(
+                        ref, articleText, queue->rasterImageInstructions(), lang, domain,
+                        queue, cli, imageWriter, pageRepo, pageId, state->out, sNum);
+                    if (!ok) {
+                        // Propagate to the outer per-page loop too: the same
+                        // CLI/account will likely fail again immediately, so
+                        // stop this whole session rather than churn through
+                        // remaining pages just to hit the same wall.
+                        rasterPaused = sessionRasterPaused = true;
+                    }
                     continue;
                 }
                 *(state->out) << QStringLiteral("[S%1] Generating SVG: %2...\n")
@@ -741,16 +1116,36 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                 state->out->flush();
             }
 
-            // Mark Complete when SVG requirements are satisfied.  If SVG was
-            // expected but not generated, leave the page in ContentReady so the
-            // next run retries SVG generation.  The social-media second pass is
-            // NOT run here — it runs separately via --review + --generation once
-            // the page accumulates enough traffic and gets the SocialMedia flag.
-            if (!svgExpected || !sourceSvgForSocialMedia.isEmpty()) {
+            // Mark Complete only when BOTH SVG and raster-image requirements are
+            // satisfied.  If either is outstanding, leave the page in ContentReady
+            // so the next generation run retries only the work still needed —
+            // this is what lets a page interrupted mid-image-generation (crash or
+            // CLI usage-limit pause) resume cleanly instead of silently completing
+            // with images missing.  The social-media second pass is NOT run here —
+            // it runs separately via --review + --generation once the page
+            // accumulates enough traffic and gets the SocialMedia flag.
+            // An under-count (fewer raster refs than imageCountMin()) is treated
+            // the same as "not fully ready" — the page stays ContentReady so the
+            // next run's content regeneration gets another chance at a better
+            // count, exactly like an SVG that the AI failed to reference at all.
+            bool rasterSatisfied = true;
+            if (rasterWanted) {
+                const bool countSatisfied = queue->imageCountMin() <= 0
+                                            || rasterRefCount >= queue->imageCountMin();
+                rasterSatisfied = rasterCliReady && countSatisfied
+                                 && pageRepo.allRasterImagesTerminal(pageId);
+                if (rasterCliReady && !countSatisfied && !g_stopRequested && !rasterPaused) {
+                    *(state->out) << QStringLiteral(
+                        "[S%1] WARN: %2 — only %3 raster image(s) found, %4 required minimum\n")
+                        .arg(sNum).arg(page.permalink).arg(rasterRefCount).arg(queue->imageCountMin());
+                    state->out->flush();
+                }
+            }
+            if ((!svgExpected || !sourceSvgForSocialMedia.isEmpty()) && rasterSatisfied) {
                 pageRepo.setGenerationState(pageId, PageGenerationState::Complete);
-            } else {
+            } else if (!g_stopRequested && !rasterPaused) {
                 *(state->out) << QStringLiteral(
-                    "[S%1] WARN: %2 — SVG expected but not generated; "
+                    "[S%1] WARN: %2 — SVG and/or raster images not fully ready; "
                     "page stays ContentReady for retry on next run\n")
                     .arg(sNum).arg(page.permalink);
                 state->out->flush();
@@ -779,6 +1174,12 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
 
     if (g_stopRequested) {
         *(state->out) << QStringLiteral("[S%1] Stop requested — session finished.\n").arg(sNum);
+        state->out->flush();
+    } else if (sessionRasterPaused) {
+        *(state->out) << QStringLiteral(
+            "[S%1] Session paused after a raster-image usage-limit/auth error — "
+            "no article was left half-published; re-run --generation once the "
+            "limit clears or after re-authenticating.\n").arg(sNum);
         state->out->flush();
     }
 
@@ -1012,6 +1413,9 @@ void LauncherGeneration::run(const QString & /*value*/)
             info.customInstructions = strategyTable->customInstructionsForRow(row);
             info.svgInstructions    = strategyTable->svgInstructionsForRow(row);
             info.endPermalink       = strategyTable->endPermalinkForRow(row);
+            info.imageInstructions  = strategyTable->imageInstructionsForRow(row);
+            info.imageCountMin      = strategyTable->imageCountMinForRow(row);
+            info.imageCountMax      = strategyTable->imageCountMaxForRow(row);
             info.nonSvgImages       = strategyTable->data(
                 strategyTable->index(row, GenStrategyTable::COL_NON_SVG_IMAGES)).toString()
                 == QStringLiteral("Yes");
@@ -1090,7 +1494,10 @@ void LauncherGeneration::run(const QString & /*value*/)
                                         *categoryTable,
                                         info.customInstructions,
                                         info.svgInstructions,
-                                        workingDir);
+                                        workingDir,
+                                        info.imageInstructions,
+                                        info.imageCountMin,
+                                        info.imageCountMax);
         runGenerationSession(queue, info.strategyId, info.endPermalink,
                               engine, editingLangIndex,
                               *categoryTable, state, 0, cli);
@@ -1122,6 +1529,9 @@ void LauncherGeneration::run(const QString & /*value*/)
         info.svgInstructions    = strategyTable->svgInstructionsForRow(row);
         info.primaryAttrId      = strategyTable->primaryAttrIdForRow(row);
         info.endPermalink       = strategyTable->endPermalinkForRow(row);
+        info.imageInstructions  = strategyTable->imageInstructionsForRow(row);
+        info.imageCountMin      = strategyTable->imageCountMinForRow(row);
+        info.imageCountMax      = strategyTable->imageCountMaxForRow(row);
         info.nonSvgImages       = strategyTable->data(
             strategyTable->index(row, GenStrategyTable::COL_NON_SVG_IMAGES)).toString()
             == QStringLiteral("Yes");
@@ -1169,30 +1579,56 @@ void LauncherGeneration::run(const QString & /*value*/)
 
             if (!retryOnly && !dbPath.isEmpty()) {
                 const QString connName = QStringLiteral("gen_src_") + info.strategyId;
-                QString nameColumn;
+                // Combo tables (e.g. Fashion's 19 PageAttributesFashionCombo*)
+                // self-compose their topic text via composeArticleTopic() —
+                // see AbstractPageAttributes.h. nullptr/empty result (every
+                // other, single-name-column table) falls back to the legacy
+                // "first non-id column" behavior below, unchanged.
+                const AbstractPageAttributes *attrsProto =
+                    AbstractPageAttributes::ALL_PAGE_ATTRIBUTES().value(info.primaryAttrId, nullptr);
                 QStringList names;
                 {
                     QSqlDatabase srcDb = QSqlDatabase::addDatabase(
                         QStringLiteral("QSQLITE"), connName);
                     srcDb.setDatabaseName(dbPath);
                     if (srcDb.open()) {
-                        QSqlQuery pq(srcDb);
-                        if (pq.exec(QStringLiteral("PRAGMA table_info(records)"))) {
-                            while (pq.next()) {
-                                const QString col = pq.value(1).toString();
-                                if (col != QStringLiteral("id") && nameColumn.isEmpty()) {
-                                    nameColumn = col;
+                        QSqlQuery probe(srcDb);
+                        QString orderBy = QStringLiteral("id");
+                        QString firstNonIdColumn;
+                        if (probe.exec(QStringLiteral("SELECT * FROM records LIMIT 0"))) {
+                            const QSqlRecord schema = probe.record();
+                            for (int i = 0; i < schema.count(); ++i) {
+                                const QString col = schema.fieldName(i);
+                                if (col == QStringLiteral("id")) {
+                                    continue;
+                                }
+                                if (firstNonIdColumn.isEmpty()) {
+                                    firstNonIdColumn = col;
                                 }
                             }
+                            if (schema.indexOf(QStringLiteral("combo_msv")) >= 0) {
+                                orderBy = QStringLiteral("combo_msv DESC, id ASC");
+                            }
                         }
-                        if (!nameColumn.isEmpty()) {
-                            QSqlQuery q(srcDb);
-                            q.exec(QStringLiteral("SELECT ") + nameColumn
-                                   + QStringLiteral(" FROM records ORDER BY id"));
+
+                        QSqlQuery q(srcDb);
+                        if (q.exec(QStringLiteral("SELECT * FROM records ORDER BY ") + orderBy)) {
+                            const QSqlRecord schema = q.record();
                             while (q.next()) {
-                                const QString v = q.value(0).toString().trimmed();
-                                if (!v.isEmpty()) {
-                                    names << v;
+                                QString name;
+                                if (attrsProto) {
+                                    QHash<QString, QString> rowValues;
+                                    for (int i = 0; i < schema.count(); ++i) {
+                                        rowValues.insert(schema.fieldName(i), q.value(i).toString());
+                                    }
+                                    name = attrsProto->composeArticleTopic(rowValues);
+                                }
+                                if (name.isEmpty() && !firstNonIdColumn.isEmpty()) {
+                                    name = q.value(firstNonIdColumn).toString();
+                                }
+                                name = name.trimmed();
+                                if (!name.isEmpty()) {
+                                    names << name;
                                 }
                             }
                         }
@@ -1202,6 +1638,12 @@ void LauncherGeneration::run(const QString & /*value*/)
 
                 // Symptom hub pages use /symptoms/<slug> prefix.
                 const bool isSymptomHub = (info.pageTypeId == QStringLiteral("symptom_hub"));
+
+                // Guards against two different source rows in THIS batch
+                // composing to the same slug — without this, the collision is
+                // only caught later by pageRepo.create()'s UNIQUE constraint,
+                // after a full (wasted) AI generation call already ran.
+                QSet<QString> seenThisRun;
 
                 for (const QString &name : std::as_const(names)) {
                     QString slug = name.toLower();
@@ -1217,6 +1659,10 @@ void LauncherGeneration::run(const QString & /*value*/)
                     const QString permalink = isSymptomHub
                         ? QStringLiteral("/symptoms/") + slug
                         : QLatin1Char('/') + slug;
+                    if (seenThisRun.contains(permalink)) {
+                        continue;
+                    }
+                    seenThisRun.insert(permalink);
                     if (allExistingPermalinks.contains(permalink)) {
                         if (policyRetryIds.contains(permalink)) {
                             PageRecord vp;
@@ -1389,7 +1835,10 @@ void LauncherGeneration::run(const QString & /*value*/)
                                      *categoryTable,
                                      alloc.customInstructions,
                                      alloc.svgInstructions,
-                                     workingDir);
+                                     workingDir,
+                                     alloc.imageInstructions,
+                                     alloc.imageCountMin,
+                                     alloc.imageCountMax);
         } else {
             // Classic strategy: read pending pages from pages.db.
             PageDb           *queueDb   = new PageDb(workingDir);
@@ -1401,7 +1850,10 @@ void LauncherGeneration::run(const QString & /*value*/)
                                      alloc.customInstructions,
                                      alloc.svgInstructions,
                                      jobsLimit,
-                                     workingDir);
+                                     workingDir,
+                                     alloc.imageInstructions,
+                                     alloc.imageCountMin,
+                                     alloc.imageCountMax);
             // queueDb / queueRepo intentionally leak — coroutines hold references
             // across suspension points; process exit cleans up.
             Q_UNUSED(queueDb)

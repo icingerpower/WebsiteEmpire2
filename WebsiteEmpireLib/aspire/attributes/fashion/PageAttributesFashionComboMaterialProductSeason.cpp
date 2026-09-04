@@ -33,6 +33,12 @@ QStringList PageAttributesFashionComboMaterialProductSeason::allowedFormulaIds()
     return {FORMULA_FABRIC_WEATHER};
 }
 
+QString PageAttributesFashionComboMaterialProductSeason::composeArticleTopic(const QHash<QString, QString> &rowValues) const
+{
+    return rowValues.value(ID_MATERIAL) + QLatin1Char(' ') + rowValues.value(ID_PRODUCT_TYPE)
+         + QStringLiteral(" outfit ") + rowValues.value(ID_SEASON);
+}
+
 QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesFashionComboMaterialProductSeason::getAttributes() const
 {
     auto attributes = PageAttributesFashionComboBase::getAttributes();

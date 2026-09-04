@@ -30,6 +30,11 @@ QString AbstractPageAttributes::areAttributesCrossValid(
     return QString{};
 }
 
+QString AbstractPageAttributes::composeArticleTopic(const QHash<QString, QString> &) const
+{
+    return QString{};
+}
+
 AbstractPageAttributes::Recorder::Recorder(AbstractPageAttributes *pageAttributes)
 {
     pageAttributes->init();

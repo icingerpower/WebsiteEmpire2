@@ -31,6 +31,12 @@ QStringList PageAttributesFashionComboMaterialProduct::allowedFormulaIds() const
     return {FORMULA_HOW_TO_STYLE_MATERIAL_PRODUCT};
 }
 
+QString PageAttributesFashionComboMaterialProduct::composeArticleTopic(const QHash<QString, QString> &rowValues) const
+{
+    return QStringLiteral("How to style a ") + rowValues.value(ID_MATERIAL) + QLatin1Char(' ')
+         + rowValues.value(ID_PRODUCT_TYPE);
+}
+
 QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesFashionComboMaterialProduct::getAttributes() const
 {
     auto attributes = PageAttributesFashionComboBase::getAttributes();

@@ -49,6 +49,18 @@ public:
     virtual QStringList allowedFormulaIds() const = 0;
 
     QSharedPointer<QList<Attribute>> getAttributes() const override;
+
+    // Pure virtual (unlike AbstractPageAttributes's opt-in default): every
+    // combo table MUST self-describe how to render one of its rows as an
+    // article topic, mirroring its own getDescription() template and using
+    // its own ID_* slot constants. A missing override is a compile error —
+    // deliberately, since the alternative (falling through to the base
+    // class's generic "first non-id column" behavior) would silently expose
+    // combo_formula_id ("direct_transactional") as the topic instead.
+    // rowValues is keyed by DB column name (== Attribute::id); when this
+    // table has more than one allowedFormulaIds() entry, branch on
+    // rowValues.value(ID_FORMULA_ID) to pick the matching phrasing.
+    QString composeArticleTopic(const QHash<QString, QString> &rowValues) const override = 0;
 };
 
 #endif // PAGEATTRIBUTESFASHIONCOMBOBASE_H

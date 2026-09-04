@@ -27,6 +27,8 @@ public:
     // Rejects colorA == colorB — "X and X outfit combination" is not a
     // meaningful color-pairing query.
     QString areAttributesCrossValid(const QHash<QString, QString> &id_values) const override;
+
+    QString composeArticleTopic(const QHash<QString, QString> &rowValues) const override;
 };
 
 #endif // PAGEATTRIBUTESFASHIONCOMBOCOLORCOLOR_H

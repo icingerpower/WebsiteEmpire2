@@ -2,6 +2,7 @@
 #define ABSTRACTPAGEATTRIBUTES_H
 
 #include <QAbstractTableModel>
+#include <QHash>
 #include <QList>
 #include <QMap>
 #include <QSharedPointer>
@@ -75,6 +76,15 @@ public:
     virtual QString getName() const = 0;
     virtual QString getDescription() const = 0;
     virtual QSharedPointer<QList<Attribute>> getAttributes() const = 0;
+
+    // Composes a human-readable article topic string from one result row's
+    // column values (keyed by Attribute::id, i.e. the DB column name).
+    // Default returns an empty string — "not specialized"; callers (see
+    // LauncherGeneration) fall back to their legacy single-column topic
+    // derivation in that case. Only classes whose rows are NOT a single
+    // human-readable name (e.g. multi-slot combination tables such as
+    // PageAttributesFashionCombo*) need to override this.
+    virtual QString composeArticleTopic(const QHash<QString, QString> &rowValues) const;
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     int columnCount(const QModelIndex &parent = QModelIndex()) const override;

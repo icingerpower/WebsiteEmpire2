@@ -31,6 +31,12 @@ QStringList PageAttributesFashionComboProductDemographic::allowedFormulaIds() co
     return {FORMULA_BEST_PRODUCT_FOR_DEMOGRAPHIC};
 }
 
+QString PageAttributesFashionComboProductDemographic::composeArticleTopic(const QHash<QString, QString> &rowValues) const
+{
+    return QStringLiteral("Best ") + rowValues.value(ID_PRODUCT_TYPE) + QStringLiteral(" for ")
+         + rowValues.value(ID_DEMOGRAPHIC);
+}
+
 QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesFashionComboProductDemographic::getAttributes() const
 {
     auto attributes = PageAttributesFashionComboBase::getAttributes();

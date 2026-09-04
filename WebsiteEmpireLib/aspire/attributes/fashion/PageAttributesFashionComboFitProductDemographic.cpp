@@ -33,6 +33,12 @@ QStringList PageAttributesFashionComboFitProductDemographic::allowedFormulaIds()
     return {FORMULA_FIT_RECOMMENDATION};
 }
 
+QString PageAttributesFashionComboFitProductDemographic::composeArticleTopic(const QHash<QString, QString> &rowValues) const
+{
+    return QStringLiteral("Best ") + rowValues.value(ID_FIT) + QLatin1Char(' ') + rowValues.value(ID_PRODUCT_TYPE)
+         + QStringLiteral(" for ") + rowValues.value(ID_DEMOGRAPHIC);
+}
+
 QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesFashionComboFitProductDemographic::getAttributes() const
 {
     auto attributes = PageAttributesFashionComboBase::getAttributes();

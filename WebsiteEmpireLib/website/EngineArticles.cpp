@@ -1,6 +1,6 @@
 #include "EngineArticles.h"
 
-#include "website/pages/PageTypeArticle.h"
+#include "website/pages/PageTypeArticleHealth.h"
 #include "website/pages/PageTypeJsApp.h"
 #include "website/pages/attributes/CategoryTable.h"
 
@@ -21,6 +21,11 @@ QString EngineArticles::getId() const
 QString EngineArticles::getName() const
 {
     return tr("Articles");
+}
+
+QString EngineArticles::getGeneratorId() const
+{
+    return QStringLiteral("health"); // GeneratorHealth::getId()
 }
 
 AbstractEngine *EngineArticles::create(QObject *parent) const
@@ -50,7 +55,7 @@ void EngineArticles::_onInit(const QDir &workingDir)
     m_jsAppType.reset();
     m_articleType.reset();
     m_categoryTable.reset(new CategoryTable(workingDir));
-    m_articleType.reset(new PageTypeArticle(*m_categoryTable));
+    m_articleType.reset(new PageTypeArticleHealth(*m_categoryTable));
     m_jsAppType.reset(new PageTypeJsApp(*m_categoryTable));
     m_pageTypes.clear();
     m_pageTypes.append(m_articleType.data());

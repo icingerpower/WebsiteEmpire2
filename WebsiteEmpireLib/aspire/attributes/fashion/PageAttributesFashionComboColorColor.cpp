@@ -82,3 +82,15 @@ QString PageAttributesFashionComboColorColor::areAttributesCrossValid(
 
     return QString{};
 }
+
+QString PageAttributesFashionComboColorColor::composeArticleTopic(const QHash<QString, QString> &rowValues) const
+{
+    const QString &colorA  = rowValues.value(ID_COLOR_A);
+    const QString &colorB  = rowValues.value(ID_COLOR_B);
+    const QString &formula = rowValues.value(PageAttributesFashionComboBase::ID_FORMULA_ID);
+
+    if (formula == FORMULA_DOES_COLOR_GO_WITH) {
+        return QStringLiteral("Does ") + colorA + QStringLiteral(" go with ") + colorB;
+    }
+    return colorA + QStringLiteral(" and ") + colorB + QStringLiteral(" outfit combination");
+}

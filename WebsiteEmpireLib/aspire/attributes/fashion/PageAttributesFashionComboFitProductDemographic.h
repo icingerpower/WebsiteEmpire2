@@ -21,6 +21,7 @@ public:
     QString getDescription() const override;
     QSharedPointer<QList<Attribute>> getAttributes() const override;
     QStringList allowedFormulaIds() const override;
+    QString composeArticleTopic(const QHash<QString, QString> &rowValues) const override;
 };
 
 #endif // PAGEATTRIBUTESFASHIONCOMBOFITPRODUCTDEMOGRAPHIC_H

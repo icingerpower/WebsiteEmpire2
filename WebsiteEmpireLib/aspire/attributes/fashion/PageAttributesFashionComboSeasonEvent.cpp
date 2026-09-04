@@ -31,6 +31,12 @@ QStringList PageAttributesFashionComboSeasonEvent::allowedFormulaIds() const
     return {FORMULA_OCCASION_SEASONALITY};
 }
 
+QString PageAttributesFashionComboSeasonEvent::composeArticleTopic(const QHash<QString, QString> &rowValues) const
+{
+    return rowValues.value(ID_SEASON) + QLatin1Char(' ') + rowValues.value(ID_EVENT)
+         + QStringLiteral(" outfit ideas");
+}
+
 QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesFashionComboSeasonEvent::getAttributes() const
 {
     auto attributes = PageAttributesFashionComboBase::getAttributes();

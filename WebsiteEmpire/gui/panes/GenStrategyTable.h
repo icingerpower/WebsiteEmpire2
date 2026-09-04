@@ -3,6 +3,7 @@
 
 #include <QAbstractTableModel>
 #include <QDir>
+#include <QHash>
 #include <QList>
 #include <QString>
 
@@ -80,6 +81,19 @@ public:
     // Replaces the image instructions for visual row and saves strategies.json.
     void setImageInstructions(int row, const QString &instructions);
 
+    // Returns the minimum/maximum number of raster images the content prompt
+    // should request for visual row.  0/0 = unenforced (no count stated to the
+    // AI, no post-generation count check) — the default, so existing strategies
+    // are unaffected.  Only meaningful when imageInstructionsForRow() is non-empty.
+    int imageCountMinForRow(int row) const;
+    int imageCountMaxForRow(int row) const;
+
+    // Replaces the raster image count range for visual row and saves
+    // strategies.json.  No-op when both values are unchanged or the row is
+    // out of range.
+    void setImageCountMin(int row, int value);
+    void setImageCountMax(int row, int value);
+
     // Returns the endPermalink slug suffix for visual row (empty = no suffix).
     // The value is appended with a hyphen to the generated page slug,
     // e.g. endPermalink "genes-biomarkers" + page slug "knee-pain" → "knee-pain-genes-biomarkers".
@@ -123,7 +137,9 @@ private:
         QString themeId;             // empty = all themes
         QString customInstructions;  // empty = use generic prompt
         QString svgInstructions;     // non-empty = SVG generation pass enabled
-        QString imageInstructions;   // non-empty = raster image generation pass enabled (future)
+        QString imageInstructions;   // non-empty = raster image generation pass enabled
+        int     imageCountMin = 0;   // 0/0 = unenforced; see imageCountMinForRow() doc
+        int     imageCountMax = 0;
         QString primaryAttrId;       // AbstractPageAttributes::getId() of the aspire primary table; empty = none
         QString primaryDbPath;       // absolute path to the aspire DB file; empty = use results_db/ convention
         QString endPermalink;        // URL slug suffix appended to generated pages; empty = no suffix
@@ -136,8 +152,18 @@ private:
     void _load();
     void _save() const;
 
-    QString            m_filePath;
-    QList<StrategyRow> m_rows;
+    // Lazily-built, process-lifetime cache of primaryAttrId -> display name,
+    // flattened from every registered generator's tables.primary. Generator
+    // prototypes/tables are fixed at compile time (self-registered via
+    // DECLARE_GENERATOR), so this never needs invalidation. Avoids rescanning
+    // ALL_GENERATORS() x tables.primary on every single cell repaint — cheap
+    // when a generator has one primary table, but Fashion alone now has 19.
+    const QHash<QString, QString> &_primaryIdToDisplayName() const;
+
+    QString                        m_filePath;
+    QList<StrategyRow>             m_rows;
+    mutable QHash<QString, QString> m_primaryIdToDisplayNameCache;
+    mutable bool                     m_primaryIdToDisplayNameCacheBuilt = false;
 };
 
 #endif // GENSTRATEGYTABLE_H

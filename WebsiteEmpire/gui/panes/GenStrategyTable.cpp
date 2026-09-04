@@ -19,6 +19,8 @@ static const QString JSON_KEY_THEME_ID             = QStringLiteral("themeId");
 static const QString JSON_KEY_CUSTOM_INSTRUCTIONS  = QStringLiteral("customInstructions");
 static const QString JSON_KEY_SVG_INSTRUCTIONS     = QStringLiteral("svgInstructions");
 static const QString JSON_KEY_IMAGE_INSTRUCTIONS   = QStringLiteral("imageInstructions");
+static const QString JSON_KEY_IMAGE_COUNT_MIN      = QStringLiteral("imageCountMin");
+static const QString JSON_KEY_IMAGE_COUNT_MAX      = QStringLiteral("imageCountMax");
 static const QString JSON_KEY_PRIMARY_ATTR_ID      = QStringLiteral("primaryAttrId");
 static const QString JSON_KEY_PRIMARY_DB_PATH      = QStringLiteral("primaryDbPath");
 static const QString JSON_KEY_END_PERMALINK        = QStringLiteral("endPermalink");
@@ -136,6 +138,46 @@ void GenStrategyTable::setImageInstructions(int row, const QString &instructions
         return;
     }
     m_rows[row].imageInstructions = instructions;
+    _save();
+}
+
+int GenStrategyTable::imageCountMinForRow(int row) const
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return 0;
+    }
+    return m_rows.at(row).imageCountMin;
+}
+
+int GenStrategyTable::imageCountMaxForRow(int row) const
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return 0;
+    }
+    return m_rows.at(row).imageCountMax;
+}
+
+void GenStrategyTable::setImageCountMin(int row, int value)
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return;
+    }
+    if (m_rows.at(row).imageCountMin == value) {
+        return;
+    }
+    m_rows[row].imageCountMin = value;
+    _save();
+}
+
+void GenStrategyTable::setImageCountMax(int row, int value)
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return;
+    }
+    if (m_rows.at(row).imageCountMax == value) {
+        return;
+    }
+    m_rows[row].imageCountMax = value;
     _save();
 }
 
@@ -290,14 +332,7 @@ QVariant GenStrategyTable::data(const QModelIndex &index, int role) const
             if (row.primaryAttrId.isEmpty()) {
                 return tr("(None)");
             }
-            for (auto it = AbstractGenerator::ALL_GENERATORS().constBegin();
-                 it != AbstractGenerator::ALL_GENERATORS().constEnd(); ++it) {
-                const AbstractGenerator::GeneratorTables tables = it.value()->getTables();
-                if (tables.primary.contains(row.primaryAttrId)) {
-                    return tables.primary.value(row.primaryAttrId).name;
-                }
-            }
-            return row.primaryAttrId; // fallback: raw id
+            return _primaryIdToDisplayName().value(row.primaryAttrId, row.primaryAttrId); // fallback: raw id
         }
         case COL_END_PERMALINK: return row.endPermalink;
         case COL_N_DONE:  return row.nDone;
@@ -364,6 +399,23 @@ bool GenStrategyTable::removeRows(int row, int count, const QModelIndex &parent)
     return true;
 }
 
+// ---- Lookup caches -----------------------------------------------------------
+
+const QHash<QString, QString> &GenStrategyTable::_primaryIdToDisplayName() const
+{
+    if (!m_primaryIdToDisplayNameCacheBuilt) {
+        m_primaryIdToDisplayNameCacheBuilt = true;
+        for (auto it = AbstractGenerator::ALL_GENERATORS().constBegin();
+             it != AbstractGenerator::ALL_GENERATORS().constEnd(); ++it) {
+            const AbstractGenerator::GeneratorTables tables = it.value()->getTables();
+            for (auto tIt = tables.primary.constBegin(); tIt != tables.primary.constEnd(); ++tIt) {
+                m_primaryIdToDisplayNameCache.insert(tIt.key(), tIt.value().name);
+            }
+        }
+    }
+    return m_primaryIdToDisplayNameCache;
+}
+
 // ---- Persistence ------------------------------------------------------------
 
 void GenStrategyTable::_load()
@@ -397,6 +449,8 @@ void GenStrategyTable::_load()
         row.customInstructions = obj.value(JSON_KEY_CUSTOM_INSTRUCTIONS).toString();
         row.svgInstructions    = obj.value(JSON_KEY_SVG_INSTRUCTIONS).toString();
         row.imageInstructions  = obj.value(JSON_KEY_IMAGE_INSTRUCTIONS).toString();
+        row.imageCountMin      = obj.value(JSON_KEY_IMAGE_COUNT_MIN).toInt(0);
+        row.imageCountMax      = obj.value(JSON_KEY_IMAGE_COUNT_MAX).toInt(0);
         row.primaryAttrId      = obj.value(JSON_KEY_PRIMARY_ATTR_ID).toString();
         row.primaryDbPath      = obj.value(JSON_KEY_PRIMARY_DB_PATH).toString();
         row.endPermalink       = obj.value(JSON_KEY_END_PERMALINK).toString();
@@ -443,6 +497,8 @@ void GenStrategyTable::_save() const
         obj.insert(JSON_KEY_CUSTOM_INSTRUCTIONS, row.customInstructions);
         obj.insert(JSON_KEY_SVG_INSTRUCTIONS,    row.svgInstructions);
         obj.insert(JSON_KEY_IMAGE_INSTRUCTIONS,  row.imageInstructions);
+        obj.insert(JSON_KEY_IMAGE_COUNT_MIN,     row.imageCountMin);
+        obj.insert(JSON_KEY_IMAGE_COUNT_MAX,     row.imageCountMax);
         obj.insert(JSON_KEY_PRIMARY_ATTR_ID,     row.primaryAttrId);
         obj.insert(JSON_KEY_PRIMARY_DB_PATH,     row.primaryDbPath);
         obj.insert(JSON_KEY_END_PERMALINK,       row.endPermalink);

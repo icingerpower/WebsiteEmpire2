@@ -33,6 +33,12 @@ QStringList PageAttributesFashionComboColorProductDemographic::allowedFormulaIds
     return {FORMULA_COLOR_PRODUCT_FOR_DEMOGRAPHIC};
 }
 
+QString PageAttributesFashionComboColorProductDemographic::composeArticleTopic(const QHash<QString, QString> &rowValues) const
+{
+    return rowValues.value(ID_DEMOGRAPHIC) + QLatin1Char(' ') + rowValues.value(ID_COLOR)
+         + QLatin1Char(' ') + rowValues.value(ID_PRODUCT_TYPE);
+}
+
 QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesFashionComboColorProductDemographic::getAttributes() const
 {
     auto attributes = PageAttributesFashionComboBase::getAttributes();

@@ -33,6 +33,12 @@ QStringList PageAttributesFashionComboStyleProductEvent::allowedFormulaIds() con
     return {FORMULA_STYLE_PRODUCT_FOR_EVENT};
 }
 
+QString PageAttributesFashionComboStyleProductEvent::composeArticleTopic(const QHash<QString, QString> &rowValues) const
+{
+    return rowValues.value(ID_STYLE) + QLatin1Char(' ') + rowValues.value(ID_PRODUCT_TYPE)
+         + QStringLiteral(" for ") + rowValues.value(ID_EVENT);
+}
+
 QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesFashionComboStyleProductEvent::getAttributes() const
 {
     auto attributes = PageAttributesFashionComboBase::getAttributes();

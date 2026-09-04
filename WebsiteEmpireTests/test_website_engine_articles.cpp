@@ -37,7 +37,7 @@ const PageBlocCategory *firstCategoryBloc(const EngineArticles &engine)
 }
 
 // Returns a non-const PageBlocCategory* via const_cast — valid because the
-// underlying object is owned non-const by PageTypeArticle.
+// underlying object is owned non-const by PageTypeArticleHealth.
 PageBlocCategory *firstCategoryBlocMut(EngineArticles &engine)
 {
     return const_cast<PageBlocCategory *>(firstCategoryBloc(engine));
@@ -74,6 +74,7 @@ private slots:
     void test_enginearticles_get_id_stable();
     void test_enginearticles_get_name_non_empty();
     void test_enginearticles_id_and_name_differ();
+    void test_enginearticles_get_generator_id_is_health();
 
     // --- Registry ---
     void test_enginearticles_registered_in_all_engines();
@@ -127,9 +128,6 @@ private slots:
     void test_enginearticles_remove_parent_cascades_to_child_in_attributes();
     void test_enginearticles_remove_category_content_changed_signal_contains_remaining_ids();
 
-    // --- Generator link ---
-    void test_enginearticles_get_generator_id_empty();
-
     // --- Editing-language row reconciliation (bug: content generated in the
     //     wrong language when engine_domains.csv has no row for the editing
     //     language — see AbstractEngine::_reconcileRows()) ---
@@ -159,6 +157,15 @@ void Test_EngineArticles::test_enginearticles_id_and_name_differ()
 {
     EngineArticles engine;
     QVERIFY(engine.getId() != engine.getName());
+}
+
+void Test_EngineArticles::test_enginearticles_get_generator_id_is_health()
+{
+    // Lets DialogAddGeneration's "Source table" picker scope itself to this
+    // engine's own Health tables instead of listing every registered
+    // generator's tables (Fashion, Factories, Languages included).
+    EngineArticles engine;
+    QCOMPARE(engine.getGeneratorId(), QStringLiteral("health"));
 }
 
 // =============================================================================
@@ -298,7 +305,7 @@ void Test_EngineArticles::test_enginearticles_get_page_types_valid_after_reinit(
 
 void Test_EngineArticles::test_enginearticles_page_type_has_two_blocs()
 {
-    // PageTypeArticle has eight blocs: Category, Text, SocialText, AutoLink,
+    // PageTypeArticleHealth has eight blocs: Category, Text, SocialText, AutoLink,
     // CategoryLinks, SocialMedia, Meta, SymptomLinks.
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
@@ -688,15 +695,6 @@ void Test_EngineArticles::test_enginearticles_remove_category_content_changed_si
 }
 
 // =============================================================================
-// Generator link
-
-void Test_EngineArticles::test_enginearticles_get_generator_id_empty()
-{
-    // EngineArticles has no associated aspire generator — should return empty.
-    EngineArticles engine;
-    QVERIFY(engine.getGeneratorId().isEmpty());
-}
-
 // =============================================================================
 // Editing-language row reconciliation
 // =============================================================================

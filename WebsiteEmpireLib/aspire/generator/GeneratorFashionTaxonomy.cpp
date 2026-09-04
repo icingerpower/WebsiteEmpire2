@@ -891,12 +891,37 @@ AbstractGenerator::GeneratorTables GeneratorFashionTaxonomy::getTables() const
 {
     GeneratorTables tables;
 
-    // Primary: the culturally most sensitive combination table (color+product
-    // for a specific event — mourning/bridal/festival color conventions vary
-    // sharply by culture) stands in as "one row = one article".
-    const TableDescriptor primary = _makeDescriptor(
-        QStringLiteral("PageAttributesFashionComboColorProductEvent"), tr("Combo: Color + Product + Event"));
-    tables.primary.insert(primary.id, primary);
+    // Primary: every combination table is independently "one row = one
+    // article" — a generation strategy picks which combo it sources from
+    // (see DialogAddGeneration's "Source table" picker). The flagship entry
+    // (color+product for a specific event — mourning/bridal/festival color
+    // conventions vary sharply by culture) is listed first for readability
+    // only; QHash does not preserve insertion order.
+    const QList<QPair<QString, QString>> primaryCombos = {
+        {QStringLiteral("PageAttributesFashionComboColorProductEvent"), tr("Combo: Color + Product + Event")},
+        {QStringLiteral("PageAttributesFashionComboColorProduct"), tr("Combo: Color + Product")},
+        {QStringLiteral("PageAttributesFashionComboSeasonEvent"), tr("Combo: Season + Event")},
+        {QStringLiteral("PageAttributesFashionComboFitProductDemographic"), tr("Combo: Fit + Product + Demographic")},
+        {QStringLiteral("PageAttributesFashionComboMaterialProductSeason"), tr("Combo: Material + Product + Season")},
+        {QStringLiteral("PageAttributesFashionComboFitProductEvent"), tr("Combo: Fit + Product + Event")},
+        {QStringLiteral("PageAttributesFashionComboStyleSeason"), tr("Combo: Style + Season")},
+        {QStringLiteral("PageAttributesFashionComboColorColor"), tr("Combo: Color + Color")},
+        {QStringLiteral("PageAttributesFashionComboProductPattern"), tr("Combo: Product + Pattern")},
+        {QStringLiteral("PageAttributesFashionComboStyleProduct"), tr("Combo: Style + Product")},
+        {QStringLiteral("PageAttributesFashionComboProductEvent"), tr("Combo: Product + Event")},
+        {QStringLiteral("PageAttributesFashionComboColorSeason"), tr("Combo: Color + Season")},
+        {QStringLiteral("PageAttributesFashionComboProductDemographic"), tr("Combo: Product + Demographic")},
+        {QStringLiteral("PageAttributesFashionComboStyleEvent"), tr("Combo: Style + Event")},
+        {QStringLiteral("PageAttributesFashionComboMaterialProduct"), tr("Combo: Material + Product")},
+        {QStringLiteral("PageAttributesFashionComboStyleProductEvent"), tr("Combo: Style + Product + Event")},
+        {QStringLiteral("PageAttributesFashionComboColorProductDemographic"), tr("Combo: Color + Product + Demographic")},
+        {QStringLiteral("PageAttributesFashionComboProductDemographicEvent"), tr("Combo: Product + Demographic + Event")},
+        {QStringLiteral("PageAttributesFashionComboPatternProductSeason"), tr("Combo: Pattern + Product + Season")},
+    };
+    for (const auto &p : primaryCombos) {
+        const TableDescriptor d = _makeDescriptor(p.first, p.second);
+        tables.primary.insert(d.id, d);
+    }
 
     // Category: the 11 controlled-vocabulary dimension tables.
     const QList<QPair<QString, QString>> vocab = {
@@ -917,33 +942,11 @@ AbstractGenerator::GeneratorTables GeneratorFashionTaxonomy::getTables() const
         tables.category.insert(d.id, d);
     }
 
-    // ReferredTo: the remaining 18 combination tables.
-    const QList<QPair<QString, QString>> otherCombos = {
-        {QStringLiteral("PageAttributesFashionComboColorProduct"), tr("Combo: Color + Product")},
-        {QStringLiteral("PageAttributesFashionComboSeasonEvent"), tr("Combo: Season + Event")},
-        {QStringLiteral("PageAttributesFashionComboFitProductDemographic"), tr("Combo: Fit + Product + Demographic")},
-        {QStringLiteral("PageAttributesFashionComboMaterialProductSeason"), tr("Combo: Material + Product + Season")},
-        {QStringLiteral("PageAttributesFashionComboFitProductEvent"), tr("Combo: Fit + Product + Event")},
-        {QStringLiteral("PageAttributesFashionComboStyleSeason"), tr("Combo: Style + Season")},
-        {QStringLiteral("PageAttributesFashionComboColorColor"), tr("Combo: Color + Color")},
-        {QStringLiteral("PageAttributesFashionComboProductPattern"), tr("Combo: Product + Pattern")},
-        {QStringLiteral("PageAttributesFashionComboStyleProduct"), tr("Combo: Style + Product")},
-        {QStringLiteral("PageAttributesFashionComboProductEvent"), tr("Combo: Product + Event")},
-        {QStringLiteral("PageAttributesFashionComboColorSeason"), tr("Combo: Color + Season")},
-        {QStringLiteral("PageAttributesFashionComboProductDemographic"), tr("Combo: Product + Demographic")},
-        {QStringLiteral("PageAttributesFashionComboStyleEvent"), tr("Combo: Style + Event")},
-        {QStringLiteral("PageAttributesFashionComboMaterialProduct"), tr("Combo: Material + Product")},
-        {QStringLiteral("PageAttributesFashionComboStyleProductEvent"), tr("Combo: Style + Product + Event")},
-        {QStringLiteral("PageAttributesFashionComboColorProductDemographic"), tr("Combo: Color + Product + Demographic")},
-        {QStringLiteral("PageAttributesFashionComboProductDemographicEvent"), tr("Combo: Product + Demographic + Event")},
-        {QStringLiteral("PageAttributesFashionComboPatternProductSeason"), tr("Combo: Pattern + Product + Season")},
-    };
-    for (const auto &c : otherCombos) {
-        const TableDescriptor d = _makeDescriptor(c.first, c.second);
-        tables.referredTo.insert(d.id, d);
-    }
+    // ReferredTo: none — every combo table is a standalone primary source
+    // (see above); no table here is a "child of" another combo row.
 
-    Q_ASSERT(tables.primary.size() == 1);
+    Q_ASSERT(tables.primary.size() == primaryCombos.size());
+    Q_ASSERT(tables.referredTo.isEmpty());
     return tables;
 }
 

@@ -32,6 +32,18 @@ QStringList PageAttributesFashionComboStyleSeason::allowedFormulaIds() const
     return {FORMULA_MICROTREND_LIFESTYLE, FORMULA_CAPSULE_CURATION};
 }
 
+QString PageAttributesFashionComboStyleSeason::composeArticleTopic(const QHash<QString, QString> &rowValues) const
+{
+    const QString &style   = rowValues.value(ID_STYLE);
+    const QString &season  = rowValues.value(ID_SEASON);
+    const QString &formula = rowValues.value(PageAttributesFashionComboBase::ID_FORMULA_ID);
+
+    if (formula == FORMULA_CAPSULE_CURATION) {
+        return QStringLiteral("Capsule wardrobe ") + season + QLatin1Char(' ') + style;
+    }
+    return style + QLatin1Char(' ') + season + QStringLiteral(" outfit ideas");
+}
+
 QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesFashionComboStyleSeason::getAttributes() const
 {
     auto attributes = PageAttributesFashionComboBase::getAttributes();

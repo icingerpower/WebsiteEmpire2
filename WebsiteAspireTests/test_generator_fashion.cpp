@@ -12,10 +12,28 @@
 #include "aspire/downloader/DownloadedPagesTable.h"
 #include "aspire/AspiredDb.h"
 #include "ExceptionWithTitleText.h"
+#include "aspire/attributes/AbstractPageAttributes.h"
 #include "aspire/attributes/fashion/PageAttributesFashionCulture.h"
 #include "aspire/attributes/fashion/PageAttributesFashionComboBase.h"
 #include "aspire/attributes/fashion/PageAttributesFashionComboColorProductEvent.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboColorProduct.h"
 #include "aspire/attributes/fashion/PageAttributesFashionComboColorColor.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboSeasonEvent.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboFitProductDemographic.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboMaterialProductSeason.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboFitProductEvent.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboStyleSeason.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboProductPattern.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboStyleProduct.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboProductEvent.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboColorSeason.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboProductDemographic.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboStyleEvent.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboMaterialProduct.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboStyleProductEvent.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboColorProductDemographic.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboProductDemographicEvent.h"
+#include "aspire/attributes/fashion/PageAttributesFashionComboPatternProductSeason.h"
 
 // ---------------------------------------------------------------------------
 // Per-test fixture — each test gets an isolated working directory.
@@ -196,14 +214,16 @@ private slots:
 
     // ==== getTables() ========================================================
 
-    void test_fashion_get_tables_primary_is_color_product_event()
+    void test_fashion_get_tables_primary_has_all_nineteen_combos()
     {
         Fixture fx;
         QVERIFY(fx.tmpDir.isValid());
         QScopedPointer<GeneratorFashionTaxonomy> gen(fx.makeGen());
         const auto tables = gen->getTables();
-        QCOMPARE(tables.primary.size(), 1);
-        QVERIFY(tables.primary.contains(QStringLiteral("PageAttributesFashionComboColorProductEvent")));
+        QCOMPARE(tables.primary.size(), comboKeysAndAttrIds().size());
+        for (const auto &pair : comboKeysAndAttrIds()) {
+            QVERIFY2(tables.primary.contains(pair.second), qPrintable(pair.second));
+        }
     }
 
     void test_fashion_get_tables_category_has_eleven_vocab_tables()
@@ -214,13 +234,14 @@ private slots:
         QCOMPARE(gen->getTables().category.size(), 11);
     }
 
-    void test_fashion_get_tables_referred_to_has_eighteen_other_combos()
+    void test_fashion_get_tables_referred_to_is_empty()
     {
         Fixture fx;
         QVERIFY(fx.tmpDir.isValid());
         QScopedPointer<GeneratorFashionTaxonomy> gen(fx.makeGen());
-        // All combo tables except the primary (ColorProductEvent).
-        QCOMPARE(gen->getTables().referredTo.size(), comboKeysAndAttrIds().size() - 1);
+        // Every combo table is now its own independent primary source — none
+        // is a "child of" another combo row.
+        QVERIFY(gen->getTables().referredTo.isEmpty());
     }
 
     // ==== seedStaticVocabulary() =============================================
@@ -631,6 +652,240 @@ private slots:
             threw = true;
         }
         QVERIFY(threw);
+    }
+
+    // ==== composeArticleTopic() — topic text consumed by article generation ==
+    //
+    // LauncherGeneration composes each generated article's topic/permalink
+    // from a combo row via AbstractPageAttributes::composeArticleTopic().
+    // One test per combo table, verifying it against its own getDescription()
+    // template. Multi-formula tables (ColorProduct, StyleSeason, ColorColor)
+    // get one assertion per formula id, since each renders different wording.
+
+    void test_fashion_topic_color_product_event()
+    {
+        PageAttributesFashionComboColorProductEvent attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboColorProductEvent::ID_COLOR, QStringLiteral("Black")},
+            {PageAttributesFashionComboColorProductEvent::ID_PRODUCT_TYPE, QStringLiteral("Dress")},
+            {PageAttributesFashionComboColorProductEvent::ID_EVENT, QStringLiteral("Funeral")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Black Dress for Funeral"));
+    }
+
+    void test_fashion_topic_color_product()
+    {
+        PageAttributesFashionComboColorProduct attrs;
+        QHash<QString, QString> values = {
+            {PageAttributesFashionComboColorProduct::ID_COLOR, QStringLiteral("Black")},
+            {PageAttributesFashionComboColorProduct::ID_PRODUCT_TYPE, QStringLiteral("Heels")},
+        };
+        values[PageAttributesFashionComboBase::ID_FORMULA_ID] = PageAttributesFashionComboColorProduct::FORMULA_STYLING_PAIRING;
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("What to wear with Black Heels"));
+
+        values[PageAttributesFashionComboBase::ID_FORMULA_ID] = PageAttributesFashionComboColorProduct::FORMULA_FOOTWEAR_MATCHING;
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("What shoes to wear with Black Heels"));
+
+        values[PageAttributesFashionComboBase::ID_FORMULA_ID] = PageAttributesFashionComboColorProduct::FORMULA_HOW_TO_STYLE;
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("How to style Black Heels"));
+    }
+
+    void test_fashion_topic_season_event()
+    {
+        PageAttributesFashionComboSeasonEvent attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboSeasonEvent::ID_SEASON, QStringLiteral("Summer")},
+            {PageAttributesFashionComboSeasonEvent::ID_EVENT, QStringLiteral("Beach Vacation")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Summer Beach Vacation outfit ideas"));
+    }
+
+    void test_fashion_topic_fit_product_demographic()
+    {
+        PageAttributesFashionComboFitProductDemographic attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboFitProductDemographic::ID_FIT, QStringLiteral("A-Line")},
+            {PageAttributesFashionComboFitProductDemographic::ID_PRODUCT_TYPE, QStringLiteral("Skirt")},
+            {PageAttributesFashionComboFitProductDemographic::ID_DEMOGRAPHIC, QStringLiteral("Petite")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Best A-Line Skirt for Petite"));
+    }
+
+    void test_fashion_topic_material_product_season()
+    {
+        PageAttributesFashionComboMaterialProductSeason attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboMaterialProductSeason::ID_MATERIAL, QStringLiteral("Wool")},
+            {PageAttributesFashionComboMaterialProductSeason::ID_PRODUCT_TYPE, QStringLiteral("Coat")},
+            {PageAttributesFashionComboMaterialProductSeason::ID_SEASON, QStringLiteral("Winter")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Wool Coat outfit Winter"));
+    }
+
+    void test_fashion_topic_fit_product_event()
+    {
+        PageAttributesFashionComboFitProductEvent attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboFitProductEvent::ID_FIT, QStringLiteral("Maxi")},
+            {PageAttributesFashionComboFitProductEvent::ID_PRODUCT_TYPE, QStringLiteral("Dress")},
+            {PageAttributesFashionComboFitProductEvent::ID_EVENT, QStringLiteral("Graduation")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Maxi Dress for Graduation"));
+    }
+
+    void test_fashion_topic_style_season()
+    {
+        PageAttributesFashionComboStyleSeason attrs;
+        QHash<QString, QString> values = {
+            {PageAttributesFashionComboStyleSeason::ID_STYLE, QStringLiteral("Old Money/Quiet Luxury")},
+            {PageAttributesFashionComboStyleSeason::ID_SEASON, QStringLiteral("Autumn/Fall")},
+        };
+        values[PageAttributesFashionComboBase::ID_FORMULA_ID] = PageAttributesFashionComboStyleSeason::FORMULA_MICROTREND_LIFESTYLE;
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Old Money/Quiet Luxury Autumn/Fall outfit ideas"));
+
+        values[PageAttributesFashionComboBase::ID_FORMULA_ID] = PageAttributesFashionComboStyleSeason::FORMULA_CAPSULE_CURATION;
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Capsule wardrobe Autumn/Fall Old Money/Quiet Luxury"));
+    }
+
+    void test_fashion_topic_color_color()
+    {
+        PageAttributesFashionComboColorColor attrs;
+        QHash<QString, QString> values = {
+            {PageAttributesFashionComboColorColor::ID_COLOR_A, QStringLiteral("Navy")},
+            {PageAttributesFashionComboColorColor::ID_COLOR_B, QStringLiteral("Burgundy")},
+        };
+        values[PageAttributesFashionComboBase::ID_FORMULA_ID] = PageAttributesFashionComboColorColor::FORMULA_COLOR_PAIRING;
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Navy and Burgundy outfit combination"));
+
+        values[PageAttributesFashionComboBase::ID_FORMULA_ID] = PageAttributesFashionComboColorColor::FORMULA_DOES_COLOR_GO_WITH;
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Does Navy go with Burgundy"));
+    }
+
+    void test_fashion_topic_product_pattern()
+    {
+        PageAttributesFashionComboProductPattern attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboProductPattern::ID_PRODUCT_TYPE, QStringLiteral("Dress")},
+            {PageAttributesFashionComboProductPattern::ID_PATTERN, QStringLiteral("Floral")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Outfit with Floral Dress"));
+    }
+
+    void test_fashion_topic_style_product()
+    {
+        PageAttributesFashionComboStyleProduct attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboStyleProduct::ID_STYLE, QStringLiteral("Old Money/Quiet Luxury")},
+            {PageAttributesFashionComboStyleProduct::ID_PRODUCT_TYPE, QStringLiteral("Blazer")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Old Money/Quiet Luxury Blazer outfits"));
+    }
+
+    void test_fashion_topic_product_event()
+    {
+        PageAttributesFashionComboProductEvent attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboProductEvent::ID_PRODUCT_TYPE, QStringLiteral("Heels")},
+            {PageAttributesFashionComboProductEvent::ID_EVENT, QStringLiteral("Wedding Guest")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("What Heels to wear to Wedding Guest"));
+    }
+
+    void test_fashion_topic_color_season()
+    {
+        PageAttributesFashionComboColorSeason attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboColorSeason::ID_COLOR, QStringLiteral("Sage Green")},
+            {PageAttributesFashionComboColorSeason::ID_SEASON, QStringLiteral("Autumn/Fall")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Best Sage Green outfits for Autumn/Fall"));
+    }
+
+    void test_fashion_topic_product_demographic()
+    {
+        PageAttributesFashionComboProductDemographic attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboProductDemographic::ID_PRODUCT_TYPE, QStringLiteral("Jeans")},
+            {PageAttributesFashionComboProductDemographic::ID_DEMOGRAPHIC, QStringLiteral("Pear Shape")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Best Jeans for Pear Shape"));
+    }
+
+    void test_fashion_topic_style_event()
+    {
+        PageAttributesFashionComboStyleEvent attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboStyleEvent::ID_STYLE, QStringLiteral("Boho Chic")},
+            {PageAttributesFashionComboStyleEvent::ID_EVENT, QStringLiteral("Date Night")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Boho Chic Date Night outfit ideas"));
+    }
+
+    void test_fashion_topic_material_product()
+    {
+        PageAttributesFashionComboMaterialProduct attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboMaterialProduct::ID_MATERIAL, QStringLiteral("Silk")},
+            {PageAttributesFashionComboMaterialProduct::ID_PRODUCT_TYPE, QStringLiteral("Skirt")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("How to style a Silk Skirt"));
+    }
+
+    void test_fashion_topic_style_product_event()
+    {
+        PageAttributesFashionComboStyleProductEvent attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboStyleProductEvent::ID_STYLE, QStringLiteral("Boho Chic")},
+            {PageAttributesFashionComboStyleProductEvent::ID_PRODUCT_TYPE, QStringLiteral("Dress")},
+            {PageAttributesFashionComboStyleProductEvent::ID_EVENT, QStringLiteral("Music Festival")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Boho Chic Dress for Music Festival"));
+    }
+
+    void test_fashion_topic_color_product_demographic()
+    {
+        PageAttributesFashionComboColorProductDemographic attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboColorProductDemographic::ID_COLOR, QStringLiteral("Black")},
+            {PageAttributesFashionComboColorProductDemographic::ID_PRODUCT_TYPE, QStringLiteral("Dress")},
+            {PageAttributesFashionComboColorProductDemographic::ID_DEMOGRAPHIC, QStringLiteral("Plus Size")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Plus Size Black Dress"));
+    }
+
+    void test_fashion_topic_product_demographic_event()
+    {
+        PageAttributesFashionComboProductDemographicEvent attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboProductDemographicEvent::ID_PRODUCT_TYPE, QStringLiteral("Dress")},
+            {PageAttributesFashionComboProductDemographicEvent::ID_DEMOGRAPHIC, QStringLiteral("Maternity")},
+            {PageAttributesFashionComboProductDemographicEvent::ID_EVENT, QStringLiteral("Baby Shower")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Maternity Dress for Baby Shower"));
+    }
+
+    void test_fashion_topic_pattern_product_season()
+    {
+        PageAttributesFashionComboPatternProductSeason attrs;
+        const QHash<QString, QString> values = {
+            {PageAttributesFashionComboPatternProductSeason::ID_PATTERN, QStringLiteral("Floral")},
+            {PageAttributesFashionComboPatternProductSeason::ID_PRODUCT_TYPE, QStringLiteral("Dress")},
+            {PageAttributesFashionComboPatternProductSeason::ID_SEASON, QStringLiteral("Summer")},
+        };
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Floral Dress for Summer"));
+    }
+
+    // Every combo class must be resolvable through the global registry by its
+    // attrId (LauncherGeneration looks it up this way, not by direct type) and
+    // must produce a non-empty topic for a fully-populated row — a compile-time
+    // pure-virtual override existing is not proof it was wired correctly.
+    void test_fashion_topic_all_combo_classes_resolve_via_registry()
+    {
+        for (const auto &pair : comboKeysAndAttrIds()) {
+            const AbstractPageAttributes *proto =
+                AbstractPageAttributes::ALL_PAGE_ATTRIBUTES().value(pair.second, nullptr);
+            QVERIFY2(proto != nullptr, qPrintable(pair.second));
+        }
     }
 };
 

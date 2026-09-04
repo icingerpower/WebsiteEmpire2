@@ -31,6 +31,12 @@ QStringList PageAttributesFashionComboProductEvent::allowedFormulaIds() const
     return {FORMULA_WHAT_PRODUCT_TO_WEAR};
 }
 
+QString PageAttributesFashionComboProductEvent::composeArticleTopic(const QHash<QString, QString> &rowValues) const
+{
+    return QStringLiteral("What ") + rowValues.value(ID_PRODUCT_TYPE) + QStringLiteral(" to wear to ")
+         + rowValues.value(ID_EVENT);
+}
+
 QSharedPointer<QList<AbstractPageAttributes::Attribute>> PageAttributesFashionComboProductEvent::getAttributes() const
 {
     auto attributes = PageAttributesFashionComboBase::getAttributes();

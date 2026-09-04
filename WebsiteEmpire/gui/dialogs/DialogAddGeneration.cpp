@@ -10,6 +10,8 @@
 #include <QMessageBox>
 #include <QPushButton>
 
+#include <algorithm>
+
 DialogAddGeneration::DialogAddGeneration(AbstractEngine *engine, QWidget *parent)
     : QDialog(parent)
     , ui(new Ui::DialogAddGeneration)
@@ -39,29 +41,50 @@ DialogAddGeneration::DialogAddGeneration(AbstractEngine *engine, QWidget *parent
     ui->comboBoxNonSvgImages->addItem(tr("Yes"), true);
 
     // ---- Source table -------------------------------------------------------
+    // Scope the picker to the engine's OWN generator when it declares one
+    // (AbstractEngine::getGeneratorId()) — a Fashion site has no business
+    // sourcing articles from Health/Language data, or vice versa. Only
+    // engines that don't declare a generator (getGeneratorId().isEmpty(),
+    // meaning "no known scoping") fall back to listing every registered
+    // generator's tables, same as before this scoping existed.
+    const QString scopedGeneratorId = engine ? engine->getGeneratorId() : QString{};
+
     ui->comboBoxPrimaryTable->addItem(tr("(None)"), QString{});
     for (auto it = AbstractGenerator::ALL_GENERATORS().constBegin();
          it != AbstractGenerator::ALL_GENERATORS().constEnd(); ++it) {
-        const AbstractGenerator::GeneratorTables tables = it.value()->getTables();
-        if (tables.primary.isEmpty()) {
+        if (!scopedGeneratorId.isEmpty() && it.key() != scopedGeneratorId) {
             continue;
         }
-        const AbstractGenerator::TableDescriptor &desc = *tables.primary.constBegin();
-        const QString displayName = it.value()->getName()
-                                  + QStringLiteral(" — ")
-                                  + desc.name;
-        ui->comboBoxPrimaryTable->addItem(displayName, desc.id);
+        const AbstractGenerator::GeneratorTables tables = it.value()->getTables();
+
+        // Sort by id for a stable, deterministic combobox order across runs
+        // (QHash iteration order is unspecified).
+        QList<AbstractGenerator::TableDescriptor> descs = tables.primary.values();
+        std::sort(descs.begin(), descs.end(),
+                  [](const auto &a, const auto &b) { return a.id < b.id; });
+
+        for (const AbstractGenerator::TableDescriptor &desc : std::as_const(descs)) {
+            const QString displayName = it.value()->getName()
+                                      + QStringLiteral(" — ")
+                                      + desc.name;
+            ui->comboBoxPrimaryTable->addItem(displayName, desc.id);
+        }
     }
 
-    // Pre-select based on the engine's linked generator.
-    if (engine && !engine->getGeneratorId().isEmpty()) {
+    // Pre-select based on the engine's linked generator. When that generator
+    // exposes more than one primary table, picking one automatically would be
+    // arbitrary — deterministically default to the alphabetically-first id
+    // (matches the combobox's own sort order above) rather than leaving an
+    // unexplained "(None)" selected.
+    if (!scopedGeneratorId.isEmpty()) {
         const AbstractGenerator *proto =
-            AbstractGenerator::ALL_GENERATORS().value(engine->getGeneratorId(), nullptr);
+            AbstractGenerator::ALL_GENERATORS().value(scopedGeneratorId, nullptr);
         if (proto) {
             const AbstractGenerator::GeneratorTables tables = proto->getTables();
             if (!tables.primary.isEmpty()) {
-                const QString attrId = tables.primary.constBegin()->id;
-                const int idx = ui->comboBoxPrimaryTable->findData(attrId);
+                QStringList ids = tables.primary.keys();
+                std::sort(ids.begin(), ids.end());
+                const int idx = ui->comboBoxPrimaryTable->findData(ids.first());
                 if (idx >= 0) {
                     ui->comboBoxPrimaryTable->setCurrentIndex(idx);
                 }

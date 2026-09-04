@@ -7,13 +7,13 @@
 #include <QScopedPointer>
 
 class CategoryTable;
-class PageTypeArticle;
+class PageTypeArticleHealth;
 class PageTypeJsApp;
 
 // General-purpose articles engine.
 //
 // A single "default" variation produces one domain row per target language.
-// Page types: PageTypeArticle (category + text) and PageTypeJsApp
+// Page types: PageTypeArticleHealth (category + text) and PageTypeJsApp
 //             (category + intro text + JS app + outro text).
 //
 // After init(), categoryTable() gives access to the shared category vocabulary
@@ -27,6 +27,7 @@ public:
 
     QString          getId()         const override;
     QString          getName()       const override;
+    QString          getGeneratorId() const override;
     QList<Variation> getVariations() const override;
     AbstractEngine  *create(QObject *parent = nullptr) const override;
 
@@ -40,10 +41,10 @@ protected:
     void _onInit(const QDir &workingDir) override;
 
 private:
-    QScopedPointer<CategoryTable>   m_categoryTable;
-    QScopedPointer<PageTypeArticle> m_articleType;
-    QScopedPointer<PageTypeJsApp>   m_jsAppType;
-    QList<const AbstractPageType *> m_pageTypes;
+    QScopedPointer<CategoryTable>         m_categoryTable;
+    QScopedPointer<PageTypeArticleHealth> m_articleType;
+    QScopedPointer<PageTypeJsApp>         m_jsAppType;
+    QList<const AbstractPageType *>       m_pageTypes;
 };
 
 #endif // ENGINEARTICLES_H
