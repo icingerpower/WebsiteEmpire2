@@ -464,6 +464,16 @@ public:
      */
     virtual QList<PageRecord> findPagesWithUnresolvedRasterImages(
         const QString &typeId) const = 0;
+
+    /**
+     * Returns how many of pageId's raster rows are not in Success — i.e. how
+     * many images a repair run would have to (re)generate for this page.
+     * 0 when the page has no raster rows or all of them succeeded.
+     *
+     * Used to tell the user the size of a repair run before starting it: each
+     * image costs one generation AND one review CLI call.
+     */
+    virtual int countUnresolvedRasterImages(int pageId) const = 0;
 };
 
 #endif // IPAGEREPOSITORY_H

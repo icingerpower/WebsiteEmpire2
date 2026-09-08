@@ -196,6 +196,17 @@ public:
     static bool hasSvgImgFix(const QString &articleText);
 
     /**
+     * Counts [IMGFIX] refs in articleText whose fileName does NOT end in ".svg"
+     * — i.e. the raster (photo) images that imageCountMin()/imageCountMax()
+     * apply to. SVG refs are excluded because their count is never
+     * strategy-configurable.
+     *
+     * Counts distinct occurrences, not distinct ids: the count must match what
+     * LauncherGeneration's own raster loop will iterate over.
+     */
+    static int countRasterImgFixRefs(const QString &articleText);
+
+    /**
      * Returns true when the strategy has dedicated SVG instructions, i.e. the
      * SVG generation pass should run after the article content pass.
      */
@@ -240,6 +251,29 @@ public:
     QString buildSvgRepairPrompt(const PageRecord &page,
                                   const QString   &articleText,
                                   const QString   &lang) const;
+
+    /**
+     * Builds a repair prompt asking the AI to extend the article with `missing`
+     * further outfit sections, each carrying its own raster [IMGFIX], and to
+     * return ONLY those new sections.
+     *
+     * Used when the content call produced fewer raster refs than
+     * imageCountMin(). Without this the shortfall was unrecoverable: an
+     * under-counted page stayed ContentReady, but the retry path skips content
+     * generation entirely, so it could never gain the missing images and was
+     * eventually marked Complete below the minimum.
+     *
+     * Asks for whole sections rather than bare [IMGFIX] tags (unlike
+     * buildSvgRepairPrompt) because a raster image must sit inside the outfit
+     * recommendation it illustrates — extractRelevantSection() slices the
+     * article on [TITLE] boundaries to scope each image's prompt and review, so
+     * an image with no section of its own would be reviewed against the wrong
+     * text.
+     */
+    QString buildRasterCountRepairPrompt(const PageRecord &page,
+                                          const QString   &articleText,
+                                          const QString   &lang,
+                                          int              missing) const;
 
     /**
      * Inserts imgFixCode into articleText just before the last [TITLE level="2"]

@@ -80,6 +80,7 @@ public:
     bool allRasterImagesSuccess(int) const override { return true; }
     int resetFailedRasterImages(int) override { return 0; }
     QList<PageRecord> findPagesWithUnresolvedRasterImages(const QString &) const override { return {}; }
+    int countUnresolvedRasterImages(int) const override { return 0; }
 };
 
 PageRecord makeSourcePage(int id, const QString &typeId, quint32 flags = 0)

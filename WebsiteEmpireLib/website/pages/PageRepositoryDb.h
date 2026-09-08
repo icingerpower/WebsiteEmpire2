@@ -100,6 +100,7 @@ public:
     int                              resetFailedRasterImages(int pageId) override;
     QList<PageRecord>                findPagesWithUnresolvedRasterImages(
                                          const QString &typeId) const override;
+    int                              countUnresolvedRasterImages(int pageId) const override;
 
     // Returns the number of generated pages (generated_at IS NOT NULL) whose
     // permalink is in expectedPermalinks.  Used by the GUI to cross-reference

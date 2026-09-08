@@ -33,6 +33,18 @@ private slots:
     void test_genpagequeue_parseimgfix_normalizes_path_prefixed_filename();
     void test_genpagequeue_parseimgfix_leaves_bare_filename_untouched();
     void test_genpagequeue_normalized_filename_variants_all_agree();
+
+    // --- countRasterImgFixRefs (drives the imageCountMin() top-up) ---
+    void test_genpagequeue_count_raster_refs_zero_for_empty_text();
+    void test_genpagequeue_count_raster_refs_counts_jpg_refs();
+    void test_genpagequeue_count_raster_refs_excludes_svg_refs();
+    void test_genpagequeue_count_raster_refs_counts_occurrences_not_ids();
+
+    // --- buildRasterCountRepairPrompt ---
+    void test_genpagequeue_count_repair_prompt_states_missing_count();
+    void test_genpagequeue_count_repair_prompt_includes_article_and_lang();
+    void test_genpagequeue_count_repair_prompt_demands_bare_filename();
+    void test_genpagequeue_count_repair_prompt_includes_style_instructions();
 };
 
 namespace {
@@ -316,6 +328,115 @@ void Test_Website_GenPageQueueRaster::test_genpagequeue_normalized_filename_vari
     QCOMPARE(AbstractShortCodeImage::normalizedFileName(QStringLiteral("/images/foo.jpg")), expected);
     QCOMPARE(AbstractShortCodeImage::normalizedFileName(QStringLiteral("  /images/foo.jpg  ")), expected);
     QCOMPARE(AbstractShortCodeImage::normalizedFileName(QStringLiteral("/a/b/c/foo.jpg")), expected);
+}
+
+// ---------------------------------------------------------------------------
+// countRasterImgFixRefs
+// ---------------------------------------------------------------------------
+
+void Test_Website_GenPageQueueRaster::test_genpagequeue_count_raster_refs_zero_for_empty_text()
+{
+    QCOMPARE(GenPageQueue::countRasterImgFixRefs(QString{}), 0);
+}
+
+void Test_Website_GenPageQueueRaster::test_genpagequeue_count_raster_refs_counts_jpg_refs()
+{
+    const QString text = QStringLiteral(
+        "[IMGFIX id=\"a\" fileName=\"a.jpg\" alt=\"A\"][/IMGFIX]\n"
+        "prose\n"
+        "[IMGFIX id=\"b\" fileName=\"b.jpg\" alt=\"B\"][/IMGFIX]\n");
+
+    QCOMPARE(GenPageQueue::countRasterImgFixRefs(text), 2);
+}
+
+void Test_Website_GenPageQueueRaster::test_genpagequeue_count_raster_refs_excludes_svg_refs()
+{
+    // imageCountMin()/Max() govern raster photos only — an SVG summary table
+    // must never count towards the required photo count, or a page with one
+    // SVG and too few photos would look satisfied.
+    const QString text = QStringLiteral(
+        "[IMGFIX id=\"sum\" fileName=\"summary.svg\" alt=\"Summary\"][/IMGFIX]\n"
+        "[IMGFIX id=\"a\" fileName=\"a.jpg\" alt=\"A\"][/IMGFIX]\n");
+
+    QCOMPARE(GenPageQueue::countRasterImgFixRefs(text), 1);
+}
+
+void Test_Website_GenPageQueueRaster::test_genpagequeue_count_raster_refs_counts_occurrences_not_ids()
+{
+    // The count must match what LauncherGeneration's raster loop iterates,
+    // which is per occurrence — not per distinct id.
+    const QString text = QStringLiteral(
+        "[IMGFIX id=\"same\" fileName=\"same.jpg\" alt=\"A\"][/IMGFIX]\n"
+        "[IMGFIX id=\"same\" fileName=\"same.jpg\" alt=\"A\"][/IMGFIX]\n");
+
+    QCOMPARE(GenPageQueue::countRasterImgFixRefs(text), 2);
+}
+
+// ---------------------------------------------------------------------------
+// buildRasterCountRepairPrompt
+// ---------------------------------------------------------------------------
+
+void Test_Website_GenPageQueueRaster::test_genpagequeue_count_repair_prompt_states_missing_count()
+{
+    Fixture f;
+    GenPageQueue queue(QStringLiteral("article"), false, QList<PageRecord>{}, f.categoryTable,
+                       QString{}, QString{}, QDir{},
+                       QStringLiteral("Photorealistic fashion photography."), 10, 13);
+
+    const QString prompt = queue.buildRasterCountRepairPrompt(
+        makePage(), QStringLiteral("[TITLE level=\"1\"]T[/TITLE]"), QStringLiteral("en"), 4);
+
+    QVERIFY(prompt.contains(QStringLiteral("Write 4 ADDITIONAL outfit section")));
+}
+
+void Test_Website_GenPageQueueRaster::test_genpagequeue_count_repair_prompt_includes_article_and_lang()
+{
+    Fixture f;
+    GenPageQueue queue(QStringLiteral("article"), false, QList<PageRecord>{}, f.categoryTable,
+                       QString{}, QString{}, QDir{},
+                       QStringLiteral("Photorealistic fashion photography."), 10, 13);
+
+    const QString article = QStringLiteral("[TITLE level=\"1\"]Unique Heading[/TITLE]");
+    const QString prompt  = queue.buildRasterCountRepairPrompt(
+        makePage(), article, QStringLiteral("de"), 1);
+
+    // The AI needs the existing article to avoid repeating an outfit idea.
+    QVERIFY(prompt.contains(article));
+    QVERIFY(prompt.contains(QStringLiteral("/burgundy-dress-shoes")));
+    QVERIFY(prompt.contains(QStringLiteral("written in de")));
+}
+
+void Test_Website_GenPageQueueRaster::test_genpagequeue_count_repair_prompt_demands_bare_filename()
+{
+    Fixture f;
+    GenPageQueue queue(QStringLiteral("article"), false, QList<PageRecord>{}, f.categoryTable,
+                       QString{}, QString{}, QDir{},
+                       QStringLiteral("Photorealistic fashion photography."), 10, 13);
+
+    const QString prompt = queue.buildRasterCountRepairPrompt(
+        makePage(), QStringLiteral("article"), QStringLiteral("en"), 2);
+
+    // Guards the 2026-09-07 regression: a path-prefixed fileName stored the
+    // blob under a key no lookup by basename could ever match.
+    QVERIFY(prompt.contains(QStringLiteral("bare file name only")));
+    QVERIFY(prompt.contains(QStringLiteral("never a leading slash")));
+    // Must never re-introduce the contradictory "/images/..." guidance.
+    QVERIFY(!prompt.contains(QStringLiteral("/images/")));
+}
+
+void Test_Website_GenPageQueueRaster::test_genpagequeue_count_repair_prompt_includes_style_instructions()
+{
+    Fixture f;
+    GenPageQueue queue(QStringLiteral("article"), false, QList<PageRecord>{}, f.categoryTable,
+                       QString{}, QString{}, QDir{},
+                       QStringLiteral("Blue eyes and black hair."), 10, 13);
+
+    const QString prompt = queue.buildRasterCountRepairPrompt(
+        makePage(), QStringLiteral("article"), QStringLiteral("en"), 1);
+
+    // The alt text drives the image prompt, so the new sections' alt text must
+    // be written against the same style contract as the original sections'.
+    QVERIFY(prompt.contains(QStringLiteral("Blue eyes and black hair.")));
 }
 
 QTEST_MAIN(Test_Website_GenPageQueueRaster)

@@ -173,6 +173,16 @@
           </widget>
          </item>
          <item>
+          <widget class="QPushButton" name="buttonFinishIncomplete">
+           <property name="toolTip">
+            <string>Regenerate the missing or failed images of every article left in the &quot;Content&quot; state, until each one is complete. Generates no new articles.</string>
+           </property>
+           <property name="text">
+            <string>Finish incomplete</string>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QPushButton" name="buttonGeneratePhase2">
            <property name="enabled">
             <bool>false</bool>

@@ -975,6 +975,17 @@ int PageRepositoryDb::resetFailedRasterImages(int pageId)
     return q.numRowsAffected();
 }
 
+int PageRepositoryDb::countUnresolvedRasterImages(int pageId) const
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM page_raster_images"
+        " WHERE page_id = :page_id AND status != 1"));
+    q.bindValue(QStringLiteral(":page_id"), pageId);
+    q.exec();
+    return q.next() ? q.value(0).toInt() : 0;
+}
+
 QList<PageRecord> PageRepositoryDb::findPagesWithUnresolvedRasterImages(
     const QString &typeId) const
 {

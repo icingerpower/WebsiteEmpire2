@@ -54,6 +54,21 @@ public slots:
     void removeGeneration();
     void generateOne();
     void generateCustomTopic();
+
+    /**
+     * Runs the launcher with --retry-only so it processes ONLY the retry queue:
+     * every article left in ContentReady gets its missing or permanently-failed
+     * raster images regenerated until the page is complete. Generates no new
+     * articles.
+     *
+     * This is the counterpart to generateOne(), which passes --new-only and so
+     * deliberately never touches the backlog — without this action a page whose
+     * images failed had no reachable way to be finished from the UI.
+     * Unlike generatePhase2() it sets no SocialMedia flag: that is a separate,
+     * later pass and must not be triggered as a side effect of image repair.
+     */
+    void finishIncomplete();
+
     void generatePhase2();
     void viewGenCommand();
     void computeRemainingToDo();

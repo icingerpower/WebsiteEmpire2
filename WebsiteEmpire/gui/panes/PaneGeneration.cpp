@@ -153,6 +153,70 @@ void PaneGeneration::generateOne()
     });
 }
 
+void PaneGeneration::finishIncomplete()
+{
+    if (!m_isSetup) {
+        return;
+    }
+
+    PageDb           pageDb(m_workingDir);
+    PageRepositoryDb pageRepo(pageDb);
+
+    // Report the real work up front: an image repair costs a generate AND a
+    // review CLI call per image, so the user should know the size before
+    // starting a run that can take a long time.
+    int pages  = 0;
+    int images = 0;
+    const int rowCount = m_strategies->rowCount();
+    QSet<QString> seenTypeIds;
+    for (int row = 0; row < rowCount; ++row) {
+        const QString typeId = m_strategies->data(
+            m_strategies->index(row, GenStrategyTable::COL_PAGE_TYPE)).toString();
+        if (typeId.isEmpty() || seenTypeIds.contains(typeId)) {
+            continue; // several strategies can share one page type
+        }
+        seenTypeIds.insert(typeId);
+        const QList<PageRecord> &unresolved =
+            pageRepo.findPagesWithUnresolvedRasterImages(typeId);
+        for (const PageRecord &page : std::as_const(unresolved)) {
+            ++pages;
+            images += pageRepo.countUnresolvedRasterImages(page.id);
+        }
+    }
+
+    if (pages == 0) {
+        QMessageBox::information(
+            this,
+            tr("Nothing to finish"),
+            tr("Every article already has all of its images generated."));
+        return;
+    }
+
+    const auto answer = QMessageBox::question(
+        this,
+        tr("Finish incomplete articles"),
+        tr("%n article(s) are missing images.", nullptr, pages)
+            + QLatin1Char('\n')
+            + tr("%n image(s) will be regenerated, each costing a generation and a "
+                 "review call.", nullptr, images)
+            + QStringLiteral("\n\n")
+            + tr("Start now?"),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::Yes);
+    if (answer != QMessageBox::Yes) {
+        return;
+    }
+
+    // No --limit: the retry queue must be able to drain completely.
+    _startProcess({
+        QStringLiteral("--") + AbstractLauncher::OPTION_WORKING_DIR,
+        m_workingDir.absolutePath(),
+        QStringLiteral("--") + LauncherGeneration::OPTION_NAME,
+        QStringLiteral("--") + LauncherGeneration::OPTION_SESSIONS, QStringLiteral("1"),
+        QStringLiteral("--") + LauncherGeneration::OPTION_RETRY_ONLY
+    });
+}
+
 void PaneGeneration::generateCustomTopic()
 {
     if (!m_isSetup) {
@@ -681,6 +745,10 @@ void PaneGeneration::_connectSlots()
             &QPushButton::clicked,
             this,
             &PaneGeneration::viewGenCommand);
+    connect(ui->buttonFinishIncomplete,
+            &QPushButton::clicked,
+            this,
+            &PaneGeneration::finishIncomplete);
     connect(ui->buttonGeneratePhase2,
             &QPushButton::clicked,
             this,

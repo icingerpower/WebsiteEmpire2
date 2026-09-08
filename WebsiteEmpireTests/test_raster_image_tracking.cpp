@@ -78,6 +78,12 @@ private slots:
     void test_raster_unresolved_pages_excludes_translations();
     void test_raster_unresolved_pages_ordered_by_id();
 
+    // --- countUnresolvedRasterImages ---
+    void test_raster_count_unresolved_zero_when_no_rows();
+    void test_raster_count_unresolved_zero_when_all_success();
+    void test_raster_count_unresolved_counts_pending_and_failed();
+    void test_raster_count_unresolved_isolated_per_page();
+
     // --- isolation across pages ---
     void test_raster_tracking_isolated_per_page();
 };
@@ -575,6 +581,60 @@ void Test_Website_RasterImageTracking::test_raster_unresolved_pages_ordered_by_i
     QCOMPARE(found.at(0).id, first);
     QCOMPARE(found.at(1).id, second);
     QCOMPARE(found.at(2).id, third);
+}
+
+// ---------------------------------------------------------------------------
+// countUnresolvedRasterImages
+// ---------------------------------------------------------------------------
+
+void Test_Website_RasterImageTracking::test_raster_count_unresolved_zero_when_no_rows()
+{
+    Fixture f;
+    const int pageId = f.createPage(QStringLiteral("/p"));
+
+    QCOMPARE(f.repo.countUnresolvedRasterImages(pageId), 0);
+}
+
+void Test_Website_RasterImageTracking::test_raster_count_unresolved_zero_when_all_success()
+{
+    Fixture f;
+    const int pageId = f.createPage(QStringLiteral("/p"));
+    f.repo.ensureRasterImagePending(pageId, QStringLiteral("img1"), QStringLiteral("a.jpg"));
+    f.repo.recordRasterImageAttempt(pageId, QStringLiteral("img1"),
+                                    RasterImageStatus::Success, QString());
+
+    QCOMPARE(f.repo.countUnresolvedRasterImages(pageId), 0);
+}
+
+void Test_Website_RasterImageTracking::test_raster_count_unresolved_counts_pending_and_failed()
+{
+    Fixture f;
+    const int pageId = f.createPage(QStringLiteral("/p"));
+    for (const auto &ref : {QStringLiteral("ok"), QStringLiteral("pending"),
+                            QStringLiteral("failed")}) {
+        f.repo.ensureRasterImagePending(pageId, ref, ref + QStringLiteral(".jpg"));
+    }
+    f.repo.recordRasterImageAttempt(pageId, QStringLiteral("ok"),
+                                    RasterImageStatus::Success, QString());
+    f.repo.recordRasterImageAttempt(pageId, QStringLiteral("failed"),
+                                    RasterImageStatus::FailedFinal, QStringLiteral("x"));
+
+    // Both a never-attempted image and a permanently-failed one are work a
+    // repair run must do — this is the figure shown to the user before starting.
+    QCOMPARE(f.repo.countUnresolvedRasterImages(pageId), 2);
+}
+
+void Test_Website_RasterImageTracking::test_raster_count_unresolved_isolated_per_page()
+{
+    Fixture f;
+    const int pageA = f.createPage(QStringLiteral("/a"));
+    const int pageB = f.createPage(QStringLiteral("/b"));
+    f.repo.ensureRasterImagePending(pageA, QStringLiteral("img1"), QStringLiteral("a.jpg"));
+    f.repo.ensureRasterImagePending(pageB, QStringLiteral("img1"), QStringLiteral("b.jpg"));
+    f.repo.ensureRasterImagePending(pageB, QStringLiteral("img2"), QStringLiteral("c.jpg"));
+
+    QCOMPARE(f.repo.countUnresolvedRasterImages(pageA), 1);
+    QCOMPARE(f.repo.countUnresolvedRasterImages(pageB), 2);
 }
 
 QTEST_MAIN(Test_Website_RasterImageTracking)

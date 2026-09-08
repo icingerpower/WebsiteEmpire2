@@ -262,15 +262,35 @@ static QCoro::Task<QString> runWithPolicyRetry(const QString &prompt,
 // for "asking for many images leads to job not finished."
 // ---------------------------------------------------------------------------
 
-static constexpr int kRasterImageTimeoutMs = 5 * 60 * 1000; // 5 min per CLI call
+// Per-CLI-call ceiling for image work. Was 5 min, which proved far too tight:
+// an image call is a generate AND an AI review, and under concurrent sessions
+// legitimate calls exceeded it — 2 of the first 9 permanently-failed images
+// died purely on this bound, never once judged on their content. It is also
+// well under the "--print-timeout 20m" we ourselves pass to Antigravity, so we
+// were killing calls the CLI had been told it could take longer for.
+// 10 min gives roughly 10x the nominal observed duration while still bounding
+// a genuinely hung process. Timeouts no longer consume a content attempt
+// either — see kRasterMaxTransientRetries.
+static constexpr int kRasterImageTimeoutMs = 10 * 60 * 1000;
 static constexpr int kRasterMaxAttempts    = 3;
 
-enum class CliCallOutcome { Ok, QuotaOrAuth, OtherError };
+// Budget for failures that say nothing about the image's content (timeout, CLI
+// missing from PATH). Kept SEPARATE from kRasterMaxAttempts so a slow or
+// unavailable CLI can never mark an image FailedFinal; once exhausted the row
+// is left Pending for the next run rather than killed.
+static constexpr int kRasterMaxTransientRetries = 2;
+
+enum class CliCallOutcome { Ok, QuotaOrAuth, Transient, OtherError };
 
 // Pure classification of a runBoundedClaudePrompt() result — no I/O, no
 // process, unit-testable in isolation.  A quota/auth hit is not a content
 // failure: the caller must pause rather than burn a retry attempt on it, so
 // that "usage limit reached" leaves the image queue untouched for the next run.
+//
+// Transient covers the same principle for infrastructure failures: a call we
+// killed on our own deadline, or a CLI that is not installed, tells us nothing
+// about whether the AI could produce an acceptable image, so it must not spend
+// one of the image's three content attempts.
 static CliCallOutcome classifyCliResponse(const QString &response, AbstractCli *cli)
 {
     if (!response.startsWith(QStringLiteral("__ERROR__"))) {
@@ -279,6 +299,12 @@ static CliCallOutcome classifyCliResponse(const QString &response, AbstractCli *
     const CliErrorKind kind = cli->classifyError(response);
     if (kind == CliErrorKind::QuotaExceeded || kind == CliErrorKind::AuthRequired) {
         return CliCallOutcome::QuotaOrAuth;
+    }
+    // Matches the exact strings runBoundedClaudePrompt() emits for these two
+    // conditions; anything else is treated as a content failure as before.
+    if (response.contains(QStringLiteral("timed out after"))
+     || response.contains(QStringLiteral("executable not found in PATH"))) {
+        return CliCallOutcome::Transient;
     }
     return CliCallOutcome::OtherError;
 }
@@ -393,7 +419,10 @@ static QString buildRasterImageReviewPrompt(const QString &imagePath,
     return prompt;
 }
 
-enum class RasterAttemptResult { Success, RetryableFailure, QuotaOrAuthPause };
+// TransientFailure is distinct from RetryableFailure: both are retried, but
+// only RetryableFailure spends one of the image's kRasterMaxAttempts content
+// attempts. See classifyCliResponse() and kRasterMaxTransientRetries.
+enum class RasterAttemptResult { Success, RetryableFailure, TransientFailure, QuotaOrAuthPause };
 
 // One full generate-then-review cycle for a single raster image ref.
 // tempDir must outlive the returned QImage's use — the caller loads the file
@@ -444,9 +473,17 @@ static QCoro::Task<RasterAttemptResult> runOneRasterAttempt(
     const QString genResponse = co_await runBoundedClaudePrompt(
         prepared, cli, kRasterImageTimeoutMs, tempDir.path() + QStringLiteral("/gen"));
 
-    if (classifyCliResponse(genResponse, cli) == CliCallOutcome::QuotaOrAuth) {
+    const CliCallOutcome genOutcome = classifyCliResponse(genResponse, cli);
+    if (genOutcome == CliCallOutcome::QuotaOrAuth) {
         *lastError = genResponse;
         co_return RasterAttemptResult::QuotaOrAuthPause;
+    }
+    if (genOutcome == CliCallOutcome::Transient) {
+        *lastError = genResponse;
+        *out << QStringLiteral("[S%1] WARN (raster gen, transient — no attempt spent): %2 — %3\n")
+                    .arg(sNum).arg(ref.fileName, genResponse);
+        out->flush();
+        co_return RasterAttemptResult::TransientFailure;
     }
     if (genResponse.startsWith(QStringLiteral("__ERROR__"))) {
         *lastError = genResponse;
@@ -473,9 +510,19 @@ static QCoro::Task<RasterAttemptResult> runOneRasterAttempt(
     const QString reviewResponse = co_await runBoundedClaudePrompt(
         reviewPrompt, cli, kRasterImageTimeoutMs, tempDir.path() + QStringLiteral("/review"));
 
-    if (classifyCliResponse(reviewResponse, cli) == CliCallOutcome::QuotaOrAuth) {
+    const CliCallOutcome reviewOutcome = classifyCliResponse(reviewResponse, cli);
+    if (reviewOutcome == CliCallOutcome::QuotaOrAuth) {
         *lastError = reviewResponse;
         co_return RasterAttemptResult::QuotaOrAuthPause;
+    }
+    // A review call we killed on our own deadline says nothing about the image
+    // that was just generated — do not let it condemn a possibly-good image.
+    if (reviewOutcome == CliCallOutcome::Transient) {
+        *lastError = reviewResponse;
+        *out << QStringLiteral("[S%1] WARN (raster review, transient — no attempt spent): %2 — %3\n")
+                    .arg(sNum).arg(ref.fileName, reviewResponse);
+        out->flush();
+        co_return RasterAttemptResult::TransientFailure;
     }
     if (reviewResponse.startsWith(QStringLiteral("__ERROR__"))
         || !reviewResponse.startsWith(QStringLiteral("OK"), Qt::CaseInsensitive)) {
@@ -528,8 +575,12 @@ static QCoro::Task<bool> runRasterImageGeneration(
     }
 
     QString reviewFeedback;
-    for (int attempt = pageRepo.rasterImageAttempts(pageId, ref.id) + 1;
-         attempt <= kRasterMaxAttempts; ++attempt) {
+    // attempt is advanced only by CONTENT failures, so a timeout or a missing
+    // CLI cannot walk an image to FailedFinal. transientTries is the separate,
+    // smaller budget for those; exhausting it leaves the row Pending.
+    int attempt        = pageRepo.rasterImageAttempts(pageId, ref.id) + 1;
+    int transientTries = 0;
+    while (attempt <= kRasterMaxAttempts) {
         if (g_stopRequested) {
             co_return true; // external stop request, not a quota/auth pause
         }
@@ -538,6 +589,22 @@ static QCoro::Task<bool> runRasterImageGeneration(
         const RasterAttemptResult outcome = co_await runOneRasterAttempt(
             ref, articleText, imageInstructions, lang, domain, reviewFeedback,
             queue, cli, imageWriter, out, sNum, &lastError);
+
+        if (outcome == RasterAttemptResult::TransientFailure) {
+            ++transientTries;
+            if (transientTries > kRasterMaxTransientRetries) {
+                // Leave status Pending and attempts untouched: the image keeps
+                // its full content budget for the next run instead of dying on
+                // an infrastructure problem.
+                *out << QStringLiteral(
+                    "[S%1] Raster image deferred after %2 transient failure(s): %3 — "
+                    "stays pending for the next run (%4)\n")
+                    .arg(sNum).arg(kRasterMaxTransientRetries).arg(ref.fileName, lastError);
+                out->flush();
+                co_return true;
+            }
+            continue; // retry WITHOUT advancing attempt
+        }
 
         if (outcome == RasterAttemptResult::QuotaOrAuthPause) {
             *out << QStringLiteral(
@@ -568,6 +635,7 @@ static QCoro::Task<bool> runRasterImageGeneration(
                         .arg(sNum).arg(kRasterMaxAttempts).arg(ref.fileName, lastError);
             out->flush();
         }
+        ++attempt; // only a content failure advances the attempt counter
     }
     co_return true;
 }
@@ -1025,6 +1093,53 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
             state->out->flush();
         }
 
+        // ---- Call 1.6: top up raster refs when below imageCountMin() --------
+        // Must happen HERE, in the first pass, while we still have the article
+        // text in hand and are allowed to change it. The retry path skips
+        // content generation entirely (see "Skip first-pass content generation"
+        // below), so a shortfall left unfixed now can never be fixed later: the
+        // page would keep its too-few images, repair them all successfully, and
+        // then be marked Complete below the required minimum.
+        if (!g_stopRequested && queue->wantsRasterImage() && queue->imageCountMin() > 0) {
+            const int haveRefs =
+                GenPageQueue::countRasterImgFixRefs(articleText);
+            const int missing = queue->imageCountMin() - haveRefs;
+            if (missing > 0) {
+                *(state->out) << QStringLiteral(
+                    "[S%1] Only %2 raster image ref(s), %3 required — running repair "
+                    "(1.6/2: %4 more section(s))...\n")
+                    .arg(sNum).arg(haveRefs).arg(queue->imageCountMin()).arg(missing);
+                state->out->flush();
+
+                const QString countPrompt =
+                    queue->buildRasterCountRepairPrompt(page, articleText, lang, missing);
+                const QString countResponse = co_await runClaudePrompt(countPrompt, cli);
+
+                if (countResponse.startsWith(QStringLiteral("__ERROR__"))) {
+                    *(state->out) << QStringLiteral("[S%1] WARN (count repair): %2\n")
+                                         .arg(sNum).arg(countResponse);
+                } else {
+                    // Only accept the addition if it actually raises the count —
+                    // a response that adds prose but no [IMGFIX] would otherwise
+                    // pad the article for nothing.
+                    const QString merged = articleText + QStringLiteral("\n\n")
+                                         + countResponse.trimmed();
+                    const int newRefs = GenPageQueue::countRasterImgFixRefs(merged);
+                    if (newRefs > haveRefs) {
+                        articleText = merged;
+                        *(state->out) << QStringLiteral(
+                            "[S%1] Count repair added %2 raster ref(s) (now %3).\n")
+                            .arg(sNum).arg(newRefs - haveRefs).arg(newRefs);
+                    } else {
+                        *(state->out) << QStringLiteral(
+                            "[S%1] WARN (count repair): response added no raster [IMGFIX] — discarded.\n")
+                            .arg(sNum);
+                    }
+                }
+                state->out->flush();
+            }
+        }
+
         // ---- Fix a known AI mistake: title starting with the raw permalink --
         // slug instead of a human-readable topic name (e.g. Antigravity writing
         // "/osteoarthritis-dos-and-dont Dos and Don'ts: ..." instead of
@@ -1206,10 +1321,13 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
             // with images missing.  The social-media second pass is NOT run here —
             // it runs separately via --review + --generation once the page
             // accumulates enough traffic and gets the SocialMedia flag.
-            // An under-count (fewer raster refs than imageCountMin()) is treated
-            // the same as "not fully ready" — the page stays ContentReady so the
-            // next run's content regeneration gets another chance at a better
-            // count, exactly like an SVG that the AI failed to reference at all.
+            // An under-count (fewer raster refs than imageCountMin()) also keeps
+            // the page out of Complete. Note this is a last resort only: the
+            // retry path skips content generation, so a shortfall cannot be
+            // fixed by a later run — it is fixed in call 1.6 above, before the
+            // images are generated. Reaching here with an under-count means that
+            // repair call itself failed, and the page is deliberately left
+            // ContentReady rather than published short.
             // allRasterImagesSuccess(), NOT allRasterImagesTerminal(): a
             // FailedFinal image is terminal but the article is NOT finished —
             // it cannot publish (PageGenerator's gate rejects it), so calling

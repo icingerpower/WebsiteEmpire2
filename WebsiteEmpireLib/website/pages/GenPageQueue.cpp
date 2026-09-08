@@ -558,6 +558,20 @@ bool GenPageQueue::hasSvgImgFix(const QString &articleText)
     return re.match(articleText).hasMatch();
 }
 
+int GenPageQueue::countRasterImgFixRefs(const QString &articleText)
+{
+    // Reuses parseImgFixRefs() rather than a second regex so this count can
+    // never drift from the refs LauncherGeneration actually iterates.
+    const QList<ImgFixRef> refs = parseImgFixRefs(articleText);
+    int count = 0;
+    for (const ImgFixRef &ref : std::as_const(refs)) {
+        if (!ref.fileName.endsWith(QStringLiteral(".svg"), Qt::CaseInsensitive)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 bool GenPageQueue::wantsSvgImage() const
 {
     return !m_svgInstructions.isEmpty();
@@ -645,6 +659,50 @@ QString GenPageQueue::buildSvgRepairPrompt(const PageRecord &page,
                "Return ONLY the [IMGFIX] shortcode — no preamble, no explanation, "
                "no surrounding text.")
         .arg(page.permalink, articleText, lang);
+}
+
+QString GenPageQueue::buildRasterCountRepairPrompt(const PageRecord &page,
+                                                    const QString   &articleText,
+                                                    const QString   &lang,
+                                                    int              missing) const
+{
+    QString prompt = QStringLiteral(
+                         "The following article for the web page \"%1\" is complete and "
+                         "correct, but it contains too few outfit images.\n\n"
+                         "=== Article ===\n"
+                         "%2\n\n"
+                         "=== Task ===\n"
+                         "Write %3 ADDITIONAL outfit section(s) to append to this article, "
+                         "each covering an outfit idea NOT already present above.\n\n"
+                         "Each new section must follow exactly the same structure as the "
+                         "existing sections:\n"
+                         "• [TITLE level=\"3\"]An engaging, specific heading[/TITLE]\n"
+                         "• At least 7 sentences of teaching/inspiring prose, written in %4\n"
+                         "• Exactly one [IMGFIX id=\"slug\" fileName=\"name.jpg\" "
+                         "alt=\"...\"][/IMGFIX] shortcode at the end of the section\n\n"
+                         "Rules for the [IMGFIX] shortcode:\n"
+                         "• id must be short, descriptive and kebab-case, and must not "
+                         "duplicate any id already used above\n"
+                         "• fileName must be a bare file name only (e.g. \"foo.jpg\") — "
+                         "never a path and never a leading slash — ending in .jpg\n"
+                         "• alt must start with \"Woman:\", \"Man:\" or \"Woman and man:\" "
+                         "to state who appears, followed by the exact colors and garments "
+                         "recommended in that section\n\n")
+                     .arg(page.permalink, articleText)
+                     .arg(missing)
+                     .arg(lang);
+
+    if (!m_imageInstructions.isEmpty()) {
+        prompt += QStringLiteral("Image style requirements the alt text must be consistent with:\n")
+                + m_imageInstructions
+                + QStringLiteral("\n\n");
+    }
+
+    prompt += QStringLiteral(
+        "Return ONLY the new section(s) — no preamble, no explanation, and do "
+        "NOT repeat any part of the existing article.");
+
+    return prompt;
 }
 
 QString GenPageQueue::insertImgFix(const QString &articleText, const QString &imgFixCode)
