@@ -38,8 +38,17 @@ QString PageAttributesFashionComboStyleSeason::composeArticleTopic(const QHash<Q
     const QString &season  = rowValues.value(ID_SEASON);
     const QString &formula = rowValues.value(PageAttributesFashionComboBase::ID_FORMULA_ID);
 
+    // Slot order follows how people actually type the query ("y2k summer
+    // capsule wardrobe"), not the table's column order — the composed topic is
+    // slugified into the permalink, so a reversed order costs exact-match
+    // relevance for no benefit.
+    //
+    // Unlike PageAttributesFashionComboColorProduct, BOTH formulas here are
+    // kept: keyword research put the top-10 URL overlap between the two at only
+    // 10-20% (inspiration/lookbook SERPs vs. structured checklist SERPs), so
+    // they are genuinely different intents and do not cannibalize each other.
     if (formula == FORMULA_CAPSULE_CURATION) {
-        return QStringLiteral("Capsule wardrobe ") + season + QLatin1Char(' ') + style;
+        return style + QLatin1Char(' ') + season + QStringLiteral(" capsule wardrobe");
     }
     return style + QLatin1Char(' ') + season + QStringLiteral(" outfit ideas");
 }

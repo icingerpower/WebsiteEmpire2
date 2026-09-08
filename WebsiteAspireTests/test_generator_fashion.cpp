@@ -744,7 +744,17 @@ private slots:
         QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Old Money/Quiet Luxury Autumn/Fall outfit ideas"));
 
         values[PageAttributesFashionComboBase::ID_FORMULA_ID] = PageAttributesFashionComboStyleSeason::FORMULA_CAPSULE_CURATION;
-        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Capsule wardrobe Autumn/Fall Old Money/Quiet Luxury"));
+        // Slot order matches the real-world query phrasing, not the column
+        // order — see composeArticleTopic().
+        QCOMPARE(attrs.composeArticleTopic(values), QStringLiteral("Old Money/Quiet Luxury Autumn/Fall capsule wardrobe"));
+
+        // Both formulas stay eligible here (different search intents), unlike
+        // PageAttributesFashionComboColorProduct where two of three are vetoed.
+        const QStringList allFormulas = attrs.allowedFormulaIds();
+        for (const QString &formula : allFormulas) {
+            values[PageAttributesFashionComboBase::ID_FORMULA_ID] = formula;
+            QVERIFY(attrs.isArticleTopicEligible(values));
+        }
     }
 
     void test_fashion_topic_color_color()
@@ -879,6 +889,72 @@ private slots:
     // attrId (LauncherGeneration looks it up this way, not by direct type) and
     // must produce a non-empty topic for a fully-populated row — a compile-time
     // pure-virtual override existing is not proof it was wired correctly.
+    // ==== isArticleTopicEligible() — rows vetoed from article generation ====
+
+    void test_fashion_eligibility_rejects_footwear_matching_formula()
+    {
+        // "What shoes to wear with {color} {product}" is incoherent whenever
+        // the product IS footwear ("what shoes to wear with black boots"), and
+        // its SERPs are shopping-dominated even when coherent — so the whole
+        // formula is vetoed from article generation.
+        PageAttributesFashionComboColorProduct attrs;
+        QHash<QString, QString> values = {
+            {PageAttributesFashionComboColorProduct::ID_COLOR, QStringLiteral("Black")},
+            {PageAttributesFashionComboColorProduct::ID_PRODUCT_TYPE, QStringLiteral("Boots")},
+            {PageAttributesFashionComboBase::ID_FORMULA_ID,
+             PageAttributesFashionComboColorProduct::FORMULA_FOOTWEAR_MATCHING},
+        };
+        QVERIFY(!attrs.isArticleTopicEligible(values));
+
+        // Same slot values are fine under the one surviving formula.
+        values[PageAttributesFashionComboBase::ID_FORMULA_ID] =
+            PageAttributesFashionComboColorProduct::FORMULA_STYLING_PAIRING;
+        QVERIFY(attrs.isArticleTopicEligible(values));
+    }
+
+    void test_fashion_eligibility_rejects_how_to_style_formula()
+    {
+        // "How to style {x}" and "What to wear with {x}" are the same search
+        // intent (80-90% top-ranking URL overlap), so generating both per
+        // color+product pair would put two of our own pages on one query
+        // cluster. Only FORMULA_STYLING_PAIRING survives.
+        PageAttributesFashionComboColorProduct attrs;
+        QHash<QString, QString> values = {
+            {PageAttributesFashionComboColorProduct::ID_COLOR, QStringLiteral("Black")},
+            {PageAttributesFashionComboColorProduct::ID_PRODUCT_TYPE, QStringLiteral("Boots")},
+            {PageAttributesFashionComboBase::ID_FORMULA_ID,
+             PageAttributesFashionComboColorProduct::FORMULA_HOW_TO_STYLE},
+        };
+        QVERIFY(!attrs.isArticleTopicEligible(values));
+
+        // Exactly one of the three declared formulas may pass, otherwise the
+        // pair is either duplicated or dropped entirely.
+        int eligibleFormulas = 0;
+        const QStringList allFormulas = attrs.allowedFormulaIds();
+        for (const QString &formula : allFormulas) {
+            values[PageAttributesFashionComboBase::ID_FORMULA_ID] = formula;
+            if (attrs.isArticleTopicEligible(values)) {
+                ++eligibleFormulas;
+            }
+        }
+        QCOMPARE(eligibleFormulas, 1);
+    }
+
+    void test_fashion_eligibility_defaults_to_true_for_other_combo_tables()
+    {
+        // Only ColorProduct vetoes anything today — every other combo table
+        // must keep the permissive AbstractPageAttributes default.
+        for (const auto &pair : comboKeysAndAttrIds()) {
+            if (pair.second == QStringLiteral("PageAttributesFashionComboColorProduct")) {
+                continue;
+            }
+            const AbstractPageAttributes *proto =
+                AbstractPageAttributes::ALL_PAGE_ATTRIBUTES().value(pair.second, nullptr);
+            QVERIFY2(proto != nullptr, qPrintable(pair.second));
+            QVERIFY2(proto->isArticleTopicEligible({}), qPrintable(pair.second));
+        }
+    }
+
     void test_fashion_topic_all_combo_classes_resolve_via_registry()
     {
         for (const auto &pair : comboKeysAndAttrIds()) {

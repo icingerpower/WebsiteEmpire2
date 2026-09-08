@@ -26,6 +26,19 @@ public:
     QSharedPointer<QList<Attribute>> getAttributes() const override;
     QStringList allowedFormulaIds() const override;
     QString composeArticleTopic(const QHash<QString, QString> &rowValues) const override;
+
+    /**
+     * Leaves only FORMULA_STYLING_PAIRING eligible for article generation, so
+     * each color+product pair yields exactly one article:
+     *   - FORMULA_FOOTWEAR_MATCHING is vetoed for two independent reasons
+     *     (nonsense when the product IS footwear; shopping-dominated SERPs).
+     *   - FORMULA_HOW_TO_STYLE is vetoed as the same search intent as
+     *     FORMULA_STYLING_PAIRING (80-90% top-ranking URL overlap), which would
+     *     make our own two pages compete for one query cluster.
+     * See the .cpp for the full reasoning. The rows remain in the aspire
+     * research DB — only article generation skips them.
+     */
+    bool isArticleTopicEligible(const QHash<QString, QString> &rowValues) const override;
 };
 
 #endif // PAGEATTRIBUTESFASHIONCOMBOCOLORPRODUCT_H

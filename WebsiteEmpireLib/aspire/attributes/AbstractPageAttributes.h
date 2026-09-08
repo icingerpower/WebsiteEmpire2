@@ -86,6 +86,21 @@ public:
     // PageAttributesFashionCombo*) need to override this.
     virtual QString composeArticleTopic(const QHash<QString, QString> &rowValues) const;
 
+    /**
+     * Returns false when this result row must NOT become an article, even
+     * though it is valid research data. Default true — every row is eligible.
+     *
+     * Lets a table veto rows whose query formula does not make sense for the
+     * specific values in that row (e.g. Fashion's "what shoes to wear with
+     * {color} {product}" formula applied to a footwear product: "what shoes to
+     * wear with black boots" — boots ARE shoes), or that are deliberately not
+     * worth targeting. LauncherGeneration skips ineligible rows when building
+     * its topic list; the rows themselves stay untouched in the aspire DB, so
+     * nothing is lost and the veto can be relaxed later without regenerating
+     * any research data.
+     */
+    virtual bool isArticleTopicEligible(const QHash<QString, QString> &rowValues) const;
+
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     int columnCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;

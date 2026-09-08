@@ -35,6 +35,11 @@ QString AbstractPageAttributes::composeArticleTopic(const QHash<QString, QString
     return QString{};
 }
 
+bool AbstractPageAttributes::isArticleTopicEligible(const QHash<QString, QString> &) const
+{
+    return true;
+}
+
 AbstractPageAttributes::Recorder::Recorder(AbstractPageAttributes *pageAttributes)
 {
     pageAttributes->init();
