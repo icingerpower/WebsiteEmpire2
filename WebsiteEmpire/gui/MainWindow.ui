@@ -30,11 +30,6 @@
         <string>Theme</string>
        </attribute>
       </widget>
-      <widget class="PaneMenus" name="tabMenus">
-       <attribute name="title">
-        <string>Menus</string>
-       </attribute>
-      </widget>
       <widget class="PanePages" name="tabPages">
        <attribute name="title">
         <string>Pages</string>
@@ -102,12 +97,6 @@
    <class>PaneTheme</class>
    <extends>QWidget</extends>
    <header>gui/panes/PaneTheme.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>PaneMenus</class>
-   <extends>QWidget</extends>
-   <header>gui/panes/PaneMenus.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>

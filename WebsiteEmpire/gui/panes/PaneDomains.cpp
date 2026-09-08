@@ -11,6 +11,8 @@
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/CategoryHubDirtySet.h"
 #include "website/pages/CategoryHubSyncer.h"
+#include "website/pages/FashionHubDirtySet.h"
+#include "website/pages/FashionTaxonomyHubSyncer.h"
 #include "website/pages/SymptomHubSyncer.h"
 #include "website/pages/PageDb.h"
 #include "website/pages/PageGenerator.h"
@@ -772,6 +774,10 @@ void PaneDomains::deployLocally()
         CategoryHubSyncer   hubSyncer(pageRepo, categoryTable, hubDirtySet, generator);
         hubSyncer.syncStubs(m_engine->getLangCode(0));
         hubSyncer.markStaleByStats(m_workingDir);
+        FashionHubDirtySet       fashionHubDirtySet(m_workingDir);
+        FashionTaxonomyHubSyncer fashionHubSyncer(pageRepo, m_workingDir, fashionHubDirtySet, generator);
+        fashionHubSyncer.syncStubs(m_engine->getLangCode(0));
+        fashionHubSyncer.markStaleByStats(m_workingDir);
         SymptomHubSyncer    symptomSyncer(pageRepo);
         symptomSyncer.syncStubs(m_workingDir, m_engine->getLangCode(0));
 
