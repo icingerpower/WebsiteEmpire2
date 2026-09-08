@@ -8,11 +8,7 @@
 #include "website/ImageWriter.h"
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/AbstractLegalPageDef.h"
-#include "website/pages/PageTypeCategory.h"
 #include "website/pages/PageTypeHome.h"
-#include "website/pages/PageTypeSymptomHub.h"
-#include "website/pages/PageTypeSymptomIndex.h"
-#include "website/pages/PageTypeTaxonomyIndex.h"
 #include "website/pages/PageTypeLegal.h"
 #include "website/pages/PageFlag.h"
 #include "website/pages/PageGenerationState.h"
@@ -542,15 +538,11 @@ void PanePages::_initDb()
     // Populate type filter combo (first entry = show all).
     ui->comboBoxPageType->clear();
     ui->comboBoxPageType->addItem(tr("All page types"), QString());
-    // Types managed exclusively in the Generated Pages pane.
-    const QSet<QString> generatedTypes = {
-        QLatin1String(PageTypeCategory::TYPE_ID),
-        QLatin1String(PageTypeSymptomHub::TYPE_ID),
-        QLatin1String(PageTypeSymptomIndex::TYPE_ID),
-        QLatin1String(PageTypeTaxonomyIndex::TYPE_ID),
-    };
+    // Auto-managed types (hub/index pages the app creates and syncs) belong
+    // exclusively in the Generated Pages pane — see
+    // AbstractPageType::isAutoManagedTypeId() for the single source of truth.
     for (const QString &typeId : AbstractPageType::allTypeIds()) {
-        if (generatedTypes.contains(typeId)) {
+        if (AbstractPageType::isAutoManagedTypeId(typeId)) {
             continue;
         }
         const auto pageType = AbstractPageType::createForTypeId(typeId, *m_categoryTable);
@@ -569,11 +561,24 @@ void PanePages::_refreshModel()
     if (!m_pageDb) {
         return;
     }
+    // Auto-managed type ids (hub/index pages) excluded from this manual list —
+    // see AbstractPageType::isAutoManagedTypeId() for the single source of
+    // truth this is built from, instead of a hardcoded literal list here.
+    QStringList excludedTypeIds;
+    for (const QString &typeId : AbstractPageType::allTypeIds()) {
+        if (AbstractPageType::isAutoManagedTypeId(typeId)) {
+            excludedTypeIds << QLatin1Char('\'') + typeId + QLatin1Char('\'');
+        }
+    }
+    const QString notInClause = excludedTypeIds.isEmpty()
+        ? QStringLiteral("1=1")
+        : QStringLiteral("type_id NOT IN (") + excludedTypeIds.join(QLatin1Char(',')) + QLatin1Char(')');
+
     m_model->setQuery(
         QStringLiteral(
             "SELECT id, type_id, permalink, lang, updated_at, generation_state, flags FROM pages"
-            " WHERE type_id NOT IN ('category_hub','symptom_hub','symptom_index','taxonomy_index')"
-            " ORDER BY id"),
+            " WHERE %1"
+            " ORDER BY id").arg(notInClause),
         m_pageDb->database());
     m_model->setHeaderData(0, Qt::Horizontal, tr("ID"));
     m_model->setHeaderData(1, Qt::Horizontal, tr("Type"));

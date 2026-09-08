@@ -1,7 +1,7 @@
 #include "EngineLanguages.h"
 
 #include "CountryLangManager.h"
-#include "website/pages/PageTypeArticle.h"
+#include "website/pages/PageTypeArticleHealth.h"
 #include "website/pages/attributes/CategoryTable.h"
 
 #include <QLocale>
@@ -62,7 +62,7 @@ void EngineLanguages::_onInit(const QDir &workingDir)
 {
     m_articleType.reset();   // release CategoryTable & before destroying the table
     m_categoryTable.reset(new CategoryTable(workingDir));
-    m_articleType.reset(new PageTypeArticle(*m_categoryTable));
+    m_articleType.reset(new PageTypeArticleHealth(*m_categoryTable));
     m_pageTypes.clear();
     m_pageTypes.append(m_articleType.data());
 }

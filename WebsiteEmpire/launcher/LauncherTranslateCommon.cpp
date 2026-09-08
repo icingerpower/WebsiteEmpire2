@@ -7,6 +7,7 @@
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/taxonomy/TaxonomyDb.h"
+#include "website/taxonomy/TaxonomyTranslationFilter.h"
 #include "website/taxonomy/TaxonomyTranslator.h"
 #include "website/theme/AbstractTheme.h"
 #include "website/translation/CategoryTranslator.h"
@@ -148,7 +149,11 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
         CategoryTranslator::buildJobs(*categoryTable, sourceLang, targetLangs);
 
     auto *taxonomyDb = new TaxonomyDb(workingDir);
-    const QStringList taxTypes = taxonomyDb->allTypes();
+    // Only translate taxonomies the active engine declares as translatable —
+    // e.g. a Fashion engine's Color/Season/Occasion/Material/Style, never a
+    // Health engine's Symptoms, regardless of what's synced into taxonomy.db.
+    const QStringList taxTypes = TaxonomyTranslationFilter::filterTranslatable(
+        engine, taxonomyDb->allTypes());
     const QList<TaxonomyTranslator::TranslationJob> taxJobs =
         TaxonomyTranslator::buildJobs(*taxonomyDb, taxTypes, sourceLang, targetLangs);
 

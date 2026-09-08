@@ -2,7 +2,7 @@
 
 #include <QTemporaryDir>
 
-#include "website/pages/PageTypeArticle.h"
+#include "website/pages/PageTypeArticleHealth.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/blocs/PageBlocCategory.h"
 #include "website/pages/blocs/PageBlocText.h"
@@ -18,11 +18,11 @@ namespace {
 // Engine instance used in addCode calls (no init() — getLangCode returns "" for all indices).
 EngineArticles engine;
 
-// Owns the working directory and CategoryTable so PageTypeArticle stays valid.
+// Owns the working directory and CategoryTable so PageTypeArticleHealth stays valid.
 struct ArticleFixture {
-    QTemporaryDir   dir;
-    CategoryTable   categoryTable;
-    PageTypeArticle article;
+    QTemporaryDir         dir;
+    CategoryTable         categoryTable;
+    PageTypeArticleHealth article;
 
     ArticleFixture()
         : categoryTable(QDir(dir.path()))
@@ -30,8 +30,8 @@ struct ArticleFixture {
     {}
 };
 
-// Builds the prefixed hash that PageTypeArticle::load() expects.
-// PageTypeArticle: bloc 0 = PageBlocCategory, bloc 1 = PageBlocText.
+// Builds the prefixed hash that PageTypeArticleHealth::load() expects.
+// PageTypeArticleHealth: bloc 0 = PageBlocCategory, bloc 1 = PageBlocText.
 QHash<QString, QString> makeHash(const QString &categories, const QString &text)
 {
     return {
@@ -71,68 +71,68 @@ QString bodyContent(const QString &html)
 } // namespace
 
 // =============================================================================
-// Test_PageTypeArticle
+// Test_Website_PageTypeArticleHealth
 // =============================================================================
 
-class Test_PageTypeArticle : public QObject
+class Test_Website_PageTypeArticleHealth : public QObject
 {
     Q_OBJECT
 
 private slots:
     // --- getPageBlocs ---
-    void test_pagetypearticle_get_page_blocs_returns_four_blocs();
-    void test_pagetypearticle_get_page_blocs_all_non_null();
-    void test_pagetypearticle_get_page_blocs_returns_same_ref_on_repeated_calls();
+    void test_pagetypearticlehealth_get_page_blocs_returns_eight_blocs();
+    void test_pagetypearticlehealth_get_page_blocs_all_non_null();
+    void test_pagetypearticlehealth_get_page_blocs_returns_same_ref_on_repeated_calls();
 
     // --- getAttributes ---
-    void test_pagetypearticle_get_attributes_empty_by_default();
-    void test_pagetypearticle_get_attributes_returns_same_ref_on_repeated_calls();
+    void test_pagetypearticlehealth_get_attributes_empty_by_default();
+    void test_pagetypearticlehealth_get_attributes_returns_same_ref_on_repeated_calls();
 
     // --- load / save ---
-    void test_pagetypearticle_save_prefixes_text_bloc_key();
-    void test_pagetypearticle_save_prefixes_category_bloc_key();
-    void test_pagetypearticle_load_save_roundtrip_text();
-    void test_pagetypearticle_load_ignores_unknown_prefix();
-    void test_pagetypearticle_load_empty_hash_produces_empty_text_key();
+    void test_pagetypearticlehealth_save_prefixes_text_bloc_key();
+    void test_pagetypearticlehealth_save_prefixes_category_bloc_key();
+    void test_pagetypearticlehealth_load_save_roundtrip_text();
+    void test_pagetypearticlehealth_load_ignores_unknown_prefix();
+    void test_pagetypearticlehealth_load_empty_hash_produces_empty_text_key();
 
     // --- addCode: HTML page structure ---
-    void test_pagetypearticle_addcode_starts_with_doctype();
-    void test_pagetypearticle_addcode_contains_html_head_body_tags();
-    void test_pagetypearticle_addcode_ends_with_body_html_close();
-    void test_pagetypearticle_addcode_head_before_body();
-    void test_pagetypearticle_addcode_output_css_js_params_untouched();
+    void test_pagetypearticlehealth_addcode_starts_with_doctype();
+    void test_pagetypearticlehealth_addcode_contains_html_head_body_tags();
+    void test_pagetypearticlehealth_addcode_ends_with_body_html_close();
+    void test_pagetypearticlehealth_addcode_head_before_body();
+    void test_pagetypearticlehealth_addcode_output_css_js_params_untouched();
 
     // --- addCode: CSS inlining ---
-    void test_pagetypearticle_addcode_always_has_style_tag_for_base_css();
-    void test_pagetypearticle_addcode_css_inlined_in_style_tag();
-    void test_pagetypearticle_addcode_style_tag_in_head_before_body();
+    void test_pagetypearticlehealth_addcode_always_has_style_tag_for_base_css();
+    void test_pagetypearticlehealth_addcode_css_inlined_in_style_tag();
+    void test_pagetypearticlehealth_addcode_style_tag_in_head_before_body();
 
     // --- addCode: JS inlining ---
-    void test_pagetypearticle_addcode_no_script_tag_when_no_js();
+    void test_pagetypearticlehealth_addcode_no_script_tag_when_no_js();
 
     // --- addCode: body content ---
-    void test_pagetypearticle_addcode_empty_text_empty_body();
-    void test_pagetypearticle_addcode_text_content_in_body();
-    void test_pagetypearticle_addcode_single_para_wrapped_in_p_in_body();
-    void test_pagetypearticle_addcode_two_paragraphs_produce_two_p_tags();
-    void test_pagetypearticle_addcode_paragraphs_appear_in_order();
-    void test_pagetypearticle_addcode_video_shortcode_expanded_in_body();
-    void test_pagetypearticle_addcode_video_shortcode_tag_absent_from_output();
+    void test_pagetypearticlehealth_addcode_empty_text_empty_body();
+    void test_pagetypearticlehealth_addcode_text_content_in_body();
+    void test_pagetypearticlehealth_addcode_single_para_wrapped_in_p_in_body();
+    void test_pagetypearticlehealth_addcode_two_paragraphs_produce_two_p_tags();
+    void test_pagetypearticlehealth_addcode_paragraphs_appear_in_order();
+    void test_pagetypearticlehealth_addcode_video_shortcode_expanded_in_body();
+    void test_pagetypearticlehealth_addcode_video_shortcode_tag_absent_from_output();
 };
 
 // =============================================================================
 // getPageBlocs
 // =============================================================================
 
-void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_returns_four_blocs()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_get_page_blocs_returns_eight_blocs()
 {
-    // PageTypeArticle has eight blocs: Category, Text, SocialText, AutoLink,
+    // PageTypeArticleHealth has eight blocs: Category, Text, SocialText, AutoLink,
     // CategoryLinks, Social, Meta, SymptomLinks.
     ArticleFixture f;
     QCOMPARE(f.article.getPageBlocs().size(), 8);   // 1
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_all_non_null()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_get_page_blocs_all_non_null()
 {
     ArticleFixture f;
     for (const AbstractPageBloc *bloc : f.article.getPageBlocs()) {
@@ -140,7 +140,7 @@ void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_all_non_null()
     }
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_returns_same_ref_on_repeated_calls()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_get_page_blocs_returns_same_ref_on_repeated_calls()
 {
     ArticleFixture f;
     QVERIFY(&f.article.getPageBlocs() == &f.article.getPageBlocs());   // 3
@@ -150,13 +150,13 @@ void Test_PageTypeArticle::test_pagetypearticle_get_page_blocs_returns_same_ref_
 // getAttributes
 // =============================================================================
 
-void Test_PageTypeArticle::test_pagetypearticle_get_attributes_empty_by_default()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_get_attributes_empty_by_default()
 {
     ArticleFixture f;
     QVERIFY(f.article.getAttributes().isEmpty());   // 4
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_get_attributes_returns_same_ref_on_repeated_calls()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_get_attributes_returns_same_ref_on_repeated_calls()
 {
     ArticleFixture f;
     QVERIFY(&f.article.getAttributes() == &f.article.getAttributes());   // 5
@@ -166,7 +166,7 @@ void Test_PageTypeArticle::test_pagetypearticle_get_attributes_returns_same_ref_
 // load / save
 // =============================================================================
 
-void Test_PageTypeArticle::test_pagetypearticle_save_prefixes_text_bloc_key()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_save_prefixes_text_bloc_key()
 {
     ArticleFixture f;
     f.article.load(makeHash(QString(), QStringLiteral("hello")));
@@ -178,7 +178,7 @@ void Test_PageTypeArticle::test_pagetypearticle_save_prefixes_text_bloc_key()
     QCOMPARE(saved.value(key), QStringLiteral("hello"));    // 7
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_save_prefixes_category_bloc_key()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_save_prefixes_category_bloc_key()
 {
     ArticleFixture f;
     f.article.load(makeHash(QString(), QString()));
@@ -189,7 +189,7 @@ void Test_PageTypeArticle::test_pagetypearticle_save_prefixes_category_bloc_key(
     QVERIFY(saved.contains(key));   // 8
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_load_save_roundtrip_text()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_load_save_roundtrip_text()
 {
     ArticleFixture f;
     const QString text = QStringLiteral("first para\n\nsecond para");
@@ -207,7 +207,7 @@ void Test_PageTypeArticle::test_pagetypearticle_load_save_roundtrip_text()
     QCOMPARE(saved2.value(key), text);   // 9
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_load_ignores_unknown_prefix()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_load_ignores_unknown_prefix()
 {
     ArticleFixture f;
     QHash<QString, QString> input = makeHash(QString(), QStringLiteral("text"));
@@ -219,7 +219,7 @@ void Test_PageTypeArticle::test_pagetypearticle_load_ignores_unknown_prefix()
     QVERIFY(!saved.contains(QStringLiteral("9_future_key")));   // 11
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_load_empty_hash_produces_empty_text_key()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_load_empty_hash_produces_empty_text_key()
 {
     ArticleFixture f;
     f.article.load({});
@@ -234,14 +234,14 @@ void Test_PageTypeArticle::test_pagetypearticle_load_empty_hash_produces_empty_t
 // addCode — HTML page structure
 // =============================================================================
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_starts_with_doctype()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_starts_with_doctype()
 {
     ArticleFixture f;
     const auto &html = htmlFrom(f, QString());
     QVERIFY(html.startsWith(QStringLiteral("<!DOCTYPE html>")));   // 13
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_contains_html_head_body_tags()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_contains_html_head_body_tags()
 {
     ArticleFixture f;
     const auto &html = htmlFrom(f, QString());
@@ -250,21 +250,21 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_contains_html_head_body_
     QVERIFY(html.contains(QStringLiteral("<body>")));   // 16
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_ends_with_body_html_close()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_ends_with_body_html_close()
 {
     ArticleFixture f;
     const auto &html = htmlFrom(f, QString());
     QVERIFY(html.endsWith(QStringLiteral("</body></html>")));   // 17
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_head_before_body()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_head_before_body()
 {
     ArticleFixture f;
     const auto &html = htmlFrom(f, QString());
     QVERIFY(html.indexOf(QStringLiteral("<head>")) < html.indexOf(QStringLiteral("<body>")));   // 18
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_output_css_js_params_untouched()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_output_css_js_params_untouched()
 {
     ArticleFixture f;
     f.article.load(makeHash(QString(), QStringLiteral("text")));
@@ -281,7 +281,7 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_output_css_js_params_unt
 // addCode — CSS inlining
 // =============================================================================
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_always_has_style_tag_for_base_css()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_always_has_style_tag_for_base_css()
 {
     // AbstractPageType always inlines base layout CSS regardless of bloc content.
     ArticleFixture f;
@@ -290,7 +290,7 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_always_has_style_tag_for
     QVERIFY(html.contains(QStringLiteral("page-content")));   // base CSS class present
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_css_inlined_in_style_tag()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_css_inlined_in_style_tag()
 {
     ArticleFixture f;
     const int catId = f.categoryTable.addCategory(QStringLiteral("Tech"));
@@ -303,7 +303,7 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_css_inlined_in_style_tag
     QVERIFY(html.contains(QStringLiteral(".breadcrumb")));    // 23
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_style_tag_in_head_before_body()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_style_tag_in_head_before_body()
 {
     ArticleFixture f;
     const int catId = f.categoryTable.addCategory(QStringLiteral("Tech"));
@@ -319,7 +319,7 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_style_tag_in_head_before
 // addCode — JS inlining
 // =============================================================================
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_no_script_tag_when_no_js()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_no_script_tag_when_no_js()
 {
     // AbstractPageType always injects the image-zoom lightbox script, so a
     // <script> tag is present even when no page bloc emits JS.
@@ -332,21 +332,21 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_no_script_tag_when_no_js
 // addCode — body content
 // =============================================================================
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_empty_text_empty_body()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_empty_text_empty_body()
 {
     ArticleFixture f;
     const auto &html = htmlFrom(f, QString());
     QVERIFY(bodyContent(html).isEmpty());   // 26
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_text_content_in_body()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_text_content_in_body()
 {
     ArticleFixture f;
     const auto &html = htmlFrom(f, QStringLiteral("hello world"));
     QVERIFY(bodyContent(html).contains(QStringLiteral("hello world")));   // 27
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_single_para_wrapped_in_p_in_body()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_single_para_wrapped_in_p_in_body()
 {
     ArticleFixture f;
     const auto &body = bodyContent(htmlFrom(f, QStringLiteral("Hello")));
@@ -354,7 +354,7 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_single_para_wrapped_in_p
     QVERIFY(body.endsWith(QStringLiteral("</p>")));    // 29
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_two_paragraphs_produce_two_p_tags()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_two_paragraphs_produce_two_p_tags()
 {
     ArticleFixture f;
     const auto &body = bodyContent(htmlFrom(f, QStringLiteral("first\n\nsecond")));
@@ -362,14 +362,14 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_two_paragraphs_produce_t
     QCOMPARE(body.count(QStringLiteral("</p>")), 2);   // 31
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_paragraphs_appear_in_order()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_paragraphs_appear_in_order()
 {
     ArticleFixture f;
     const auto &body = bodyContent(htmlFrom(f, QStringLiteral("alpha\n\nbeta")));
     QVERIFY(body.indexOf(QStringLiteral("alpha")) < body.indexOf(QStringLiteral("beta")));   // 32
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_video_shortcode_expanded_in_body()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_video_shortcode_expanded_in_body()
 {
     ArticleFixture f;
     const auto &body = bodyContent(
@@ -378,7 +378,7 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_video_shortcode_expanded
     QVERIFY(body.contains(QStringLiteral("example.com"))); // 34
 }
 
-void Test_PageTypeArticle::test_pagetypearticle_addcode_video_shortcode_tag_absent_from_output()
+void Test_Website_PageTypeArticleHealth::test_pagetypearticlehealth_addcode_video_shortcode_tag_absent_from_output()
 {
     ArticleFixture f;
     const auto &html = htmlFrom(
@@ -386,5 +386,5 @@ void Test_PageTypeArticle::test_pagetypearticle_addcode_video_shortcode_tag_abse
     QVERIFY(!html.contains(QStringLiteral("[VIDEO")));   // 35
 }
 
-QTEST_MAIN(Test_PageTypeArticle)
-#include "test_page_type_article.moc"
+QTEST_MAIN(Test_Website_PageTypeArticleHealth)
+#include "test_page_type_article_health.moc"

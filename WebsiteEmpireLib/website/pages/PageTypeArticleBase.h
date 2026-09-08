@@ -1,5 +1,5 @@
-#ifndef PAGETYPEARTICLE_H
-#define PAGETYPEARTICLE_H
+#ifndef PAGETYPEARTICLEBASE_H
+#define PAGETYPEARTICLEBASE_H
 
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/blocs/PageBlocAutoLink.h"
@@ -7,7 +7,6 @@
 #include "website/pages/blocs/PageBlocMeta.h"
 #include "website/pages/blocs/PageBlocSocial.h"
 #include "website/pages/blocs/PageBlocSocialMedia.h"
-#include "website/pages/blocs/PageBlocSymptomLinks.h"
 #include "website/pages/blocs/PageBlocText.h"
 
 #include <QDir>
@@ -17,17 +16,31 @@ class CategoryTable;
 class PageBlocCategory;
 
 /**
- * A page type composed of seven blocs (in order):
- *   0 — PageBlocCategory      : primary breadcrumb category
- *   1 — PageBlocText           : main article body
- *   2 — PageBlocSocial         : social-media text metadata (title + desc, first pass)
- *   3 — PageBlocAutoLink       : keywords that auto-link to this page
- *   4 — PageBlocCategoryLinks  : cross-reference category links (body parts, etc.)
- *   5 — PageBlocSocialMedia    : social-media image variants (second pass, opt-in)
- *   6 — PageBlocMeta           : SEO title + meta description (translatable)
- *   7 — PageBlocSymptomLinks   : editor-selected symptom pill links
+ * Shared base for article-style page types across verticals (Health,
+ * Fashion, ...).
  *
- * Registered in the AbstractPageType registry under TYPE_ID = "article".
+ * Composes seven generic blocs (storage order):
+ *   0 — PageBlocCategory      : primary breadcrumb category
+ *   1 — PageBlocText          : main article body
+ *   2 — PageBlocSocial        : social-media text metadata (title + desc, first pass)
+ *   3 — PageBlocAutoLink      : keywords that auto-link to this page
+ *   4 — PageBlocCategoryLinks : cross-reference category links (body parts, etc.)
+ *   5 — PageBlocSocialMedia   : social-media image variants (second pass, opt-in)
+ *   6 — PageBlocMeta          : SEO title + meta description (translatable)
+ *
+ * NOT registered via DECLARE_PAGE_TYPE: getTypeId()/getDisplayName() stay
+ * pure virtual (inherited from AbstractPageType), so this class can never be
+ * constructed through AbstractPageType::createForTypeId() — it exists purely
+ * as a shared base for concrete verticals.
+ *
+ * A concrete vertical (see PageTypeArticleHealth) supplies TYPE_ID/
+ * DISPLAY_NAME and may, in its own constructor (after this base's
+ * constructor has populated blocs 0–6 into the protected m_blocs list),
+ * append its own additional blocs — e.g. PageTypeArticleHealth appends a
+ * PageBlocSymptomLinks as bloc 7 and overrides getRenderBlocs() to
+ * reposition it in the rendered output without changing storage order.
+ * A vertical with no extra blocs (e.g. PageTypeArticleFashion) needs no
+ * override at all: it inherits getPageBlocs()/getRenderBlocs() unchanged.
  *
  * The category bloc is first so getAttributes() returns the page's selected
  * categories before any text-bloc attributes.  PageBlocMeta is last so it can
@@ -43,43 +56,16 @@ class PageBlocCategory;
  *
  * Call setGenerationContext() (AbstractPageType) before addCode() so that
  * buildHeadMetaTags() can emit correct canonical, og:url and hreflang tags.
- *
- * bindGenerationContext() stores the working directory so that addCode() can
- * supply it to PageBlocSymptomLinks for aspire DB queries.
  */
-class PageTypeArticle : public AbstractPageType
+class PageTypeArticleBase : public AbstractPageType
 {
 public:
-    static constexpr const char *TYPE_ID      = "article";
-    static constexpr const char *DISPLAY_NAME = "Article";
-
-    explicit PageTypeArticle(CategoryTable &categoryTable);
-    ~PageTypeArticle() override;
-
-    QString getTypeId()      const override;
-    QString getDisplayName() const override;
+    explicit PageTypeArticleBase(CategoryTable &categoryTable);
+    ~PageTypeArticleBase() override;
 
     const QList<const AbstractPageBloc *> &getPageBlocs() const override;
 
-    /**
-     * Renders symptom links between the category breadcrumb (bloc 0) and
-     * the article text (bloc 1), without changing the storage key order.
-     */
-    QList<const AbstractPageBloc *> getRenderBlocs() const override;
-
     bool isCountedInTranslationStats() const override;
-
-    /**
-     * Stores the working directory; delegates to bindWorkingDir().
-     */
-    void bindGenerationContext(IPageRepository &repo, const QDir &workingDir) override;
-
-    /**
-     * Passes the working directory to PageBlocSymptomLinks so its edit widget
-     * and getAiKeyClues() can load the symptom vocabulary from taxonomy.db.
-     * Called by both bindGenerationContext() and GenPageQueue._schema().
-     */
-    void bindWorkingDir(const QDir &workingDir) override;
 
     /**
      * Sets the canonical URL of the article page so PageBlocAutoLink can
@@ -124,9 +110,9 @@ public:
     void prepareJsonLdImage(const QDir &workingDir, const QString &domain) override;
 
     /**
-     * Returns true: PageTypeArticle always requires an SVG image in the first
-     * pass.  LauncherGeneration will not mark the page Complete if SVG
-     * generation failed — it stays ContentReady for retry on the next run.
+     * Returns true: every article vertical always requires an SVG image in
+     * the first pass.  LauncherGeneration will not mark the page Complete if
+     * SVG generation failed — it stays ContentReady for retry on the next run.
      */
     bool hasSvg() const override;
 
@@ -150,7 +136,6 @@ protected:
                          QSet<QString>  &cssDoneIds,
                          QSet<QString>  &jsDoneIds) const override;
 
-private:
     QScopedPointer<PageBlocCategory> m_categoryBloc;
     PageBlocText                     m_textBloc;
     PageBlocSocial                   m_socialTextBloc;
@@ -158,8 +143,7 @@ private:
     PageBlocCategoryLinks            m_categoryLinksBloc;
     PageBlocSocialMedia              m_socialBloc;
     PageBlocMeta                     m_metaBloc;
-    PageBlocSymptomLinks             m_symptomLinksBloc;
     QList<const AbstractPageBloc *>  m_blocs;
 };
 
-#endif // PAGETYPEARTICLE_H
+#endif // PAGETYPEARTICLEBASE_H

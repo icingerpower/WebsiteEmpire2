@@ -29,8 +29,12 @@ set(BLOCS_FILES
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocArticleUtils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocHubGrid.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocHubGrid.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocFashionHubGrid.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocFashionHubGrid.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocSymptomLinks.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocSymptomLinks.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocFashionTaxonomyLinks.h
+    ${CMAKE_CURRENT_LIST_DIR}/PageBlocFashionTaxonomyLinks.cpp
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocConditionList.h
     ${CMAKE_CURRENT_LIST_DIR}/PageBlocConditionList.cpp
     ${BLOCS_WIDGETS_FILES}

@@ -5,6 +5,8 @@
 #include "website/WebsiteSettingsTable.h"
 #include "website/pages/CategoryHubDirtySet.h"
 #include "website/pages/CategoryHubSyncer.h"
+#include "website/pages/FashionHubDirtySet.h"
+#include "website/pages/FashionTaxonomyHubSyncer.h"
 #include "website/pages/SymptomHubSyncer.h"
 #include "website/pages/TaxonomyIndexSyncer.h"
 #include "website/pages/PageTypeTaxonomyIndex.h"
@@ -151,6 +153,8 @@ PaneGeneratedPages::PaneGeneratedPages(QWidget *parent)
 PaneGeneratedPages::~PaneGeneratedPages()
 {
     // Tear down in reverse dependency order.
+    m_fashionSyncer.reset();
+    m_fashionDirtySet.reset();
     m_taxonomyIndexSyncer.reset();
     m_symptomSyncer.reset();
     m_syncer.reset();
@@ -201,18 +205,29 @@ void PaneGeneratedPages::syncStubs()
     const QString lang = m_settingsTable ? m_settingsTable->editingLangCode() : QString{};
     if (!lang.isEmpty()) {
         m_syncer->syncStubs(lang);
-        m_symptomSyncer->syncStubs(m_workingDir, lang);
         m_taxonomyIndexSyncer->syncStubs(lang);
+        if (m_fashionSyncer) {
+            m_fashionSyncer->syncStubs(lang);
+            m_fashionSyncer->markStaleByStats(m_workingDir);
+        }
 
-        // Ensure the /symptoms index stub exists so it appears in the page picker.
-        if (m_pageRepo) {
-            const QList<PageRecord> all = m_pageRepo->findAll();
-            const bool found = std::any_of(all.begin(), all.end(), [](const PageRecord &r) {
-                return r.permalink == QStringLiteral("/symptoms");
-            });
-            if (!found) {
-                m_pageRepo->create(QLatin1String(PageTypeSymptomIndex::TYPE_ID),
-                                   QStringLiteral("/symptoms"), lang);
+        // m_symptomSyncer is only non-null for the Health vertical (see
+        // _initDb()) — both the sync call and the /symptoms stub creation
+        // below must stay behind this same guard, or a Fashion/Languages
+        // site would grow a Health-only /symptoms page it should never have.
+        if (m_symptomSyncer) {
+            m_symptomSyncer->syncStubs(m_workingDir, lang);
+
+            // Ensure the /symptoms index stub exists so it appears in the page picker.
+            if (m_pageRepo) {
+                const QList<PageRecord> all = m_pageRepo->findAll();
+                const bool found = std::any_of(all.begin(), all.end(), [](const PageRecord &r) {
+                    return r.permalink == QStringLiteral("/symptoms");
+                });
+                if (!found) {
+                    m_pageRepo->create(QLatin1String(PageTypeSymptomIndex::TYPE_ID),
+                                       QStringLiteral("/symptoms"), lang);
+                }
             }
         }
     }
@@ -290,6 +305,8 @@ void PaneGeneratedPages::_connectSlots()
 void PaneGeneratedPages::_initDb()
 {
     // Tear down in reverse dependency order.
+    m_fashionSyncer.reset();
+    m_fashionDirtySet.reset();
     m_taxonomyIndexSyncer.reset();
     m_symptomSyncer.reset();
     m_syncer.reset();
@@ -310,8 +327,26 @@ void PaneGeneratedPages::_initDb()
     m_dirtySet       = std::make_unique<CategoryHubDirtySet>(m_workingDir);
     m_syncer         = std::make_unique<CategoryHubSyncer>(
                            *m_pageRepo, *m_categoryTable, *m_dirtySet, *m_pageGenerator);
-    m_symptomSyncer          = std::make_unique<SymptomHubSyncer>(*m_pageRepo);
     m_taxonomyIndexSyncer    = std::make_unique<TaxonomyIndexSyncer>(*m_pageRepo);
+
+    // Vertical-specific syncers: only constructed (non-null) for the engine's
+    // OWN vertical, via AbstractEngine::getGeneratorId() — the same
+    // engine-to-generator link DialogAddGeneration's Source-table picker uses.
+    // Left null for every other vertical so syncStubs()'s null-guards below
+    // correctly skip Health stub creation on a Fashion site (and vice versa)
+    // instead of the previous unconditional construction that created a
+    // /symptoms stub page on every site regardless of vertical.
+    const QString generatorId = m_engine ? m_engine->getGeneratorId() : QString{};
+
+    if (generatorId == QStringLiteral("health")) {
+        m_symptomSyncer = std::make_unique<SymptomHubSyncer>(*m_pageRepo);
+    }
+
+    if (generatorId == QStringLiteral("fashion_taxonomy")) {
+        m_fashionDirtySet = std::make_unique<FashionHubDirtySet>(m_workingDir);
+        m_fashionSyncer   = std::make_unique<FashionTaxonomyHubSyncer>(
+                                *m_pageRepo, m_workingDir, *m_fashionDirtySet, *m_pageGenerator);
+    }
 }
 
 void PaneGeneratedPages::_refreshModel()

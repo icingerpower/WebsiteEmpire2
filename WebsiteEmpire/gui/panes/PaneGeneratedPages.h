@@ -11,6 +11,8 @@ class AbstractEngine;
 class CategoryHubDirtySet;
 class CategoryHubSyncer;
 class CategoryTable;
+class FashionHubDirtySet;
+class FashionTaxonomyHubSyncer;
 class GeneratedPagesModel;
 class PageDb;
 class PageGenerator;
@@ -106,6 +108,8 @@ private:
     std::unique_ptr<CategoryHubSyncer>    m_syncer;
     std::unique_ptr<SymptomHubSyncer>     m_symptomSyncer;
     std::unique_ptr<TaxonomyIndexSyncer>  m_taxonomyIndexSyncer;
+    std::unique_ptr<FashionHubDirtySet>       m_fashionDirtySet;
+    std::unique_ptr<FashionTaxonomyHubSyncer> m_fashionSyncer;
 };
 
 #endif // PANEGENERATEDPAGES_H

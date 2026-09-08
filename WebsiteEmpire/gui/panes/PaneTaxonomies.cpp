@@ -1,8 +1,8 @@
 #include "PaneTaxonomies.h"
 
+#include "website/AbstractEngine.h"
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/blocs/AbstractPageBloc.h"
-#include "website/pages/attributes/CategoryTable.h"
 #include "website/taxonomy/TaxonomyDb.h"
 #include "website/taxonomy/TaxonomyDescriptor.h"
 #include "website/taxonomy/TaxonomySettings.h"
@@ -39,11 +39,11 @@ PaneTaxonomies::~PaneTaxonomies() = default;
 // setup
 // =============================================================================
 
-void PaneTaxonomies::setup(const QDir &workingDir)
+void PaneTaxonomies::setup(const QDir &workingDir, const AbstractEngine *engine)
 {
     m_workingDir = workingDir;
+    m_engine     = engine;
     m_isSetup    = true;
-    m_categoryTable.reset(new CategoryTable(workingDir));
 }
 
 // =============================================================================
@@ -56,11 +56,11 @@ void PaneTaxonomies::setVisible(bool visible)
     if (!visible) {
         return;
     }
-    if (m_isSetup && !m_built) {
+    if (m_isSetup && m_engine && !m_built) {
         _discover();
         _buildCards();
     }
-    if (m_isSetup) {
+    if (m_isSetup && m_engine) {
         _refreshStatus();
     }
 }
@@ -73,39 +73,37 @@ void PaneTaxonomies::_discover()
 {
     m_entries.clear();
 
-    const QList<QString> typeIds = AbstractPageType::allTypeIds();
-    for (const QString &typeId : std::as_const(typeIds)) {
-        std::unique_ptr<AbstractPageType> pageType =
-            AbstractPageType::createForTypeId(typeId, *m_categoryTable);
+    if (!m_engine) {
+        return;
+    }
+
+    const QList<const AbstractPageType *> &pageTypes = m_engine->getPageTypes();
+    for (const AbstractPageType *pageType : pageTypes) {
         if (!pageType) {
             continue;
         }
 
         const QList<const AbstractPageBloc *> &blocs = pageType->getPageBlocs();
         for (const AbstractPageBloc *bloc : std::as_const(blocs)) {
-            const std::optional<TaxonomyDescriptor> desc = bloc->taxonomy();
-            if (!desc.has_value()) {
-                continue;
-            }
-
-            // Check for duplicates by id.
-            bool found = false;
-            for (const TaxonomyEntry &e : m_entries) {
-                if (e.descriptor.id == desc->id) {
-                    found = true;
-                    break;
+            const QList<TaxonomyDescriptor> descs = bloc->taxonomies();
+            for (const TaxonomyDescriptor &desc : descs) {
+                // Check for duplicates by id.
+                bool found = false;
+                for (const TaxonomyEntry &e : m_entries) {
+                    if (e.descriptor.id == desc.id) {
+                        found = true;
+                        break;
+                    }
                 }
-            }
-            if (found) {
-                continue;
-            }
+                if (found) {
+                    continue;
+                }
 
-            TaxonomyEntry entry;
-            entry.descriptor = *desc;
-            entry.bloc       = bloc;
-            entry.pageType   = std::move(pageType);
-            m_entries.push_back(std::move(entry));
-            break; // pageType was moved; advance to next type
+                TaxonomyEntry entry;
+                entry.descriptor = desc;
+                entry.bloc       = bloc;
+                m_entries.push_back(std::move(entry));
+            }
         }
     }
 }
@@ -254,7 +252,7 @@ void PaneTaxonomies::_onSync(int entryIndex)
         return;
     }
 
-    entry.bloc->syncTaxonomy(sourcePath, m_workingDir);
+    entry.bloc->syncTaxonomy(entry.descriptor.id, sourcePath, m_workingDir);
 
     const int count = TaxonomyDb(m_workingDir).count(entry.descriptor.id);
     settings.setLastSync(entry.descriptor.id,

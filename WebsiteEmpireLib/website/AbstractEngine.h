@@ -15,7 +15,7 @@ class AbstractPageType;
 class AbstractTheme;
 class CategoryTable;
 class HostTable;
-class PageTypeArticle;
+class PageTypeArticleHealth;
 class PageTypeLegal;
 
 // Base class for website-building engines.
@@ -223,9 +223,9 @@ private:
     // Backing storage for the default getPageTypes() implementation.
     // Populated by the base _onInit(); unused when a subclass overrides both
     // _onInit() and getPageTypes().
-    QScopedPointer<CategoryTable>   m_defaultCategoryTable;
-    QScopedPointer<PageTypeArticle> m_defaultArticleType;
-    QScopedPointer<PageTypeLegal>   m_defaultLegalType;
+    QScopedPointer<CategoryTable>         m_defaultCategoryTable;
+    QScopedPointer<PageTypeArticleHealth> m_defaultArticleType;
+    QScopedPointer<PageTypeLegal>         m_defaultLegalType;
     QList<const AbstractPageType *> m_defaultPageTypes;
 
     static const QMap<QString, const AbstractEngine *> &getEngines();

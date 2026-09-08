@@ -51,7 +51,7 @@ public:
     /**
      * Returns the number of translated pages per language, counting only page
      * types where isCountedInTranslationStats() returns true (currently only
-     * PageTypeArticle).  Hub/taxonomy types are excluded because their blocs
+     * page types derived from PageTypeArticleBase).  Hub/taxonomy types are excluded because their blocs
      * return the default true from isTranslationComplete() regardless of whether
      * any translation actually exists, which would inflate counts.
      *

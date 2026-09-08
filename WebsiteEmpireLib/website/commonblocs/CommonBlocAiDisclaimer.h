@@ -11,7 +11,7 @@
  *
  * Unlike top/bottom blocs rendered on every page, this bloc is injected only
  * on article pages via AbstractTheme::addCodeArticle(), which is called from
- * PageTypeArticle::addInnerBottomCode() just before </main>.
+ * PageTypeArticleBase::addInnerBottomCode() just before </main>.
  *
  * The text field is fully translatable via BlocTranslations (persisted in
  * default_blocs.ini under group "ai_disclaimer").  Re-running common translation

@@ -8,7 +8,7 @@
  * Stores SEO metadata for a page: the HTML <title> and <meta name="description">.
  *
  * addCode() is a no-op — this bloc contributes nothing to the body.
- * PageTypeArticle::buildHeadMetaTags() calls seoTitle() / seoDescription()
+ * PageTypeArticleBase::buildHeadMetaTags() calls seoTitle() / seoDescription()
  * to emit the <title> and meta description tags into <head>.
  *
  * Both fields are translatable so each language version carries its own
@@ -48,7 +48,7 @@ public:
     bool isTranslationComplete(QStringView origContent,
                                const QString &lang) const override;
 
-    // ---- Accessors used by PageTypeArticle::buildHeadMetaTags() --------------
+    // ---- Accessors used by PageTypeArticleBase::buildHeadMetaTags() ----------
 
     /** Returns the title for lang, falling back to the source value. */
     QString seoTitle(const QString &lang) const;

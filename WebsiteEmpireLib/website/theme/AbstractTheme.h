@@ -97,7 +97,7 @@ public:
 
     /**
      * Common blocs rendered only at the bottom of article pages, in render order.
-     * Called by addCodeArticle(), which is invoked from PageTypeArticle.
+     * Called by addCodeArticle(), which is invoked from PageTypeArticleBase.
      * These blocs are persisted and translated alongside top/bottom blocs.
      * Default: returns an empty list (no article-specific blocs).
      */
@@ -215,7 +215,7 @@ public:
 
     /**
      * Calls addCode() on each bloc returned by getArticleBlocs(), in order.
-     * Called by PageTypeArticle::addInnerBottomCode() just before </main>.
+     * Called by PageTypeArticleBase::addInnerBottomCode() just before </main>.
      */
     void addCodeArticle(AbstractEngine &engine,
                         int             websiteIndex,

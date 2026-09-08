@@ -48,7 +48,7 @@
 #include "website/pages/PageRecord.h"
 #include "website/pages/PageRepositoryDb.h"
 #include "website/pages/PermalinkHistoryEntry.h"
-#include "website/pages/PageTypeArticle.h"
+#include "website/pages/PageTypeArticleHealth.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/blocs/PageBlocText.h"
 #include "website/pages/blocs/PageBlocSocial.h"
@@ -744,7 +744,7 @@ void Test_PageBlocSocialMedia_NoTranslation::test_pagebloc_social_is_complete_in
 // Test_AbstractPageType_TranslationRouting
 //
 // Tests for AbstractPageType's routing of translation protocol calls across blocs.
-// Uses PageTypeArticle as the concrete subclass because:
+// Uses PageTypeArticleHealth as the concrete subclass because:
 //   bloc 0 = PageBlocCategory    (no translatable fields)
 //   bloc 1 = PageBlocText        (one translatable field: KEY_TEXT)
 //   bloc 2 = PageBlocSocialMedia      (no translatable fields)
@@ -789,7 +789,7 @@ namespace {
 struct ArticleTypeFixture {
     QTemporaryDir  dir;
     CategoryTable  cats;
-    PageTypeArticle article;
+    PageTypeArticleHealth article;
 
     ArticleTypeFixture()
         : cats(QDir(dir.path()))
@@ -1028,7 +1028,7 @@ void Test_AbstractPageType_TranslationRouting::test_pagetype_addcode_uses_transl
     engine.init(QDir(dir.path()), hostTable);
 
     CategoryTable cats(QDir(dir.path()));
-    PageTypeArticle article(cats);
+    PageTypeArticleHealth article(cats);
     article.setAuthorLang(QStringLiteral("en"));
     article.load({
         {QStringLiteral("1_") + QLatin1String(PageBlocText::KEY_TEXT), QStringLiteral("English text")},

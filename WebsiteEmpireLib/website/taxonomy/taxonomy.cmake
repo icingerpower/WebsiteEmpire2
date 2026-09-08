@@ -6,4 +6,6 @@ set(TAXONOMY_FILES
     ${CMAKE_CURRENT_LIST_DIR}/TaxonomySettings.cpp
     ${CMAKE_CURRENT_LIST_DIR}/TaxonomyTranslator.h
     ${CMAKE_CURRENT_LIST_DIR}/TaxonomyTranslator.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/TaxonomyTranslationFilter.h
+    ${CMAKE_CURRENT_LIST_DIR}/TaxonomyTranslationFilter.cpp
 )

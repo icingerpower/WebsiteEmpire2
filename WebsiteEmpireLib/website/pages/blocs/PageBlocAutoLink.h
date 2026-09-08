@@ -17,7 +17,7 @@
  *
  * The page URL is persisted under KEY_PAGE_URL and loaded/saved with the
  * rest of the bloc data.  It must be initialised before the first save via
- * setPageUrl() — typically called by PageTypeArticle when the page record's
+ * setPageUrl() — typically called by PageTypeArticleBase when the page record's
  * URL is known or changes.
  *
  * addCode() is a no-op: auto-link substitution is performed by the page
@@ -40,7 +40,7 @@ public:
     /**
      * Sets the page URL these keywords link to.
      * Must be called before the first save() whenever the parent page's URL
-     * is known (e.g. after PageTypeArticle is created for an existing record,
+     * is known (e.g. after PageTypeArticleBase is created for an existing record,
      * or after the user changes a page's URL in the editor).
      */
     void setPageUrl(const QString &url);

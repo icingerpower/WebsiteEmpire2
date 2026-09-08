@@ -206,7 +206,8 @@ std::optional<TaxonomyDescriptor> PageBlocSymptomLinks::taxonomy() const
     };
 }
 
-void PageBlocSymptomLinks::syncTaxonomy(const QString &sourceDbPath,
+void PageBlocSymptomLinks::syncTaxonomy(const QString & /*taxonomyId*/,
+                                         const QString &sourceDbPath,
                                          const QDir    &workingDir) const
 {
     QStringList names;

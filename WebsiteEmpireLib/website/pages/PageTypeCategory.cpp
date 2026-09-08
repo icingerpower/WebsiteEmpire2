@@ -165,4 +165,4 @@ QString PageTypeCategory::buildHeadMetaTags(const QString &baseUrl, const QStrin
     return result;
 }
 
-DECLARE_PAGE_TYPE(PageTypeCategory)
+DECLARE_PAGE_TYPE_AUTO_MANAGED(PageTypeCategory)

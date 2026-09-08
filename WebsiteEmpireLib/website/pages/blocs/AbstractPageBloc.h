@@ -124,16 +124,45 @@ public:
      * Returns a descriptor if this bloc contributes items to a shared taxonomy
      * (e.g. symptom names). Returns empty optional by default.
      * PaneTaxonomies uses this to discover all taxonomies across all page types.
+     *
+     * Single-taxonomy convenience — see taxonomies() for blocs that expose
+     * more than one dimension (e.g. a Fashion bloc covering Color, Season,
+     * Occasion, Material, Style Aesthetic all at once).
      */
     virtual std::optional<TaxonomyDescriptor> taxonomy() const { return {}; }
 
     /**
-     * Reads vocabulary items from sourceDbPath (an aspire database) and writes
-     * them into the local taxonomy store via TaxonomyDb in workingDir.
-     * Called by PaneTaxonomies when the user clicks Sync.
-     * Default is a no-op.
+     * Returns every taxonomy this bloc contributes items to. Default wraps
+     * taxonomy() into a single-item list (or an empty list when taxonomy()
+     * returns nullopt) — a bloc with exactly one taxonomy (e.g.
+     * PageBlocSymptomLinks) needs no override at all. A bloc covering
+     * several independent vocabularies overrides this directly instead of
+     * taxonomy().
+     *
+     * PaneTaxonomies and the --translateCommon pipeline use this (not the
+     * singular taxonomy()) to discover every taxonomy across all page types.
      */
-    virtual void syncTaxonomy(const QString & /*sourceDbPath*/,
+    virtual QList<TaxonomyDescriptor> taxonomies() const
+    {
+        const std::optional<TaxonomyDescriptor> single = taxonomy();
+        return single.has_value() ? QList<TaxonomyDescriptor>{*single}
+                                   : QList<TaxonomyDescriptor>{};
+    }
+
+    /**
+     * Reads vocabulary items from sourceDbPath (an aspire database) and writes
+     * them into the local taxonomy store via TaxonomyDb in workingDir, under
+     * taxonomyId.
+     *
+     * taxonomyId is one of the ids returned by taxonomies() — a multi-taxonomy
+     * bloc uses it to pick which dimension this particular sync call is for.
+     * A single-taxonomy bloc (e.g. PageBlocSymptomLinks) ignores it.
+     *
+     * Called by PaneTaxonomies when the user clicks Sync on that taxonomy's
+     * card. Default is a no-op.
+     */
+    virtual void syncTaxonomy(const QString & /*taxonomyId*/,
+                              const QString & /*sourceDbPath*/,
                               const QDir    & /*workingDir*/) const {}
 
     /**

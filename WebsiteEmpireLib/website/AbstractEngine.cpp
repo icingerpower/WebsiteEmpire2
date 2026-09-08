@@ -2,7 +2,7 @@
 #include "HostTable.h"
 #include "CountryLangManager.h"
 #include "website/WebsiteSettingsTable.h"
-#include "website/pages/PageTypeArticle.h"
+#include "website/pages/PageTypeArticleHealth.h"
 #include "website/pages/PageTypeLegal.h"
 #include "website/pages/attributes/CategoryTable.h"
 
@@ -150,7 +150,7 @@ void AbstractEngine::_onInit(const QDir &workingDir)
     m_defaultLegalType.reset();
     m_defaultArticleType.reset();
     m_defaultCategoryTable.reset(new CategoryTable(workingDir));
-    m_defaultArticleType.reset(new PageTypeArticle(*m_defaultCategoryTable));
+    m_defaultArticleType.reset(new PageTypeArticleHealth(*m_defaultCategoryTable));
     m_defaultLegalType.reset(new PageTypeLegal(*m_defaultCategoryTable));
     m_defaultPageTypes.clear();
     m_defaultPageTypes.append(m_defaultArticleType.data());

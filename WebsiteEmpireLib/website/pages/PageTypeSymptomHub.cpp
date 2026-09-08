@@ -177,4 +177,4 @@ QString PageTypeSymptomHub::buildHeadMetaTags(const QString &baseUrl,
     return result;
 }
 
-DECLARE_PAGE_TYPE(PageTypeSymptomHub)
+DECLARE_PAGE_TYPE_AUTO_MANAGED(PageTypeSymptomHub)

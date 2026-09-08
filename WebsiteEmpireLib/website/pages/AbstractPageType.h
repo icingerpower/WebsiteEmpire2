@@ -40,7 +40,7 @@ class IPageRepository;
  * Registry access
  * ---------------
  *   AbstractPageType::createForTypeId("article", categoryTable)
- *       → heap-allocated PageTypeArticle, or nullptr if unknown
+ *       → heap-allocated PageTypeArticleHealth, or nullptr if unknown
  *   AbstractPageType::allTypeIds()
  *       → list of all registered type ids
  */
@@ -68,7 +68,7 @@ public:
      * Returns the blocs in the order they are rendered into HTML.
      * Defaults to getPageBlocs() (same as storage order).
      * Override in a page type to decouple visual order from data-key order —
-     * e.g. PageTypeArticle renders symptom links before the text bloc even
+     * e.g. PageTypeArticleHealth renders symptom links before the text bloc even
      * though the symptom bloc is stored last to preserve stable data keys.
      * Data methods (load/save/collectAiKeyClues/aiUpdateTargets) always use
      * getPageBlocs() so key numbering is never affected by render order.
@@ -208,7 +208,7 @@ public:
      * (e.g. "biomarky.com").  The lookup tries domain="" (global fallback) first,
      * then the supplied domain, to handle both storage conventions.
      *
-     * Default: no-op.  PageTypeArticle overrides this to rasterize the article's
+     * Default: no-op.  PageTypeArticleBase overrides this to rasterize the article's
      * primary SVG illustration to a 1200×630 WebP and cache it in images.db under
      * domain="" (global fallback served to every language/domain variant).
      *
@@ -265,7 +265,7 @@ public:
 
     /**
      * Returns true when the page type requires an SVG image to be generated as
-     * part of its first-pass AI pipeline (e.g. PageTypeArticle).
+     * part of its first-pass AI pipeline (e.g. PageTypeArticleBase).
      *
      * LauncherGeneration uses this to decide whether a page that completed the
      * content step without a valid SVG should be marked Complete or left in
@@ -341,6 +341,31 @@ public:
     static QList<QString> allTypeIds();
 
     /**
+     * Returns true when typeId is auto-managed — a hub/index page the
+     * application itself creates and syncs (category hubs, symptom hubs and
+     * index, taxonomy index, fashion tag hubs) rather than a page an editor
+     * creates or edits by hand. Registered via DECLARE_PAGE_TYPE_AUTO_MANAGED
+     * instead of DECLARE_PAGE_TYPE — see that macro's doc comment.
+     *
+     * This is the SINGLE source of truth consumers must use instead of a
+     * locally hardcoded type-id list:
+     *   - PanePages excludes auto-managed pages from its manual-editing list
+     *     and its "page type" filter dropdown (they belong in
+     *     PaneGeneratedPages instead).
+     *   - PageGenerator excludes them from the general translated-permalink
+     *     map (they derive their translated URL from category/symptom/
+     *     taxonomy/fashion-tag name translations instead — see the call site
+     *     for the full rationale).
+     * A hardcoded literal list of these type ids drifted out of sync THREE
+     * times in this codebase's history (each new auto-managed type id added
+     * elsewhere was missed here) before being consolidated into this single
+     * registry-backed check.
+     *
+     * Returns false for an unknown typeId.
+     */
+    static bool isAutoManagedTypeId(const QString &typeId);
+
+    /**
      * Place at file scope in each concrete subclass's .cpp via DECLARE_PAGE_TYPE.
      * Q_ASSERT fires on duplicate typeId.
      */
@@ -349,7 +374,8 @@ public:
     public:
         explicit Recorder(const QString &typeId,
                           const QString &displayName,
-                          Factory        factory);
+                          Factory        factory,
+                          bool           isAutoManaged = false);
     };
 
 protected:
@@ -450,6 +476,24 @@ private:
         [](CategoryTable &t) -> std::unique_ptr<AbstractPageType> {                    \
             return std::make_unique<ClassName>(t);                                     \
         }                                                                              \
+    };
+
+/**
+ * Same as DECLARE_PAGE_TYPE, but also marks the type auto-managed (see
+ * AbstractPageType::isAutoManagedTypeId()) — use this instead of
+ * DECLARE_PAGE_TYPE for any new hub/index page type the application itself
+ * creates and syncs, so it is automatically excluded from PanePages and from
+ * PageGenerator's translated-permalink map without editing either of those
+ * files.
+ */
+#define DECLARE_PAGE_TYPE_AUTO_MANAGED(ClassName)                                      \
+    AbstractPageType::Recorder recorder##ClassName {                                   \
+        QLatin1String(ClassName::TYPE_ID),                                             \
+        QLatin1String(ClassName::DISPLAY_NAME),                                        \
+        [](CategoryTable &t) -> std::unique_ptr<AbstractPageType> {                    \
+            return std::make_unique<ClassName>(t);                                     \
+        },                                                                              \
+        true                                                                            \
     };
 
 #endif // ABSTRACTPAGETYPE_H

@@ -18,6 +18,7 @@ namespace {
 struct PageTypeEntry {
     QString                        displayName;
     AbstractPageType::Factory      factory;
+    bool                           isAutoManaged = false;
 };
 
 QHash<QString, PageTypeEntry> &registry()
@@ -41,12 +42,13 @@ QList<QString> &registryOrder()
 
 AbstractPageType::Recorder::Recorder(const QString &typeId,
                                       const QString &displayName,
-                                      Factory        factory)
+                                      Factory        factory,
+                                      bool           isAutoManaged)
 {
     Q_ASSERT_X(!registry().contains(typeId),
                "AbstractPageType::Recorder",
                qPrintable(QStringLiteral("Duplicate page type id: ") + typeId));
-    registry().insert(typeId, {displayName, std::move(factory)});
+    registry().insert(typeId, {displayName, std::move(factory), isAutoManaged});
     registryOrder().append(typeId);
 }
 
@@ -67,6 +69,12 @@ std::unique_ptr<AbstractPageType> AbstractPageType::createForTypeId(const QStrin
 QList<QString> AbstractPageType::allTypeIds()
 {
     return registryOrder();
+}
+
+bool AbstractPageType::isAutoManagedTypeId(const QString &typeId)
+{
+    const auto it = registry().find(typeId);
+    return it != registry().end() && it->isAutoManaged;
 }
 
 // =============================================================================

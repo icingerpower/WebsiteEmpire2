@@ -26,12 +26,14 @@ QString slugify(const QString &name);
  * KEY_SYMPTOMS is a comma-separated string of canonical symptom names exactly
  * as they appear in the local taxonomy store (taxonomy/taxonomy.db).
  *
- * Call setWorkingDir() from PageTypeArticle::bindGenerationContext() so that
+ * Call setWorkingDir() from PageTypeArticleHealth::bindGenerationContext() so that
  * createEditWidget() can load the symptom list from the local taxonomy store.
  *
  * Taxonomy integration
  * --------------------
  * taxonomy()       — returns TaxonomyDescriptor{"symptoms", "Symptoms"}
+ *                    (translatable defaults to false — Symptoms is
+ *                    deliberately never translated by --translateCommon)
  * syncTaxonomy()   — reads health_symptom_name from the aspire DB and writes
  *                    them into TaxonomyDb under the "symptoms" type.
  * loadTaxonomy()   — reads from TaxonomyDb and returns the ordered list.
@@ -47,7 +49,7 @@ public:
     /**
      * Stores the working directory so createEditWidget() can load the
      * symptom list from the local taxonomy store.
-     * Call from PageTypeArticle::bindGenerationContext().
+     * Call from PageTypeArticleHealth::bindGenerationContext().
      */
     void setWorkingDir(const QDir &workingDir);
 
@@ -90,7 +92,10 @@ public:
     std::optional<AiUpdateSpec> getAiUpdateSpec() const override;
 
     std::optional<TaxonomyDescriptor> taxonomy() const override;
-    void syncTaxonomy(const QString &sourceDbPath, const QDir &workingDir) const override;
+
+    /** taxonomyId is ignored — this bloc only ever has the one "symptoms" taxonomy. */
+    void syncTaxonomy(const QString &taxonomyId, const QString &sourceDbPath,
+                      const QDir &workingDir) const override;
     QStringList loadTaxonomy(const QDir &workingDir) const override;
 
 private:

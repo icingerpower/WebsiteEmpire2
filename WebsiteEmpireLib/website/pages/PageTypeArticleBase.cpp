@@ -1,4 +1,4 @@
-#include "PageTypeArticle.h"
+#include "PageTypeArticleBase.h"
 
 #include "website/AbstractEngine.h"
 #include "website/ImageWriter.h"
@@ -22,7 +22,7 @@
 // Constructor / Destructor
 // =============================================================================
 
-PageTypeArticle::PageTypeArticle(CategoryTable &categoryTable)
+PageTypeArticleBase::PageTypeArticleBase(CategoryTable &categoryTable)
     : m_categoryBloc(new PageBlocCategory(categoryTable))
     , m_categoryLinksBloc(categoryTable)
 {
@@ -33,69 +33,36 @@ PageTypeArticle::PageTypeArticle(CategoryTable &categoryTable)
     m_blocs.append(&m_categoryLinksBloc);  // 4
     m_blocs.append(&m_socialBloc);         // 5 — social image variants, second pass
     m_blocs.append(&m_metaBloc);           // 6 — SEO title + meta description
-    m_blocs.append(&m_symptomLinksBloc);   // 7 — editor-selected symptom pill links
 }
 
-PageTypeArticle::~PageTypeArticle() = default;
-
-// =============================================================================
-// bindGenerationContext
-// =============================================================================
-
-void PageTypeArticle::bindGenerationContext(IPageRepository & /*repo*/, const QDir &workingDir)
-{
-    bindWorkingDir(workingDir);
-}
-
-void PageTypeArticle::bindWorkingDir(const QDir &workingDir)
-{
-    m_symptomLinksBloc.setWorkingDir(workingDir);
-}
+PageTypeArticleBase::~PageTypeArticleBase() = default;
 
 // =============================================================================
 // Accessors
 // =============================================================================
 
-QString PageTypeArticle::getTypeId()                   const { return QLatin1String(TYPE_ID); }
-QString PageTypeArticle::getDisplayName()              const { return QLatin1String(DISPLAY_NAME); }
-bool    PageTypeArticle::isCountedInTranslationStats() const { return true; }
+bool PageTypeArticleBase::isCountedInTranslationStats() const { return true; }
 
-const QList<const AbstractPageBloc *> &PageTypeArticle::getPageBlocs() const
+const QList<const AbstractPageBloc *> &PageTypeArticleBase::getPageBlocs() const
 {
     return m_blocs;
 }
 
-QList<const AbstractPageBloc *> PageTypeArticle::getRenderBlocs() const
-{
-    // Storage order: 0=category 1=text 2=social 3=autolink 4=categorylinks
-    //                5=socialmedia 6=meta 7=symptomlinks
-    // Render order: symptomlinks inserted at position 1 (after category, before text)
-    // so the pill links appear above the article title without changing data keys.
-    QList<const AbstractPageBloc *> order;
-    order.reserve(m_blocs.size());
-    order.append(m_blocs.at(0));               // category
-    order.append(m_blocs.at(7));               // symptomlinks — before text
-    for (int i = 1; i <= 6; ++i) {
-        order.append(m_blocs.at(i));
-    }
-    return order;
-}
-
-void PageTypeArticle::setPageUrl(const QString &url)
+void PageTypeArticleBase::setPageUrl(const QString &url)
 {
     m_autoLinkBloc.setPageUrl(url);
 }
 
-const PageBlocSocial      &PageTypeArticle::socialTextBloc() const { return m_socialTextBloc; }
-const PageBlocSocialMedia &PageTypeArticle::socialBloc()     const { return m_socialBloc; }
-const PageBlocAutoLink    &PageTypeArticle::autoLinkBloc()   const { return m_autoLinkBloc; }
-const PageBlocMeta        &PageTypeArticle::metaBloc()       const { return m_metaBloc; }
+const PageBlocSocial      &PageTypeArticleBase::socialTextBloc() const { return m_socialTextBloc; }
+const PageBlocSocialMedia &PageTypeArticleBase::socialBloc()     const { return m_socialBloc; }
+const PageBlocAutoLink    &PageTypeArticleBase::autoLinkBloc()   const { return m_autoLinkBloc; }
+const PageBlocMeta        &PageTypeArticleBase::metaBloc()       const { return m_metaBloc; }
 
 // =============================================================================
 // prepareJsonLdImage
 // =============================================================================
 
-void PageTypeArticle::prepareJsonLdImage(const QDir &workingDir, const QString &domain)
+void PageTypeArticleBase::prepareJsonLdImage(const QDir &workingDir, const QString &domain)
 {
     // Any second-pass social image works — no fallback needed.
     if (!m_socialBloc.imgOg().isEmpty() || !m_socialBloc.imgWide().isEmpty()
@@ -156,12 +123,12 @@ void PageTypeArticle::prepareJsonLdImage(const QDir &workingDir, const QString &
 // autoSeoTitle / autoSeoDescription
 // =============================================================================
 
-QString PageTypeArticle::autoSeoTitle(const QString &langCode) const
+QString PageTypeArticleBase::autoSeoTitle(const QString &langCode) const
 {
     return m_metaBloc.seoTitle(langCode);
 }
 
-QString PageTypeArticle::autoSeoDescription(const QString &langCode) const
+QString PageTypeArticleBase::autoSeoDescription(const QString &langCode) const
 {
     return m_metaBloc.seoDescription(langCode);
 }
@@ -258,9 +225,9 @@ QString resolveDateForLang(const QHash<QString, QString> &byLang,
 
 } // namespace
 
-QString PageTypeArticle::buildHeadMetaTags(const QString &baseUrl,
-                                            const QString &langCode,
-                                            const QString &canonicalPath) const
+QString PageTypeArticleBase::buildHeadMetaTags(const QString &baseUrl,
+                                                const QString &langCode,
+                                                const QString &canonicalPath) const
 {
     // Base emits: <title>, <meta name="description">, canonical, og:url.
     QString result = AbstractPageType::buildHeadMetaTags(baseUrl, langCode, canonicalPath);
@@ -455,9 +422,9 @@ QString PageTypeArticle::buildHeadMetaTags(const QString &baseUrl,
     return result;
 }
 
-bool PageTypeArticle::hasSvg() const { return true; }
+bool PageTypeArticleBase::hasSvg() const { return true; }
 
-void PageTypeArticle::addInnerTopCode(AbstractEngine &engine,
+void PageTypeArticleBase::addInnerTopCode(AbstractEngine &engine,
                                           int             websiteIndex,
                                           QString        &html,
                                           QString        &css,
@@ -525,5 +492,3 @@ void PageTypeArticle::addInnerTopCode(AbstractEngine &engine,
 
     html += QStringLiteral("</span>");
 }
-
-DECLARE_PAGE_TYPE(PageTypeArticle)

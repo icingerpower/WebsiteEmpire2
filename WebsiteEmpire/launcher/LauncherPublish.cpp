@@ -6,6 +6,8 @@
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/CategoryHubDirtySet.h"
 #include "website/pages/CategoryHubSyncer.h"
+#include "website/pages/FashionHubDirtySet.h"
+#include "website/pages/FashionTaxonomyHubSyncer.h"
 #include "website/pages/SymptomHubSyncer.h"
 #include "website/pages/TaxonomyIndexSyncer.h"
 #include "website/pages/PageGenerationState.h"
@@ -174,19 +176,36 @@ void LauncherPublish::run(const QString & /*value*/)
     hubSyncer.syncStubs(engine->getLangCode(0));
     hubSyncer.markStaleByStats(workingDir);
 
-    out << QStringLiteral("Syncing symptom hub stubs...\n");
-    out.flush();
-    SymptomHubSyncer symptomSyncer(pageRepo);
-    symptomSyncer.syncStubs(workingDir, engine->getLangCode(0));
+    // Vertical-specific stub syncing, gated by AbstractEngine::getGeneratorId()
+    // (the same engine-to-generator link DialogAddGeneration's Source-table
+    // picker uses) — a Fashion site must never grow a Health-only /symptoms
+    // page, and a Health site must never run the Fashion tag hub sync.
+    const QString generatorId = engine->getGeneratorId();
+
+    if (generatorId == QStringLiteral("fashion_taxonomy")) {
+        out << QStringLiteral("Syncing fashion tag hub stubs...\n");
+        out.flush();
+        FashionHubDirtySet      fashionHubDirtySet(workingDir);
+        FashionTaxonomyHubSyncer fashionHubSyncer(pageRepo, workingDir, fashionHubDirtySet, generator);
+        fashionHubSyncer.syncStubs(engine->getLangCode(0));
+        fashionHubSyncer.markStaleByStats(workingDir);
+    }
+
+    if (generatorId == QStringLiteral("health")) {
+        out << QStringLiteral("Syncing symptom hub stubs...\n");
+        out.flush();
+        SymptomHubSyncer symptomSyncer(pageRepo);
+        symptomSyncer.syncStubs(workingDir, engine->getLangCode(0));
+    }
 
     out << QStringLiteral("Syncing taxonomy index stubs...\n");
     out.flush();
     TaxonomyIndexSyncer taxonomySyncer(pageRepo);
     taxonomySyncer.syncStubs(engine->getLangCode(0));
 
-    out << QStringLiteral("Syncing symptom index stub...\n");
-    out.flush();
-    {
+    if (generatorId == QStringLiteral("health")) {
+        out << QStringLiteral("Syncing symptom index stub...\n");
+        out.flush();
         const QList<PageRecord> all = pageRepo.findAll();
         const bool found = std::any_of(all.begin(), all.end(), [](const PageRecord &r) {
             return r.permalink == QStringLiteral("/symptoms");
