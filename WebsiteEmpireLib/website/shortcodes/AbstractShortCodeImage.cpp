@@ -4,6 +4,13 @@
 
 #include <QRegularExpression>
 
+QString AbstractShortCodeImage::normalizedFileName(const QString &fileName)
+{
+    const QString trimmed = fileName.trimmed();
+    const int lastSlash = trimmed.lastIndexOf(QLatin1Char('/'));
+    return lastSlash >= 0 ? trimmed.mid(lastSlash + 1) : trimmed;
+}
+
 QList<AbstractShortCode::ArgumentDef> AbstractShortCodeImage::availableArguments() const
 {
     return {
@@ -53,8 +60,10 @@ void AbstractShortCodeImage::addCode(QStringView     origContent,
 
     // Plain <img> — the page-level lightbox (AbstractPageType) handles zoom for
     // all .page-content img[src] elements automatically.
+    // Normalised so an AI-written "/images/foo.jpg" can never emit
+    // src="//images/foo.jpg" — see normalizedFileName().
     html += QStringLiteral("<img src=\"/");
-    html += fileName;
+    html += normalizedFileName(fileName);
     html += QStringLiteral("\" alt=\"");
     html += alt;
     html += QStringLiteral("\"");

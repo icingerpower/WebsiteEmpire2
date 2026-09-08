@@ -4,6 +4,9 @@
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/IPageRepository.h"
 #include "website/pages/attributes/CategoryTable.h"
+#include "website/shortcodes/AbstractShortCodeImage.h"
+
+#include "aicli/AbstractCli.h"
 
 #include <QDateTime>
 #include <QJsonDocument>
@@ -17,11 +20,17 @@ GenPageQueue::GenPageQueue(const QString   &pageTypeId,
                             const QString   &customInstructions,
                             const QString   &svgInstructions,
                             int              limit,
-                            const QDir      &workingDir)
+                            const QDir      &workingDir,
+                            const QString   &imageInstructions,
+                            int              imageCountMin,
+                            int              imageCountMax)
     : m_pageTypeId(pageTypeId)
     , m_nonSvgImages(nonSvgImages)
     , m_customInstructions(customInstructions)
     , m_svgInstructions(svgInstructions)
+    , m_imageInstructions(imageInstructions)
+    , m_imageCountMin(imageCountMin)
+    , m_imageCountMax(imageCountMax)
     , m_categoryTable(categoryTable)
     , m_workingDir(workingDir)
 {
@@ -38,11 +47,17 @@ GenPageQueue::GenPageQueue(const QString          &pageTypeId,
                             CategoryTable          &categoryTable,
                             const QString          &customInstructions,
                             const QString          &svgInstructions,
-                            const QDir             &workingDir)
+                            const QDir             &workingDir,
+                            const QString          &imageInstructions,
+                            int                     imageCountMin,
+                            int                     imageCountMax)
     : m_pageTypeId(pageTypeId)
     , m_nonSvgImages(nonSvgImages)
     , m_customInstructions(customInstructions)
     , m_svgInstructions(svgInstructions)
+    , m_imageInstructions(imageInstructions)
+    , m_imageCountMin(imageCountMin)
+    , m_imageCountMax(imageCountMax)
     , m_categoryTable(categoryTable)
     , m_workingDir(workingDir)
     , m_pending(virtualPages)
@@ -96,8 +111,14 @@ QString GenPageQueue::buildStep1Prompt(const PageRecord &page,
              effectiveLang,
              m_nonSvgImages ? QStringLiteral("include non-SVG images")
                             : QStringLiteral("no images"),
+             // Deliberately NOT "use relative paths like /images/foo.jpg": that
+             // contradicted the [IMGFIX] rules below (which specify a bare
+             // fileName="image.jpg") and made the AI alternate between the two
+             // spellings run to run, silently breaking every image on a page
+             // whenever it chose the path-prefixed form. Bare file name only.
              m_nonSvgImages
-                 ? QStringLiteral("Reference images as relative paths (e.g. /images/foo.jpg).\n")
+                 ? QStringLiteral("Give each image a bare file name only "
+                                  "(e.g. \"foo.jpg\") — never a path or leading slash.\n")
                  : QString());
 
     if (!m_customInstructions.isEmpty()) {
@@ -208,8 +229,14 @@ QString GenPageQueue::buildCombinedPrompt(const PageRecord &page,
              effectiveLang,
              m_nonSvgImages ? QStringLiteral("include non-SVG images")
                             : QStringLiteral("no images"),
+             // Deliberately NOT "use relative paths like /images/foo.jpg": that
+             // contradicted the [IMGFIX] rules below (which specify a bare
+             // fileName="image.jpg") and made the AI alternate between the two
+             // spellings run to run, silently breaking every image on a page
+             // whenever it chose the path-prefixed form. Bare file name only.
              m_nonSvgImages
-                 ? QStringLiteral("Reference images as relative paths (e.g. /images/foo.jpg).\n")
+                 ? QStringLiteral("Give each image a bare file name only "
+                                  "(e.g. \"foo.jpg\") — never a path or leading slash.\n")
                  : QString());
 
     if (!m_customInstructions.isEmpty()) {
@@ -318,9 +345,31 @@ QString GenPageQueue::buildContentPrompt(const PageRecord &page,
              effectiveLang,
              m_nonSvgImages ? QStringLiteral("include non-SVG images")
                             : QStringLiteral("no images"),
+             // Deliberately NOT "use relative paths like /images/foo.jpg": that
+             // contradicted the [IMGFIX] rules below (which specify a bare
+             // fileName="image.jpg") and made the AI alternate between the two
+             // spellings run to run, silently breaking every image on a page
+             // whenever it chose the path-prefixed form. Bare file name only.
              m_nonSvgImages
-                 ? QStringLiteral("Reference images as relative paths (e.g. /images/foo.jpg).\n")
+                 ? QStringLiteral("Give each image a bare file name only "
+                                  "(e.g. \"foo.jpg\") — never a path or leading slash.\n")
                  : QString());
+
+    if (wantsRasterImage()) {
+        prompt += QStringLiteral(
+            "\nRaster image generation is enabled for this strategy: each [IMGFIX] "
+            "image reference below will be generated as a real (non-SVG) photo by AI. ");
+        if (m_imageCountMin > 0 && m_imageCountMax > 0) {
+            prompt += QStringLiteral(
+                "Include between %1 and %2 distinct [IMGFIX] raster images, one per "
+                "idea/section.\n")
+                .arg(m_imageCountMin).arg(m_imageCountMax);
+        } else {
+            prompt += QStringLiteral("\n");
+        }
+        prompt += m_imageInstructions;
+        prompt += QStringLiteral("\n");
+    }
 
     if (!m_customInstructions.isEmpty()) {
         prompt += QStringLiteral("\n\nAdditional instructions:\n");
@@ -514,9 +563,24 @@ bool GenPageQueue::wantsSvgImage() const
     return !m_svgInstructions.isEmpty();
 }
 
-bool GenPageQueue::wantsPngImage() const
+bool GenPageQueue::wantsRasterImage() const
 {
-    return false; // PNG generation not yet implemented
+    return !m_imageInstructions.isEmpty();
+}
+
+QString GenPageQueue::rasterImageInstructions() const
+{
+    return m_imageInstructions;
+}
+
+int GenPageQueue::imageCountMin() const
+{
+    return m_imageCountMin;
+}
+
+int GenPageQueue::imageCountMax() const
+{
+    return m_imageCountMax;
 }
 
 GenPageQueue::SvgGenerationResult GenPageQueue::parseSvgDelimitedResponse(const QString &response)
@@ -602,6 +666,49 @@ QString GenPageQueue::insertImgFix(const QString &articleText, const QString &im
     return articleText.left(lastPos)
            + imgFixCode + QStringLiteral("\n\n")
            + articleText.mid(lastPos);
+}
+
+QString GenPageQueue::extractRelevantSection(const QString &articleText, const QString &imgFixId)
+{
+    if (imgFixId.isEmpty()) {
+        return articleText;
+    }
+
+    // Locate this specific [IMGFIX id="imgFixId" ...] occurrence — ids are
+    // unique per the content prompt's own rules, so this matches exactly one
+    // tag when the AI followed instructions.
+    const QRegularExpression reThisTag(
+        QStringLiteral("\\[IMGFIX\\b[^\\]]*\\bid=\"%1\"[^\\]]*\\]")
+            .arg(QRegularExpression::escape(imgFixId)),
+        QRegularExpression::CaseInsensitiveOption);
+    const auto tagMatch = reThisTag.match(articleText);
+    if (!tagMatch.hasMatch()) {
+        return articleText;
+    }
+    const int tagPos = tagMatch.capturedStart();
+
+    // Single pass over every heading: the last one at-or-before tagPos is the
+    // section start; the first one strictly after tagPos is the section end
+    // (open-ended to the end of the article when there is no next heading).
+    static const QRegularExpression reTitle(QStringLiteral(R"(\[TITLE level="\d+"\])"));
+
+    int sectionStart = -1;
+    int sectionEnd   = articleText.size();
+    auto it = reTitle.globalMatch(articleText);
+    while (it.hasNext()) {
+        const int pos = it.next().capturedStart();
+        if (pos <= tagPos) {
+            sectionStart = pos;
+        } else {
+            sectionEnd = pos;
+            break;
+        }
+    }
+
+    if (sectionStart < 0) {
+        return articleText;
+    }
+    return articleText.mid(sectionStart, sectionEnd - sectionStart);
 }
 
 QString GenPageQueue::fixSlugTitle(const QString &articleText,
@@ -699,7 +806,10 @@ QList<GenPageQueue::ImgFixRef> GenPageQueue::parseImgFixRefs(const QString &arti
             if (key == QStringLiteral("id")) {
                 ref.id = val;
             } else if (key == QStringLiteral("fileName")) {
-                ref.fileName = val;
+                // Normalised to a bare basename so the key a generated blob is
+                // stored under in images.db always matches the one the rendered
+                // <img src> asks for — see AbstractShortCodeImage::normalizedFileName().
+                ref.fileName = AbstractShortCodeImage::normalizedFileName(val);
             } else if (key == QStringLiteral("alt")) {
                 ref.alt = val;
             }
@@ -754,6 +864,55 @@ QString GenPageQueue::buildSvgPrompt(const ImgFixRef &ref,
         "• Keep the total SVG under 5000 characters. Show only the 6–8 most important rows\n"
         "  if a table would be longer. A truncated SVG is unusable.")
         .arg(lang);
+
+    return prompt;
+}
+
+QString GenPageQueue::buildRasterImagePrompt(const ImgFixRef &ref,
+                                              const QString   &articleText,
+                                              const QString   &lang,
+                                              const QString   &outputPath) const
+{
+    // Note: the image description (alt) is used instead of any permalink or topic
+    // name, mirroring buildSvgPrompt(), to avoid policy-filter rejections and to
+    // keep the per-image request focused on exactly what should appear in frame.
+    QString prompt = QStringLiteral(
+                         "Create a real (raster, photorealistic-capable) image for the "
+                         "following web article.\n\n")
+                     + QString::fromLatin1(RASTER_IMAGE_PROMPT_MARKER)
+                     + QStringLiteral("\n")
+                     + QStringLiteral(
+                         "Image id          : %1\n"
+                         "Image description : %2\n"
+                         "Language          : %3\n"
+                         "Output path       : %4\n\n")
+                         .arg(ref.id, ref.alt, lang, outputPath);
+
+    // Scoped to this image's own section (see extractRelevantSection()) rather
+    // than the full article — a multi-section article must never let one
+    // section's image be tailored to a DIFFERENT section's recommendation.
+    const QString section = extractRelevantSection(articleText, ref.id);
+    if (!section.isEmpty()) {
+        prompt += QStringLiteral("Relevant article section (for context — tailor the image "
+                                 "to THIS specific recommendation, not any other part of the "
+                                 "article):\n"
+                                 "---\n")
+                + section
+                + QStringLiteral("\n---\n\n");
+    }
+
+    if (!m_imageInstructions.isEmpty()) {
+        prompt += QStringLiteral("Strategy style requirements (follow these exactly):\n")
+                + m_imageInstructions
+                + QStringLiteral("\n\n");
+    }
+
+    prompt += QStringLiteral(
+        "Technical requirements:\n"
+        "• Save the generated image to exactly this file path: %1\n"
+        "• Do not print the image or any commentary as text — write the file, then stop.\n"
+        "• The image must not contain any text, watermark, or logo.")
+        .arg(outputPath);
 
     return prompt;
 }

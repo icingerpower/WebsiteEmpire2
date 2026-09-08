@@ -2,6 +2,7 @@
 #include "ui_PaneGeneration.h"
 
 #include "GenStrategyTable.h"
+#include "aspire/attributes/AbstractPageAttributes.h"
 #include "aicli/AbstractCli.h"
 #include "aicli/AvailableCliList.h"
 #include "aicli/AvailableCliTable.h"
@@ -22,6 +23,7 @@
 #include <algorithm>
 
 #include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileDialog>
 #include <QInputDialog>
@@ -30,8 +32,10 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSet>
+#include <QSpinBox>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QSqlRecord>
 #include <QTableWidgetItem>
 #include <QTextEdit>
 
@@ -276,6 +280,33 @@ void PaneGeneration::_startProcess(QStringList args)
         args << QStringLiteral("--") + AbstractLauncher::OPTION_CLI << cliName;
     }
 
+    // Refuse to start a run the selected CLI cannot actually fulfil: if any
+    // active (priority 1) strategy has raster image instructions configured
+    // but the CLI can't generate images, every raster attempt would burn a
+    // CLI call and fail review, up to kRasterMaxAttempts times per image,
+    // before the page gets stuck FailedFinal — catch it before that instead.
+    if (selectedCli && !selectedCli->canGenImages() && m_strategies) {
+        QStringList offendingStrategyNames;
+        for (int row = 0; row < m_strategies->rowCount(); ++row) {
+            if (m_strategies->priorityForRow(row) != 1) {
+                continue;
+            }
+            if (!m_strategies->imageInstructionsForRow(row).isEmpty()) {
+                offendingStrategyNames << m_strategies->data(
+                    m_strategies->index(row, GenStrategyTable::COL_NAME)).toString();
+            }
+        }
+        if (!offendingStrategyNames.isEmpty()) {
+            QMessageBox::warning(this, tr("CLI cannot generate images"),
+                tr("\"%1\" cannot generate raster images, but the following active "
+                   "strategy(ies) require them:\n\n%2\n\nSwitch to a CLI with image "
+                   "generation support (e.g. Antigravity or Codex) before running, "
+                   "or remove the image instructions from these strategies.")
+                    .arg(cliName, offendingStrategyNames.join(QStringLiteral("\n"))));
+            return;
+        }
+    }
+
     const QString exe = QCoreApplication::applicationFilePath();
 
     m_lastOkPermalink.clear();
@@ -288,6 +319,9 @@ void PaneGeneration::_startProcess(QStringList args)
 
     auto *process = new QProcess(this);
     m_activeProcess = process;
+
+    QElapsedTimer elapsedTimer;
+    elapsedTimer.start();
 
     connect(process, &QProcess::readyReadStandardOutput, this, [this, process]() {
         const QString text = QString::fromUtf8(process->readAllStandardOutput());
@@ -307,18 +341,22 @@ void PaneGeneration::_startProcess(QStringList args)
     connect(process,
             QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this,
-            [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+            [this, process, elapsedTimer](int exitCode, QProcess::ExitStatus exitStatus) {
                 m_activeProcess = nullptr;
                 ui->progressBarGeneration->setVisible(false);
                 ui->buttonGenOne->setEnabled(true);
                 ui->buttonGenCustomTopic->setEnabled(true);
                 ui->buttonGeneratePhase2->setEnabled(true);
+                const qint64 elapsedMs = elapsedTimer.elapsed();
+                const QString elapsedStr = _formatElapsed(elapsedMs);
                 const QString statusMsg = (exitStatus == QProcess::CrashExit)
                     ? tr("\nProcess CRASHED (signal %1) — run the generation command in a "
                          "terminal for a backtrace.").arg(exitCode)
-                    : tr("\nProcess finished (exit code %1).").arg(exitCode);
+                    : tr("\nProcess finished (exit code %1) in %2.").arg(
+                          QString::number(exitCode), elapsedStr);
                 ui->textEditOutput->append(statusMsg);
                 computeRemainingToDo();
+                _onStrategySelectionChanged(ui->tableViewStrategies->currentIndex(), QModelIndex{});
 
                 if (exitCode == 0 && !m_lastOkPermalink.isEmpty()) {
                     const QString location = m_domain.isEmpty()
@@ -327,8 +365,8 @@ void PaneGeneration::_startProcess(QStringList args)
                     QMessageBox::information(
                         this,
                         tr("Page Generated"),
-                        tr("One page was generated successfully.\n\nURL:\n%1")
-                            .arg(location));
+                        tr("One page was generated successfully in %1.\n\nURL:\n%2")
+                            .arg(elapsedStr, location));
                 }
                 process->deleteLater();
             });
@@ -410,23 +448,56 @@ void PaneGeneration::computeRemainingToDo()
                         dbCount = countQ.value(0).toInt();
                     }
 
-                    // Detect the first non-id column (the topic name field).
-                    QString nameColumn;
-                    QSqlQuery pragmaQ(db);
-                    if (pragmaQ.exec(QStringLiteral("PRAGMA table_info(records)"))) {
-                        while (pragmaQ.next()) {
-                            const QString col = pragmaQ.value(1).toString();
-                            if (col != QStringLiteral("id") && nameColumn.isEmpty()) {
-                                nameColumn = col;
+                    // Combo tables (e.g. Fashion's 19 PageAttributesFashionCombo*)
+                    // self-compose their topic text via composeArticleTopic() —
+                    // must match LauncherGeneration.cpp's actual generation logic,
+                    // or the expected-permalink set never matches real generated
+                    // pages and "done" stays stuck at 0. Falls back to the first
+                    // non-id column for single-name-column tables, unchanged.
+                    const QString primaryAttrId = m_strategies->primaryAttrIdForRow(row);
+                    const AbstractPageAttributes *attrsProto =
+                        AbstractPageAttributes::ALL_PAGE_ATTRIBUTES().value(primaryAttrId,
+                                                                             nullptr);
+
+                    QSqlQuery topicQ(db);
+                    if (topicQ.exec(QStringLiteral("SELECT * FROM records"))) {
+                        const QSqlRecord schema = topicQ.record();
+                        QString firstNonIdColumn;
+                        for (int i = 0; i < schema.count(); ++i) {
+                            const QString &col = schema.fieldName(i);
+                            if (col != QStringLiteral("id") && firstNonIdColumn.isEmpty()) {
+                                firstNonIdColumn = col;
                             }
                         }
-                    }
-                    if (!nameColumn.isEmpty()) {
-                        QSqlQuery topicQ(db);
-                        topicQ.exec(QStringLiteral("SELECT ") + nameColumn
-                                    + QStringLiteral(" FROM records"));
+                        // Rows the launcher will skip must not inflate the
+                        // total either — mirrors LauncherGeneration's
+                        // isArticleTopicEligible() filter, or "N total" counts
+                        // thousands of rows that can never become articles.
+                        int eligibleCount = 0;
                         while (topicQ.next()) {
-                            topicNames.append(topicQ.value(0).toString());
+                            QString name;
+                            if (attrsProto) {
+                                QHash<QString, QString> rowValues;
+                                for (int i = 0; i < schema.count(); ++i) {
+                                    rowValues.insert(schema.fieldName(i),
+                                                      topicQ.value(i).toString());
+                                }
+                                if (!attrsProto->isArticleTopicEligible(rowValues)) {
+                                    continue;
+                                }
+                                ++eligibleCount;
+                                name = attrsProto->composeArticleTopic(rowValues);
+                            }
+                            if (name.isEmpty() && !firstNonIdColumn.isEmpty()) {
+                                name = topicQ.value(firstNonIdColumn).toString();
+                            }
+                            name = name.trimmed();
+                            if (!name.isEmpty()) {
+                                topicNames.append(name);
+                            }
+                        }
+                        if (attrsProto) {
+                            dbCount = eligibleCount;
                         }
                     }
                 }
@@ -438,9 +509,11 @@ void PaneGeneration::computeRemainingToDo()
             nTotal = dbCount;
             done   = pageRepo.countGeneratedMatchingPermalinks(typeId,
                                                                 expectedPermalinks);
+            done  -= _unresolvedRasterCount(pageRepo, typeId, expectedPermalinks);
         } else {
             // No DB linked: count all AI-generated pages of this type.
             done = pageRepo.findGeneratedByTypeId(typeId).size();
+            done -= _unresolvedRasterCount(pageRepo, typeId, {});
         }
 
         m_strategies->setNDone(row, done);
@@ -491,6 +564,10 @@ void PaneGeneration::_onStrategySelectionChanged(const QModelIndex &current,
                                              ui->textEditPrompt->toPlainText());
         m_strategies->setSvgInstructions(previous.row(),
                                           ui->textEditSvgInstructions->toPlainText());
+        m_strategies->setImageInstructions(previous.row(),
+                                           ui->textEditImageInstructions->toPlainText());
+        m_strategies->setImageCountMin(previous.row(), ui->spinImageCountMin->value());
+        m_strategies->setImageCountMax(previous.row(), ui->spinImageCountMax->value());
     }
 
     const bool hasSelection = current.isValid();
@@ -502,6 +579,9 @@ void PaneGeneration::_onStrategySelectionChanged(const QModelIndex &current,
         ui->buttonLinkDb->setEnabled(false);
         ui->textEditPrompt->clear();
         ui->textEditSvgInstructions->clear();
+        ui->textEditImageInstructions->clear();
+        ui->spinImageCountMin->setValue(0);
+        ui->spinImageCountMax->setValue(0);
         ui->tableWidgetStrategyParams->setRowCount(0);
         return;
     }
@@ -521,6 +601,9 @@ void PaneGeneration::_onStrategySelectionChanged(const QModelIndex &current,
     m_updatingFields = true;
     ui->textEditPrompt->setPlainText(m_strategies->customInstructionsForRow(row));
     ui->textEditSvgInstructions->setPlainText(m_strategies->svgInstructionsForRow(row));
+    ui->textEditImageInstructions->setPlainText(m_strategies->imageInstructionsForRow(row));
+    ui->spinImageCountMin->setValue(m_strategies->imageCountMinForRow(row));
+    ui->spinImageCountMax->setValue(m_strategies->imageCountMaxForRow(row));
     m_updatingFields = false;
 
     // Build parameter rows dynamically so we can add the DB path when needed.
@@ -618,6 +701,18 @@ void PaneGeneration::_connectSlots()
             &QTextEdit::textChanged,
             this,
             &PaneGeneration::_onSvgEdited);
+    connect(ui->textEditImageInstructions,
+            &QTextEdit::textChanged,
+            this,
+            &PaneGeneration::_onImageInstructionsEdited);
+    connect(ui->spinImageCountMin,
+            &QSpinBox::valueChanged,
+            this,
+            &PaneGeneration::_onImageCountMinEdited);
+    connect(ui->spinImageCountMax,
+            &QSpinBox::valueChanged,
+            this,
+            &PaneGeneration::_onImageCountMaxEdited);
 }
 
 void PaneGeneration::_onPromptEdited()
@@ -646,6 +741,43 @@ void PaneGeneration::_onSvgEdited()
                                       ui->textEditSvgInstructions->toPlainText());
 }
 
+void PaneGeneration::_onImageInstructionsEdited()
+{
+    if (m_updatingFields || !m_isSetup) {
+        return;
+    }
+    const QModelIndex current = ui->tableViewStrategies->currentIndex();
+    if (!current.isValid()) {
+        return;
+    }
+    m_strategies->setImageInstructions(current.row(),
+                                       ui->textEditImageInstructions->toPlainText());
+}
+
+void PaneGeneration::_onImageCountMinEdited(int value)
+{
+    if (m_updatingFields || !m_isSetup) {
+        return;
+    }
+    const QModelIndex current = ui->tableViewStrategies->currentIndex();
+    if (!current.isValid()) {
+        return;
+    }
+    m_strategies->setImageCountMin(current.row(), value);
+}
+
+void PaneGeneration::_onImageCountMaxEdited(int value)
+{
+    if (m_updatingFields || !m_isSetup) {
+        return;
+    }
+    const QModelIndex current = ui->tableViewStrategies->currentIndex();
+    if (!current.isValid()) {
+        return;
+    }
+    m_strategies->setImageCountMax(current.row(), value);
+}
+
 void PaneGeneration::_saveCurrentPrompts()
 {
     if (!m_isSetup) {
@@ -659,6 +791,10 @@ void PaneGeneration::_saveCurrentPrompts()
                                          ui->textEditPrompt->toPlainText());
     m_strategies->setSvgInstructions(current.row(),
                                       ui->textEditSvgInstructions->toPlainText());
+    m_strategies->setImageInstructions(current.row(),
+                                       ui->textEditImageInstructions->toPlainText());
+    m_strategies->setImageCountMin(current.row(), ui->spinImageCountMin->value());
+    m_strategies->setImageCountMax(current.row(), ui->spinImageCountMax->value());
 }
 
 QString PaneGeneration::_resolvedDbPath(int row) const
@@ -689,6 +825,18 @@ QString PaneGeneration::_resolvedDbPath(int row) const
     }
 
     return {};
+}
+
+QString PaneGeneration::_formatElapsed(qint64 ms)
+{
+    const qint64 totalSeconds = ms / 1000;
+    const qint64 minutes      = totalSeconds / 60;
+    const qint64 seconds      = totalSeconds % 60;
+
+    if (minutes <= 0) {
+        return tr("%1 s").arg(seconds);
+    }
+    return tr("%1 min %2 s").arg(QString::number(minutes), QString::number(seconds));
 }
 
 QString PaneGeneration::_primaryDomain(AbstractEngine       *engine,
@@ -724,6 +872,25 @@ QString PaneGeneration::_primaryDomain(AbstractEngine       *engine,
 AbstractCli *PaneGeneration::_selectedCli() const
 {
     return m_cliList ? m_cliList->cliAt(ui->comboBoxCli->currentIndex()) : nullptr;
+}
+
+int PaneGeneration::_unresolvedRasterCount(const IPageRepository &pageRepo,
+                                            const QString         &typeId,
+                                            const QSet<QString>   &expectedPermalinks)
+{
+    const QList<PageRecord> &unresolved =
+        pageRepo.findPagesWithUnresolvedRasterImages(typeId);
+    int count = 0;
+    for (const PageRecord &page : std::as_const(unresolved)) {
+        if (page.generatedAt.isEmpty()) {
+            continue; // not counted as done in the first place
+        }
+        if (!expectedPermalinks.isEmpty() && !expectedPermalinks.contains(page.permalink)) {
+            continue; // outside the linked DB's topic set, same as the done filter
+        }
+        ++count;
+    }
+    return count;
 }
 
 void PaneGeneration::_restoreGenerationCli()

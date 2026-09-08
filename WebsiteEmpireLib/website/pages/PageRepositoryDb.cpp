@@ -859,3 +859,140 @@ void PageRepositoryDb::markAllCompleteAsPublished()
     q.bindValue(QStringLiteral(":socialcomplete"), static_cast<int>(PageGenerationState::SocialComplete));
     q.exec();
 }
+
+// =============================================================================
+// Raster (non-SVG) image generation tracking
+// =============================================================================
+
+void PageRepositoryDb::ensureRasterImagePending(int pageId, const QString &refId,
+                                                const QString &fileName)
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "INSERT INTO page_raster_images (page_id, ref_id, file_name, status, attempts, updated_at)"
+        " VALUES (:page_id, :ref_id, :file_name, 0, 0, :ts)"
+        " ON CONFLICT(page_id, ref_id) DO NOTHING"));
+    q.bindValue(QStringLiteral(":page_id"),   pageId);
+    q.bindValue(QStringLiteral(":ref_id"),    refId);
+    q.bindValue(QStringLiteral(":file_name"), fileName);
+    q.bindValue(QStringLiteral(":ts"),        currentUtc());
+    q.exec();
+}
+
+RasterImageStatus PageRepositoryDb::rasterImageStatus(int pageId, const QString &refId) const
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "SELECT status FROM page_raster_images WHERE page_id = :page_id AND ref_id = :ref_id"));
+    q.bindValue(QStringLiteral(":page_id"), pageId);
+    q.bindValue(QStringLiteral(":ref_id"),  refId);
+    q.exec();
+    if (q.next()) {
+        return static_cast<RasterImageStatus>(q.value(0).toInt());
+    }
+    return RasterImageStatus::Pending;
+}
+
+int PageRepositoryDb::rasterImageAttempts(int pageId, const QString &refId) const
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "SELECT attempts FROM page_raster_images WHERE page_id = :page_id AND ref_id = :ref_id"));
+    q.bindValue(QStringLiteral(":page_id"), pageId);
+    q.bindValue(QStringLiteral(":ref_id"),  refId);
+    q.exec();
+    if (q.next()) {
+        return q.value(0).toInt();
+    }
+    return 0;
+}
+
+void PageRepositoryDb::recordRasterImageAttempt(int                pageId,
+                                                const QString      &refId,
+                                                RasterImageStatus   status,
+                                                const QString      &lastError)
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "UPDATE page_raster_images"
+        " SET status = :status, attempts = attempts + 1,"
+        "     last_error = :last_error, updated_at = :ts"
+        " WHERE page_id = :page_id AND ref_id = :ref_id"));
+    q.bindValue(QStringLiteral(":status"),     static_cast<int>(status));
+    q.bindValue(QStringLiteral(":last_error"), lastError);
+    q.bindValue(QStringLiteral(":ts"),         currentUtc());
+    q.bindValue(QStringLiteral(":page_id"),    pageId);
+    q.bindValue(QStringLiteral(":ref_id"),     refId);
+    q.exec();
+}
+
+bool PageRepositoryDb::allRasterImagesTerminal(int pageId) const
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM page_raster_images WHERE page_id = :page_id AND status = 0"));
+    q.bindValue(QStringLiteral(":page_id"), pageId);
+    q.exec();
+    return q.next() && q.value(0).toInt() == 0;
+}
+
+bool PageRepositoryDb::hasRasterImages(int pageId) const
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM page_raster_images WHERE page_id = :page_id"));
+    q.bindValue(QStringLiteral(":page_id"), pageId);
+    q.exec();
+    return q.next() && q.value(0).toInt() > 0;
+}
+
+bool PageRepositoryDb::allRasterImagesSuccess(int pageId) const
+{
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM page_raster_images WHERE page_id = :page_id AND status != 1"));
+    q.bindValue(QStringLiteral(":page_id"), pageId);
+    q.exec();
+    return q.next() && q.value(0).toInt() == 0;
+}
+
+int PageRepositoryDb::resetFailedRasterImages(int pageId)
+{
+    // attempts = 0 as well as status = Pending: LauncherGeneration's attempt
+    // loop starts at attempts + 1 and stops at kRasterMaxAttempts, so a row
+    // reset to Pending while still carrying attempts = 3 would be skipped
+    // immediately and the "retry" would silently do nothing.
+    QSqlQuery q(m_db.database());
+    q.prepare(QStringLiteral(
+        "UPDATE page_raster_images"
+        " SET status = 0, attempts = 0, last_error = NULL, updated_at = :ts"
+        " WHERE page_id = :page_id AND status = 2"));
+    q.bindValue(QStringLiteral(":ts"),      currentUtc());
+    q.bindValue(QStringLiteral(":page_id"), pageId);
+    if (!q.exec()) {
+        return 0;
+    }
+    return q.numRowsAffected();
+}
+
+QList<PageRecord> PageRepositoryDb::findPagesWithUnresolvedRasterImages(
+    const QString &typeId) const
+{
+    QList<PageRecord> result;
+    QSqlQuery q(m_db.database());
+    // IN (subquery) rather than a JOIN: a page with several unresolved images
+    // must appear once, and SELECT_PAGES has no table alias to disambiguate.
+    q.prepare(QString::fromLatin1(SELECT_PAGES)
+              + QStringLiteral(
+                  " WHERE type_id = :typeId"
+                  "   AND source_page_id IS NULL"
+                  "   AND id IN (SELECT page_id FROM page_raster_images"
+                  "              WHERE status != 1)"
+                  " ORDER BY id ASC"));
+    q.bindValue(QStringLiteral(":typeId"), typeId);
+    q.exec();
+    while (q.next()) {
+        result.append(rowToRecord(q));
+    }
+    return result;
+}

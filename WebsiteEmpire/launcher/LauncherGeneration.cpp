@@ -358,7 +358,8 @@ static QCoro::Task<QString> runBoundedClaudePrompt(QString      preparedPrompt,
 // self-contained instead.
 static QString buildRasterImageReviewPrompt(const QString &imagePath,
                                              const QString &description,
-                                             const QString &styleInstructions)
+                                             const QString &styleInstructions,
+                                             const QString &articleSection)
 {
     QString prompt = QStringLiteral(
         "You are reviewing an AI-generated image for a web article.\n\n"
@@ -366,6 +367,12 @@ static QString buildRasterImageReviewPrompt(const QString &imagePath,
         "or vision tool: %1\n\n"
         "The image should show: %2\n")
         .arg(imagePath, description);
+    if (!articleSection.isEmpty()) {
+        prompt += QStringLiteral(
+            "\nThe article section this image illustrates (the image must match the "
+            "SPECIFIC recommendation below — colors, garments, pairing — not just the "
+            "general topic):\n---\n%1\n---\n").arg(articleSection);
+    }
     if (!styleInstructions.isEmpty()) {
         prompt += QStringLiteral("\nStyle requirements the image must follow:\n%1\n")
                      .arg(styleInstructions);
@@ -374,8 +381,11 @@ static QString buildRasterImageReviewPrompt(const QString &imagePath,
         "\nTo respond OK, ALL of the following must be true:\n"
         "1. The image file opens correctly and is not blank, corrupted, or a placeholder.\n"
         "2. The subject described above is clearly visible and correctly depicted.\n"
-        "3. The image follows the style requirements above (when given).\n"
-        "4. The image contains no text, watermark, or logo.\n\n"
+        "3. When an article section is given, the image matches that section's specific "
+        "recommendation (e.g. the exact colors/garments named) — not a generic or "
+        "mismatched substitute.\n"
+        "4. The image follows the style requirements above (when given).\n"
+        "5. The image contains no text, watermark, or logo.\n\n"
         "Respond with ONLY one of:\n"
         "- \"OK\" — if all conditions above are met.\n"
         "- \"FAIL: <reason>\" — if any condition is not met. Be specific.\n"
@@ -458,7 +468,8 @@ static QCoro::Task<RasterAttemptResult> runOneRasterAttempt(
     *out << QStringLiteral("[S%1] Reviewing raster image: %2...\n").arg(sNum).arg(ref.fileName);
     out->flush();
     const QString reviewPrompt =
-        buildRasterImageReviewPrompt(outputPath, ref.alt, imageInstructions);
+        buildRasterImageReviewPrompt(outputPath, ref.alt, imageInstructions,
+                                      GenPageQueue::extractRelevantSection(articleText, ref.id));
     const QString reviewResponse = co_await runBoundedClaudePrompt(
         reviewPrompt, cli, kRasterImageTimeoutMs, tempDir.path() + QStringLiteral("/review"));
 
@@ -692,6 +703,68 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                 }
             }
 
+            // ---- Raster image repair --------------------------------------
+            // The retry queue's main job for a raster strategy: an article held
+            // at ContentReady because one or more of its images is still
+            // Pending or went FailedFinal.  Re-runs the per-image
+            // generate/review loop against the STORED article text, so the
+            // prose and every already-good image are untouched and only the
+            // broken ones are redone.
+            //
+            // resetFailedRasterImages() must come first: runRasterImageGeneration()
+            // returns early for any row whose status is not Pending, so without
+            // the reset a FailedFinal row is skipped and the page would cycle
+            // through the retry queue forever making no progress.  One fresh
+            // budget per explicit retry run — the reset deliberately does NOT
+            // live inside the generate loop, which would spin without end on an
+            // image the AI genuinely cannot produce.
+            bool rasterRepairOk    = true;
+            bool retryRasterPaused = false;
+            if (queue->wantsRasterImage() && !pageRepo.allRasterImagesSuccess(pageId)) {
+                if (!cli->canGenImages()) {
+                    // Not a failure of this page: a capable CLI simply never
+                    // looked at it.  Never fabricate a failed attempt here.
+                    *(state->out) << QStringLiteral(
+                        "[S%1] WARN: %2 — images need repair but %3 cannot generate "
+                        "images; stays ContentReady for a capable CLI\n")
+                        .arg(sNum).arg(page.permalink, cli->getName());
+                    state->out->flush();
+                    rasterRepairOk = false;
+                } else {
+                    const int nReset = pageRepo.resetFailedRasterImages(pageId);
+                    *(state->out) << QStringLiteral(
+                        "[S%1] Repairing raster images: %2 (%3 previously failed)\n")
+                        .arg(sNum).arg(page.permalink).arg(nReset);
+                    state->out->flush();
+
+                    for (const auto &ref : std::as_const(retryRefs)) {
+                        if (g_stopRequested || retryRasterPaused) {
+                            break;
+                        }
+                        if (ref.fileName.endsWith(QStringLiteral(".svg"), Qt::CaseInsensitive)) {
+                            continue;
+                        }
+                        // Never regenerate an image that already succeeded —
+                        // it would burn a CLI call and could replace a good
+                        // image with a worse one.
+                        if (pageRepo.rasterImageStatus(pageId, ref.id)
+                                == RasterImageStatus::Success) {
+                            continue;
+                        }
+                        const bool ok = co_await runRasterImageGeneration(
+                            ref, retryText, queue->rasterImageInstructions(), lang, domain,
+                            queue, cli, imageWriter, pageRepo, pageId, state->out, sNum);
+                        if (!ok) {
+                            retryRasterPaused = sessionRasterPaused = true;
+                        }
+                    }
+                    // Re-read rather than trusting the loop: an image that
+                    // exhausted its fresh budget is FailedFinal again, and the
+                    // page must stay ContentReady rather than be called done.
+                    rasterRepairOk = pageRepo.allRasterImagesSuccess(pageId);
+                }
+            }
+
             // Run second pass only when the SocialMedia flag is set — set by
             // --review (stats threshold reached) or the UI (manual override).
             const bool wantsSocialSecondPass =
@@ -795,7 +868,11 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                 }
             }
 
-            if (!svgExpectedR || !retrySvg.isEmpty()) {
+            // rasterRepairOk is part of the gate: without it this branch marked
+            // a page Complete whenever no SVG was expected — which is every
+            // raster-only article — so a re-queued page with a broken image was
+            // promoted to Complete on its next run having repaired nothing.
+            if ((!svgExpectedR || !retrySvg.isEmpty()) && rasterRepairOk) {
                 const PageGenerationState finalState = socialPassRan
                     ? PageGenerationState::SocialComplete
                     : PageGenerationState::Complete;
@@ -803,7 +880,12 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                 state->jobsCompleted.fetch_add(1);
                 *(state->out) << QStringLiteral("[S%1] OK (retry): %2\n")
                                      .arg(sNum).arg(page.permalink);
-            } else {
+            } else if (!rasterRepairOk && !g_stopRequested && !retryRasterPaused) {
+                *(state->out) << QStringLiteral(
+                    "[S%1] WARN: %2 — raster image(s) still unresolved after repair, "
+                    "stays ContentReady\n")
+                    .arg(sNum).arg(page.permalink);
+            } else if (rasterRepairOk) {
                 *(state->out) << QStringLiteral(
                     "[S%1] WARN: %2 — SVG still missing after retry, stays ContentReady\n")
                     .arg(sNum).arg(page.permalink);
@@ -1128,12 +1210,19 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
             // the same as "not fully ready" — the page stays ContentReady so the
             // next run's content regeneration gets another chance at a better
             // count, exactly like an SVG that the AI failed to reference at all.
+            // allRasterImagesSuccess(), NOT allRasterImagesTerminal(): a
+            // FailedFinal image is terminal but the article is NOT finished —
+            // it cannot publish (PageGenerator's gate rejects it), so calling
+            // it Complete stranded it forever, counted as done while being
+            // permanently unpublishable and never retried. Staying
+            // ContentReady instead puts it back in the retry queue, where the
+            // raster repair pass above grants it a fresh attempt budget.
             bool rasterSatisfied = true;
             if (rasterWanted) {
                 const bool countSatisfied = queue->imageCountMin() <= 0
                                             || rasterRefCount >= queue->imageCountMin();
                 rasterSatisfied = rasterCliReady && countSatisfied
-                                 && pageRepo.allRasterImagesTerminal(pageId);
+                                 && pageRepo.allRasterImagesSuccess(pageId);
                 if (rasterCliReady && !countSatisfied && !g_stopRequested && !rasterPaused) {
                     *(state->out) << QStringLiteral(
                         "[S%1] WARN: %2 — only %3 raster image(s) found, %4 required minimum\n")
@@ -1609,6 +1698,19 @@ void LauncherGeneration::run(const QString & /*value*/)
                             if (schema.indexOf(QStringLiteral("combo_msv")) >= 0) {
                                 orderBy = QStringLiteral("combo_msv DESC, id ASC");
                             }
+                            // Formula first, so consecutive generations walk
+                            // DIFFERENT slot values instead of the same one
+                            // rendered through each of a table's formulas in
+                            // turn. Without this, a multi-formula table like
+                            // ColorProduct emits "What to wear with Black
+                            // Boots", then "How to style Black Boots", ... —
+                            // near-duplicate articles back to back, because
+                            // every formula of one slot pair shares the same
+                            // combo_msv and sits adjacent in id order.
+                            // No-op for single-formula tables (constant key).
+                            if (schema.indexOf(QStringLiteral("combo_formula_id")) >= 0) {
+                                orderBy = QStringLiteral("combo_formula_id ASC, ") + orderBy;
+                            }
                         }
 
                         QSqlQuery q(srcDb);
@@ -1620,6 +1722,12 @@ void LauncherGeneration::run(const QString & /*value*/)
                                     QHash<QString, QString> rowValues;
                                     for (int i = 0; i < schema.count(); ++i) {
                                         rowValues.insert(schema.fieldName(i), q.value(i).toString());
+                                    }
+                                    // Row-level veto: valid research data that
+                                    // must not become an article (see
+                                    // AbstractPageAttributes::isArticleTopicEligible).
+                                    if (!attrsProto->isArticleTopicEligible(rowValues)) {
+                                        continue;
                                     }
                                     name = attrsProto->composeArticleTopic(rowValues);
                                 }
@@ -1726,6 +1834,38 @@ void LauncherGeneration::run(const QString & /*value*/)
                 if (!(p.flags & static_cast<quint32>(PageFlag::SocialMedia))) {
                     schedRepo.setGenerationState(p.id, PageGenerationState::Complete);
                 }
+            }
+        }
+
+        // ---- Housekeeping: demote "Complete" pages with broken images --------
+        // An article with an unresolved raster image is not complete: it can
+        // never publish (PageGenerator's gate rejects it).  Runs before the
+        // retry queue is built, so a demoted page is picked up as a ContentReady
+        // retry in this same run and gets repaired instead of sitting there
+        // permanently unpublishable while counted as done.
+        //
+        // This also heals pages stranded by the older completion rule, which
+        // used allRasterImagesTerminal() and therefore treated a FailedFinal
+        // image as good enough to mark the page Complete.
+        //
+        // SocialComplete is deliberately NOT demoted: its social-media second
+        // pass already ran, and re-running the first pass would be wasteful.
+        {
+            const QList<PageRecord> unresolved =
+                schedRepo.findPagesWithUnresolvedRasterImages(info.pageTypeId);
+            int demoted = 0;
+            for (const PageRecord &p : std::as_const(unresolved)) {
+                if (p.generationState != PageGenerationState::Complete) {
+                    continue;
+                }
+                schedRepo.setGenerationState(p.id, PageGenerationState::ContentReady);
+                ++demoted;
+            }
+            if (demoted > 0) {
+                *out << QStringLiteral(
+                    "  → %1 page(s) demoted to ContentReady: raster image(s) unresolved\n")
+                    .arg(demoted);
+                out->flush();
             }
         }
 

@@ -5,6 +5,7 @@
 #include "website/pages/PageGenerationState.h"
 #include "website/pages/PageRecord.h"
 #include "website/pages/PermalinkHistoryEntry.h"
+#include "website/pages/RasterImageStatus.h"
 
 #include <QHash>
 #include <QList>
@@ -364,6 +365,105 @@ public:
      * the social-media second pass or other review-driven actions.
      */
     virtual QList<PageRecord> findByFlag(PageFlag flag) const = 0;
+
+    // -------------------------------------------------------------------------
+    // Raster (non-SVG) image generation tracking
+    // -------------------------------------------------------------------------
+    //
+    // A page with N raster [IMGFIX] refs is only safe to mark Complete (see
+    // allRasterImagesTerminal()) or to publish (see allRasterImagesSuccess())
+    // once every ref has a row here.  This is what lets generation resume
+    // cleanly after a crash or a CLI usage-limit pause instead of silently
+    // shipping a page with some images still missing — see LauncherGeneration
+    // and PageGenerator's publish-time gate.
+
+    /**
+     * Ensures a row exists for (pageId, refId) with status Pending, attempts 0.
+     * No-op if a row already exists — never resets progress made in a prior run.
+     * Call once per expected raster image ref before attempting generation.
+     */
+    virtual void ensureRasterImagePending(int pageId, const QString &refId,
+                                          const QString &fileName) = 0;
+
+    /**
+     * Returns the current status for (pageId, refId), or RasterImageStatus::Pending
+     * if no row exists (should not normally happen once ensureRasterImagePending()
+     * has been called for every expected ref).
+     */
+    virtual RasterImageStatus rasterImageStatus(int pageId, const QString &refId) const = 0;
+
+    /** Returns the number of attempts already recorded for (pageId, refId), or 0. */
+    virtual int rasterImageAttempts(int pageId, const QString &refId) const = 0;
+
+    /**
+     * Records the outcome of one generation/review attempt for (pageId, refId):
+     * increments attempts, sets status, and stores lastError (empty clears it).
+     * Requires a row to already exist (call ensureRasterImagePending() first).
+     */
+    virtual void recordRasterImageAttempt(int                pageId,
+                                          const QString      &refId,
+                                          RasterImageStatus   status,
+                                          const QString      &lastError) = 0;
+
+    /**
+     * Returns true if pageId has zero page_raster_images rows with status
+     * Pending — i.e. every raster ref attempted so far has reached Success or
+     * FailedFinal.  Vacuously true when pageId has no raster image rows at all
+     * (nothing to wait for).  Used by LauncherGeneration to decide whether a
+     * page can leave the auto-retry loop and reach PageGenerationState::Complete.
+     */
+    virtual bool allRasterImagesTerminal(int pageId) const = 0;
+
+    /**
+     * Returns true if pageId has at least one page_raster_images row.  Used by
+     * the publish-time gate to distinguish "no raster images expected" (the
+     * overwhelmingly common case, unaffected by this feature) from "raster
+     * images expected" (which then must also pass allRasterImagesSuccess()).
+     */
+    virtual bool hasRasterImages(int pageId) const = 0;
+
+    /**
+     * Returns true only if EVERY page_raster_images row for pageId has status
+     * Success.  Unlike allRasterImagesTerminal(), a FailedFinal row also makes
+     * this false — a permanently-failed image must never go live silently.
+     * Vacuously true when pageId has no raster image rows at all.
+     *
+     * This — NOT allRasterImagesTerminal() — is the completeness criterion for
+     * a page: an article with a failed image is not a finished article.  It
+     * governs the publish-time gate (PageGenerator), whether LauncherGeneration
+     * may promote the page to PageGenerationState::Complete, and whether
+     * PaneGeneration counts the page as "done".
+     */
+    virtual bool allRasterImagesSuccess(int pageId) const = 0;
+
+    /**
+     * Resets every FailedFinal raster row for pageId back to Pending with
+     * attempts = 0 and last_error cleared.  Returns the number of rows reset.
+     * Rows already Pending or Success are left untouched.
+     *
+     * This is the requeue primitive that makes a permanently-failed image
+     * recoverable.  Without it a FailedFinal row is a dead end:
+     * LauncherGeneration's per-image driver returns early for any row whose
+     * status is not Pending, and the attempt loop starts at attempts + 1, so
+     * clearing BOTH fields is what actually grants a fresh attempt budget.
+     *
+     * Called at the start of a retry pass, not on the first-pass path — a reset
+     * inside the generate loop would spin forever on an image the AI genuinely
+     * cannot produce.  One fresh budget per explicit retry run is the contract.
+     */
+    virtual int resetFailedRasterImages(int pageId) = 0;
+
+    /**
+     * Returns the source pages of typeId that have at least one raster row not
+     * in Success — i.e. articles that are not truly finished because an image
+     * is missing or permanently failed.  Ordered by id ascending.
+     *
+     * Used by PaneGeneration so the "done" count reflects publishable articles
+     * rather than merely content-filled ones; a page listed here is one the
+     * retry queue still has work to do on.
+     */
+    virtual QList<PageRecord> findPagesWithUnresolvedRasterImages(
+        const QString &typeId) const = 0;
 };
 
 #endif // IPAGEREPOSITORY_H

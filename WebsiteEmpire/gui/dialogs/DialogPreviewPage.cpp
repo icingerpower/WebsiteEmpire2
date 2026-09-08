@@ -356,12 +356,15 @@ void DialogPreviewPage::_inlineRasterImages(QString &html, const QString &domain
         return;
     }
 
-    // Match any src="/images/..." attribute.  The domain segment may be empty
-    // (producing a double slash like /images//file.webp) when no domain is
-    // configured in the engine, so we extract the filename from the last path
-    // component rather than trying to parse out a specific domain slot.
+    // Match any src="/<filename>.<ext>" raster-image attribute — the renderer
+    // emits a bare root-relative path with no "/images/" prefix (mirrors how
+    // _inlineSvgs() matches src="/foo.svg" with no such prefix either; this
+    // regex previously required "/images/" and so never matched anything,
+    // silently leaving every raster [IMGFIX] as a broken link in the preview).
+    // Still extract the filename from the last path component defensively, in
+    // case a future domain/subpath segment is ever introduced.
     static const QRegularExpression reSrc(
-        QStringLiteral("src=\"(/images/[^\"]*)\""),
+        QStringLiteral("src=\"(/[^\"]+\\.(?:jpg|jpeg|png|webp))\""),
         QRegularExpression::CaseInsensitiveOption);
 
     QStringList filenames;

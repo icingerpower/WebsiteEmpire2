@@ -80,6 +80,15 @@ public:
     void setEndPermalink(int, const QString &) override {}
     void setPublishedAt(int, const QString &) override {}
     void markAllCompleteAsPublished() override {}
+    void ensureRasterImagePending(int, const QString &, const QString &) override {}
+    RasterImageStatus rasterImageStatus(int, const QString &) const override { return RasterImageStatus::Pending; }
+    int rasterImageAttempts(int, const QString &) const override { return 0; }
+    void recordRasterImageAttempt(int, const QString &, RasterImageStatus, const QString &) override {}
+    bool allRasterImagesTerminal(int) const override { return true; }
+    bool hasRasterImages(int) const override { return false; }
+    bool allRasterImagesSuccess(int) const override { return true; }
+    int resetFailedRasterImages(int) override { return 0; }
+    QList<PageRecord> findPagesWithUnresolvedRasterImages(const QString &) const override { return {}; }
 
 private:
     QList<PageRecord>                    m_records;

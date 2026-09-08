@@ -44,6 +44,17 @@
  *   state       INTEGER NOT NULL DEFAULT 0  -- PageGenerationState (Pending=0 / Complete=3)
  *   PRIMARY KEY (page_id, lang)
  *
+ * page_raster_images                -- per-[IMGFIX] raster image generation outcome
+ *   id          INTEGER PRIMARY KEY AUTOINCREMENT
+ *   page_id     INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE
+ *   ref_id      TEXT    NOT NULL   -- the IMGFIX shortcode's id attribute
+ *   file_name   TEXT    NOT NULL
+ *   status      INTEGER NOT NULL  -- RasterImageStatus (0=Pending, 1=Success, 2=FailedFinal)
+ *   attempts    INTEGER NOT NULL DEFAULT 0
+ *   last_error  TEXT
+ *   updated_at  TEXT    NOT NULL
+ *   UNIQUE (page_id, ref_id)
+ *
  * Multiple PageDb instances in the same process each get a unique connection
  * name to satisfy Qt's "one connection per database name" requirement.
  *

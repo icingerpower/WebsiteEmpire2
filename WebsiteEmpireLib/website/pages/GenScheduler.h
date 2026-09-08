@@ -40,7 +40,10 @@ public:
         QString svgInstructions;       // non-empty = SVG generation pass enabled
         QString primaryAttrId;         // AbstractPageAttributes::getId(); empty = no source DB
         QString endPermalink;          // URL slug suffix appended to generated pages; empty = none
+        QString imageInstructions;     // non-empty = raster image generation pass enabled
         bool    nonSvgImages = false;
+        int     imageCountMin = 0;     // 0/0 = unenforced
+        int     imageCountMax = 0;
         int     priority            = 1;  // 1 = normal generation; 2+ = improvement passes
         int     pendingCountOverride = -1; // >= 0 overrides pageRepo pending count
     };
@@ -52,7 +55,10 @@ public:
         QString customInstructions;    // forwarded from StrategyInfo
         QString svgInstructions;       // forwarded from StrategyInfo
         QString endPermalink;          // forwarded from StrategyInfo; empty = none
+        QString imageInstructions;     // forwarded from StrategyInfo
         bool    nonSvgImages = false;
+        int     imageCountMin = 0;     // forwarded from StrategyInfo
+        int     imageCountMax = 0;
         int     sessionCount = 1;
     };
 

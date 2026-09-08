@@ -107,7 +107,10 @@ QList<GenScheduler::StrategyAllocation> GenScheduler::computeAllocations(int tot
         alloc.customInstructions = c.info.customInstructions;
         alloc.svgInstructions    = c.info.svgInstructions;
         alloc.endPermalink       = c.info.endPermalink;
+        alloc.imageInstructions  = c.info.imageInstructions;
         alloc.nonSvgImages       = c.info.nonSvgImages;
+        alloc.imageCountMin      = c.info.imageCountMin;
+        alloc.imageCountMax      = c.info.imageCountMax;
         alloc.sessionCount = qMax(1, qRound(totalSessions * c.weight / totalWeight));
         sessionsAssigned  += alloc.sessionCount;
         result.append(alloc);

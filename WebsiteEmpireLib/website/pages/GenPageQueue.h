@@ -61,6 +61,13 @@ public:
      * customInstructions  — strategy-level extra instructions appended to step-1 prompt
      * svgInstructions     — non-empty enables the SVG generation pass; used verbatim
      *                       in buildSvgPrompt() as the design requirements section
+     * imageInstructions   — non-empty enables the raster image generation pass
+     *                       (see wantsRasterImage()); used verbatim in
+     *                       buildRasterImagePrompt() as the style/requirements section
+     *                       and folded into buildContentPrompt() so the article-writing
+     *                       call knows to produce raster [IMGFIX] references
+     * imageCountMin/Max   — 0/0 = unenforced; otherwise buildContentPrompt() states the
+     *                       exact range to the AI (see GenStrategyTable for the UI)
      * limit               — max pages to pop from this queue (−1 = all pending)
      */
     GenPageQueue(const QString   &pageTypeId,
@@ -70,7 +77,10 @@ public:
                  const QString   &customInstructions = {},
                  const QString   &svgInstructions    = {},
                  int              limit = -1,
-                 const QDir      &workingDir = QDir{});
+                 const QDir      &workingDir = QDir{},
+                 const QString   &imageInstructions = {},
+                 int              imageCountMin = 0,
+                 int              imageCountMax = 0);
 
     /**
      * Source-DB-backed constructor: caller supplies pre-built PageRecord items
@@ -84,7 +94,10 @@ public:
                  CategoryTable          &categoryTable,
                  const QString          &customInstructions = {},
                  const QString          &svgInstructions    = {},
-                 const QDir             &workingDir = QDir{});
+                 const QDir             &workingDir = QDir{},
+                 const QString          &imageInstructions = {},
+                 int                     imageCountMin = 0,
+                 int                     imageCountMax = 0);
 
     bool             hasNext()   const;
     const PageRecord &peekNext() const;
@@ -189,10 +202,34 @@ public:
     bool wantsSvgImage() const;
 
     /**
-     * Returns true when the strategy has image (raster/PNG) instructions.
-     * Currently always returns false — PNG generation is not yet implemented.
+     * Returns true when the strategy has dedicated raster image instructions,
+     * i.e. the raster image generation pass should run for [IMGFIX] refs whose
+     * fileName does not end in ".svg" after the article content pass.
      */
-    bool wantsPngImage() const;
+    bool wantsRasterImage() const;
+
+    /**
+     * Returns the strategy's raw raster image style/requirements text (empty
+     * when wantsRasterImage() is false).  Exposed so callers building a
+     * separate review prompt (grading a generated image against the same
+     * style requirements used in buildRasterImagePrompt()) don't have to
+     * duplicate the strategy's imageInstructions text.
+     */
+    QString rasterImageInstructions() const;
+
+    /**
+     * Returns the configured minimum/maximum number of raster images for this
+     * strategy (0/0 = unenforced).  Exposed so LauncherGeneration can: (1) trim
+     * an over-long AI response to at most imageCountMax() raster refs before
+     * attempting generation, bounding the CLI-call cost of a single page; and
+     * (2) require at least imageCountMin() raster refs to have been found
+     * before a page is allowed to reach PageGenerationState::Complete — an
+     * under-count leaves the page in ContentReady, where the next generation
+     * run's content regeneration gets another chance at a better count, the
+     * same fallback already used when SVG generation comes up short.
+     */
+    int imageCountMin() const;
+    int imageCountMax() const;
 
     /**
      * Builds a repair prompt that asks Claude to return ONLY the missing
@@ -210,6 +247,26 @@ public:
      */
     static QString insertImgFix(const QString &articleText,
                                  const QString &imgFixCode);
+
+    /**
+     * Returns the portion of articleText most relevant to the [IMGFIX
+     * id="imgFixId" ...] occurrence — everything from the nearest preceding
+     * [TITLE level="N"] heading up to the next [TITLE] heading (or the end of
+     * the article). Used to scope both image generation and image review to
+     * the one section an image actually illustrates, instead of the whole
+     * article — so a multi-section article (e.g. several "type" sections,
+     * each with its own outfit recommendation) can never have one section's
+     * image tailored to, or validated against, another section's unrelated
+     * recommendation.
+     *
+     * Deterministic string search — no AI call. Falls back to the full
+     * articleText (never returns something narrower than the truth) when:
+     * imgFixId is empty, no [IMGFIX id="imgFixId" ...] occurrence is found in
+     * articleText, or no [TITLE] heading precedes that occurrence (e.g. it
+     * sits in the article's opening paragraph, before any heading).
+     */
+    static QString extractRelevantSection(const QString &articleText,
+                                           const QString &imgFixId);
 
     /**
      * Fixes a known AI mistake where the first [TITLE level="1"]...[/TITLE]
@@ -267,6 +324,24 @@ public:
                             const QString   &articleText,
                             const QString   &lang) const;
 
+    /**
+     * Builds a prompt requesting a real (raster, photorealistic-capable) image
+     * for the given image reference, tagged with RASTER_IMAGE_PROMPT_MARKER
+     * (see common/aicli/AbstractCli.h) so a CLI's preparePrompt() override can
+     * detect it and switch to its own image-generation tool.  articleText is
+     * included for context so the image reflects the article; m_imageInstructions
+     * is used verbatim as the shared style/requirements section (equivalent to
+     * m_svgInstructions in buildSvgPrompt()).  outputPath is the absolute path
+     * the CLI must save the resulting image file to.
+     *
+     * Pure function of its inputs — safe to call again identically on a retry
+     * or on the next generation run after a crash or CLI usage-limit error.
+     */
+    QString buildRasterImagePrompt(const ImgFixRef &ref,
+                                    const QString   &articleText,
+                                    const QString   &lang,
+                                    const QString   &outputPath) const;
+
 private:
     // Returns the content schema for this page type: key → "" (all empty).
     // Built lazily and cached; requires CategoryTable for type instantiation.
@@ -282,6 +357,9 @@ private:
     bool             m_nonSvgImages;
     QString          m_customInstructions;
     QString          m_svgInstructions;
+    QString          m_imageInstructions;
+    int              m_imageCountMin = 0;
+    int              m_imageCountMax = 0;
     CategoryTable   &m_categoryTable;
     QDir             m_workingDir;
     QList<PageRecord> m_pending;

@@ -31,7 +31,7 @@ add_empire_test(Test_Website_PageBlocCategory          test_website_page_bloc_ca
 add_empire_test(Test_Website_PageBlocCategoryLinks     test_website_page_bloc_category_links.cpp)
 add_empire_test(Test_Website_PageBlocImageLinks        test_website_page_bloc_image_links.cpp)
 add_empire_test(Test_Website_PageBlocCategoryArticles test_website_page_bloc_image_category.cpp)
-add_empire_test(Test_Website_PageTypeArticle  test_page_type_article.cpp)
+add_empire_test(Test_Website_PageTypeArticleHealth  test_page_type_article_health.cpp)
 add_empire_test(Test_Website_Engine_Languages test_website_engine_languages.cpp)
 add_empire_test(Test_Website_Engine_Articles  test_website_engine_articles.cpp)
 add_empire_test(Test_Website_Settings         test_website_settings.cpp)
@@ -56,6 +56,9 @@ add_empire_test(Test_Website_GenerationWorkflow              test_generation_wor
 add_empire_test(Test_Website_GenerationCoroutine             test_generation_coroutine.cpp)
 add_empire_test(Test_Website_CategoryHub_DirtySet            test_category_hub_dirty_set.cpp)
 add_empire_test(Test_Website_CategoryHub_Syncer              test_category_hub_syncer.cpp)
+add_empire_test(Test_Website_FashionTaxonomyHub_Syncer        test_fashion_taxonomy_hub_syncer.cpp)
+add_empire_test(Test_Website_PageTypeFashionTagHub            test_page_type_fashion_tag_hub.cpp)
+add_empire_test(Test_Website_PageBlocFashionHubGrid           test_page_bloc_fashion_hub_grid.cpp)
 add_empire_test(Test_Website_SocialMedia                     test_social_media.cpp)
 add_empire_test(Test_Website_ReviewAction                    test_website_review_action.cpp)
 add_empire_test(Test_Website_PageStateFormatter              test_website_page_state_formatter.cpp)
@@ -66,6 +69,15 @@ target_link_libraries(Test_Website_RobotsWriter PRIVATE ZLIB::ZLIB)
 add_empire_test(Test_Website_SitemapOrchestrator             test_website_sitemap_orchestrator.cpp)
 add_empire_test(Test_Website_StatsDbMerger                   test_stats_db_merger.cpp)
 add_empire_test(Test_Website_PagesStatsWidget                test_pages_stats_widget.cpp)
+add_empire_test(Test_Website_CliAntigravity                  test_cli_antigravity.cpp)
+add_empire_test(Test_Website_CliCodex                        test_cli_codex.cpp)
+add_empire_test(Test_Website_GenPageQueueRaster               test_gen_page_queue_raster.cpp)
+add_empire_test(Test_Website_AbstractPageBlocTaxonomies       test_abstract_page_bloc_taxonomies.cpp)
+add_empire_test(Test_Website_PageBlocFashionTaxonomyLinks     test_page_bloc_fashion_taxonomy_links.cpp)
+add_empire_test(Test_Website_TaxonomyTranslationFilter        test_taxonomy_translation_filter.cpp)
+add_empire_test(Test_Website_PageTypeArticleFashion            test_page_type_article_fashion.cpp)
+add_empire_test(Test_Website_EngineArticlesFashion             test_engine_articles_fashion.cpp)
+add_empire_test(Test_Website_RasterImageTracking              test_raster_image_tracking.cpp)
 
 # LauncherTranslate modes test compiles launcher code directly (no app binary needed).
 add_executable(Test_Website_LauncherTranslate_Modes
@@ -99,6 +111,22 @@ target_link_libraries(Test_Website_GenStrategyTable PRIVATE
 target_include_directories(Test_Website_GenStrategyTable PRIVATE
     ../WebsiteEmpireLib
     ../WebsiteEmpire/gui/panes)
+
+# PaneTaxonomies test compiles app-layer pane code directly (no .ui file —
+# the widget is built entirely in code).
+add_executable(Test_Website_PaneTaxonomies
+    test_pane_taxonomies.cpp
+    ../WebsiteEmpire/gui/panes/PaneTaxonomies.cpp)
+add_test(NAME Test_Website_PaneTaxonomies COMMAND Test_Website_PaneTaxonomies)
+target_link_libraries(Test_Website_PaneTaxonomies PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Sql
+    QCoro::Core
+    -Wl,--whole-archive WebsiteEmpireLib -Wl,--no-whole-archive)
+target_include_directories(Test_Website_PaneTaxonomies PRIVATE
+    ../WebsiteEmpireLib
+    ../WebsiteEmpire)
 
 # SVG validation test — needs Qt::Svg.
 add_executable(Test_Website_SvgValidation test_website_svg_validation.cpp)

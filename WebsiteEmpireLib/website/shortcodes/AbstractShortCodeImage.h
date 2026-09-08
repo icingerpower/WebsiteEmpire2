@@ -89,6 +89,28 @@ public:
      */
     QString getTextEnd(const QDialog *dialog) const override;
 
+    /**
+     * Reduces a fileName argument to its bare basename: strips any directory
+     * part and leading slashes ("/images/foo.jpg", "images/foo.jpg" and
+     * "foo.jpg" all yield "foo.jpg"). Trims surrounding whitespace.
+     *
+     * THE single source of truth for image file naming, applied both when
+     * rendering the <img src> here and when the raster/SVG pipeline keys a
+     * generated blob in images.db (GenPageQueue::parseImgFixRefs()). The two
+     * MUST agree: a blob stored under one spelling and requested under another
+     * silently renders as a broken image.
+     *
+     * Regression this guards (2026-09-07): buildContentPrompt() told the AI
+     * both `fileName="image.jpg"` (bare) and, for non-SVG strategies,
+     * "reference images as relative paths (e.g. /images/foo.jpg)". The AI
+     * alternated between the two between runs. A "/images/…"-spelled fileName
+     * produced src="//images/foo.jpg" (double slash) and stored the blob under
+     * the literal key "/images/foo.jpg", so every lookup by basename missed and
+     * every image on the page rendered broken — while generation itself
+     * reported complete success.
+     */
+    static QString normalizedFileName(const QString &fileName);
+
 protected:
     /** Translatability of the id argument — No for IMGFIX, Yes for IMGTR. */
     virtual Translatable idTranslatable() const = 0;

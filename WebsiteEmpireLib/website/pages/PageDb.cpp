@@ -203,4 +203,22 @@ void PageDb::createSchema()
         "  state   INTEGER NOT NULL DEFAULT 0,"
         "  PRIMARY KEY (page_id, lang)"
         ")"));
+
+    // page_raster_images — per-[IMGFIX] raster image generation outcome.  A row
+    // is created (status Pending) the first time LauncherGeneration attempts a
+    // raster image for a page, and stays Pending/updated across runs so that a
+    // crash or CLI usage-limit pause never loses track of which images still
+    // need work — see RasterImageStatus.h.
+    q.exec(QStringLiteral(
+        "CREATE TABLE IF NOT EXISTS page_raster_images ("
+        "  id         INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  page_id    INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,"
+        "  ref_id     TEXT    NOT NULL,"
+        "  file_name  TEXT    NOT NULL,"
+        "  status     INTEGER NOT NULL DEFAULT 0,"
+        "  attempts   INTEGER NOT NULL DEFAULT 0,"
+        "  last_error TEXT,"
+        "  updated_at TEXT    NOT NULL,"
+        "  UNIQUE (page_id, ref_id)"
+        ")"));
 }

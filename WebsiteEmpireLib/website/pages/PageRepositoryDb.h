@@ -86,6 +86,20 @@ public:
     void                             setEndPermalink(int id, const QString &value) override;
     void                             setPublishedAt(int id, const QString &utcIso) override;
     void                             markAllCompleteAsPublished() override;
+    void                             ensureRasterImagePending(int pageId, const QString &refId,
+                                                              const QString &fileName) override;
+    RasterImageStatus                rasterImageStatus(int pageId, const QString &refId) const override;
+    int                              rasterImageAttempts(int pageId, const QString &refId) const override;
+    void                             recordRasterImageAttempt(int                pageId,
+                                                              const QString      &refId,
+                                                              RasterImageStatus   status,
+                                                              const QString      &lastError) override;
+    bool                             allRasterImagesTerminal(int pageId) const override;
+    bool                             hasRasterImages(int pageId) const override;
+    bool                             allRasterImagesSuccess(int pageId) const override;
+    int                              resetFailedRasterImages(int pageId) override;
+    QList<PageRecord>                findPagesWithUnresolvedRasterImages(
+                                         const QString &typeId) const override;
 
     // Returns the number of generated pages (generated_at IS NOT NULL) whose
     // permalink is in expectedPermalinks.  Used by the GUI to cross-reference

@@ -7,6 +7,8 @@
 #include "website/pages/PageRecord.h"
 #include "website/pages/PermalinkHistoryEntry.h"
 #include "website/pages/attributes/CategoryTable.h"
+#include "website/pages/blocs/PageBlocFashionHubGrid.h" // KEY_DIMENSION / KEY_TAG_VALUE
+#include "website/pages/blocs/PageBlocFashionTaxonomyLinks.h" // dimensions() / slugify()
 #include "website/pages/blocs/PageBlocSymptomLinks.h"   // SymptomNav::slugify
 #include "website/sitemap/SitemapOrchestrator.h"
 #include "website/taxonomy/TaxonomyDb.h"
@@ -579,13 +581,14 @@ int PageGenerator::generateAll(const QDir     &workingDir,
             // tr:<lang>:_permalink_slug for every content page; without this mapping
             // resolveLinkHref() returns the English slug even when a translated slug
             // exists, causing internal links and hreflang alternates to point to the
-            // wrong (English) path.  Hub/index types are excluded because they derive
-            // their translated URL from category/symptom name translations above.
-            const bool isHubOrIndex =
-                r.typeId == QStringLiteral("category_hub")
-                || r.typeId == QStringLiteral("symptom_hub")
-                || r.typeId == QStringLiteral("taxonomy_index")
-                || r.typeId == QStringLiteral("symptom_index");
+            // wrong (English) path.  Auto-managed hub/index types are excluded
+            // because they derive their translated URL from category/symptom/
+            // taxonomy/fashion-tag name translations above instead — see
+            // AbstractPageType::isAutoManagedTypeId() for the single source of
+            // truth this now uses instead of a hardcoded list (which drifted out
+            // of sync with new auto-managed types more than once before being
+            // consolidated into the registry).
+            const bool isHubOrIndex = AbstractPageType::isAutoManagedTypeId(r.typeId);
             if (!isHubOrIndex && !r.langCodesToTranslate.isEmpty()) {
                 const QHash<QString, QString> &data = m_pageRepo.loadData(r.id);
                 for (const QString &lang : std::as_const(r.langCodesToTranslate)) {
@@ -699,6 +702,54 @@ int PageGenerator::generateAll(const QDir     &workingDir,
             if (!resolved.isEmpty() && resolved != record.permalink) {
                 outPathOverride = resolved;
             }
+        }
+        // Fashion tag hub pages: generate at translated URL when the tag has
+        // a translation that differs from its English value. Uses
+        // PageBlocFashionTaxonomyLinks::slugify() (not categoryHubSlug()) so
+        // the hub's URL always agrees with the slug PageBlocFashionTaxonomyLinks
+        // itself computes when it links to this hub from a tagged article.
+        if (record.typeId == QStringLiteral("fashion_tag_hub")) {
+            // PageBlocFashionHubGrid is bloc index 0 in PageTypeFashionTagHub,
+            // so its raw page_data keys are prefixed "0_" by AbstractPageType::save()
+            // — same convention as this function's "0_categories" above.
+            const QString &dimension = data.value(QStringLiteral("0_") + QLatin1String(PageBlocFashionHubGrid::KEY_DIMENSION));
+            const QString &tagValue  = data.value(QStringLiteral("0_") + QLatin1String(PageBlocFashionHubGrid::KEY_TAG_VALUE));
+            if (!dimension.isEmpty() && !tagValue.isEmpty()) {
+                const QString translatedName =
+                    TaxonomyDb(workingDir).translationFor(dimension, tagValue, currentLang);
+                if (translatedName != tagValue) {
+                    for (const auto &dim : PageBlocFashionTaxonomyLinks::dimensions()) {
+                        if (dim.taxonomyId != dimension) {
+                            continue;
+                        }
+                        const QString slug = PageBlocFashionTaxonomyLinks::slugify(translatedName);
+                        if (!slug.isEmpty()) {
+                            outPathOverride = dim.hubPrefix + slug;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Never publish a page whose raster (non-SVG) images are still
+        // unresolved (Pending) or permanently failed (FailedFinal) — a crash
+        // or CLI usage-limit pause during LauncherGeneration's per-image
+        // generate/review/retry loop must never result in a page going live
+        // with broken image references. The previously-published variant (if
+        // any) is left untouched in page_variants; this page is simply
+        // skipped until every raster image reaches Success.
+        //
+        // Checked against the SOURCE page id: a translation's [IMGFIX] refs
+        // reuse the source's fileName (see ShortCodeImageFix), so its image
+        // completeness is governed by the same page_raster_images rows.
+        const int rasterOwnerId = record.sourcePageId > 0 ? record.sourcePageId : record.id;
+        if (m_pageRepo.hasRasterImages(rasterOwnerId)
+                && !m_pageRepo.allRasterImagesSuccess(rasterOwnerId)) {
+            qWarning().noquote()
+                << QStringLiteral("Skipping page %1: raster images not all "
+                                  "successfully generated yet").arg(record.permalink);
+            continue;
         }
 
         if (_writePage(*type, record, connName, domain, engine, websiteIndex, outPathOverride)) {
@@ -859,6 +910,33 @@ int PageGenerator::generateSubset(const QList<int> &pageIds,
                     ++count;
                 }
                 continue;
+            }
+        }
+        // Fashion tag hub pages: same translated-slug rule as generateAll()'s
+        // outPathOverride branch above, kept in sync with it manually — see
+        // that branch's comment for why PageBlocFashionTaxonomyLinks::slugify()
+        // is used here rather than categoryHubSlug().
+        if (record.typeId == QStringLiteral("fashion_tag_hub")) {
+            // PageBlocFashionHubGrid is bloc index 0 in PageTypeFashionTagHub,
+            // so its raw page_data keys are prefixed "0_" by AbstractPageType::save()
+            // — same convention as this function's "0_categories" above.
+            const QString &dimension = data.value(QStringLiteral("0_") + QLatin1String(PageBlocFashionHubGrid::KEY_DIMENSION));
+            const QString &tagValue  = data.value(QStringLiteral("0_") + QLatin1String(PageBlocFashionHubGrid::KEY_TAG_VALUE));
+            if (!dimension.isEmpty() && !tagValue.isEmpty()) {
+                const QString translatedName =
+                    TaxonomyDb(workingDir).translationFor(dimension, tagValue, currentLang);
+                if (translatedName != tagValue) {
+                    for (const auto &dim : PageBlocFashionTaxonomyLinks::dimensions()) {
+                        if (dim.taxonomyId != dimension) {
+                            continue;
+                        }
+                        const QString slug = PageBlocFashionTaxonomyLinks::slugify(translatedName);
+                        if (!slug.isEmpty()) {
+                            effectiveRecord.permalink = dim.hubPrefix + slug;
+                        }
+                        break;
+                    }
+                }
             }
         }
 

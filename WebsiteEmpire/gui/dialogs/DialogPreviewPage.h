@@ -67,8 +67,9 @@ private:
     // from the SVG blobs in images.db.  Priority: lang code > website domain >
     // domain="" (source).  No-op if images.db does not exist.
     void _inlineSvgs(QString &html, const QString &domain, const QString &lang);
-    // Replaces <img src="/images/{domain}/{file}"> tags with base64 data URIs
-    // loaded from images.db.  Prefers website domain, then language code (for
+    // Replaces <img src="/{file}"> raster-image tags (bare root-relative path,
+    // same convention _inlineSvgs() uses for SVGs) with base64 data URIs loaded
+    // from images.db.  Prefers website domain, then language code (for
     // translated social WebP variants), then falls back to domain="".
     // No-op if images.db does not exist.
     void _inlineRasterImages(QString &html, const QString &domain, const QString &lang);

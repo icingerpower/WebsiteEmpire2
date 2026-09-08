@@ -264,7 +264,7 @@
                <item>
                 <widget class="QLabel" name="labelImageNotice">
                  <property name="text">
-                  <string>Image (PNG) generation is not yet implemented. It will require a compatible CLI such as Codex or Gemini.</string>
+                  <string>Raster image generation requires a compatible CLI (e.g. Codex or Antigravity). Leave instructions empty to skip raster image generation.</string>
                  </property>
                  <property name="wordWrap">
                   <bool>true</bool>
@@ -275,17 +275,52 @@
                 </widget>
                </item>
                <item>
-                <spacer name="verticalSpacerImage">
-                 <property name="orientation">
-                  <enum>Qt::Orientation::Vertical</enum>
-                 </property>
-                 <property name="sizeHint" stdset="0">
-                  <size>
-                   <width>20</width>
-                   <height>40</height>
-                  </size>
-                 </property>
-                </spacer>
+                <layout class="QHBoxLayout" name="horizontalLayoutImageCount">
+                 <item>
+                  <widget class="QLabel" name="labelImageCountMin">
+                   <property name="text">
+                    <string>Image count min</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QSpinBox" name="spinImageCountMin">
+                   <property name="maximum">
+                    <number>100</number>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLabel" name="labelImageCountMax">
+                   <property name="text">
+                    <string>max</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QSpinBox" name="spinImageCountMax">
+                   <property name="maximum">
+                    <number>100</number>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <spacer name="horizontalSpacerImageCount">
+                   <property name="orientation">
+                    <enum>Qt::Orientation::Horizontal</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>40</width>
+                     <height>20</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <widget class="QTextEdit" name="textEditImageInstructions"/>
                </item>
               </layout>
              </widget>

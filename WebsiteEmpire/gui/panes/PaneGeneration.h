@@ -3,6 +3,7 @@
 
 #include <QDir>
 #include <QModelIndex>
+#include <QSet>       // QSet<QString> parameter of _unresolvedRasterCount
 #include <QWidget>
 
 class AbstractEngine;
@@ -10,6 +11,7 @@ class AbstractCli;
 class AvailableCliList;
 class AvailableCliTable;
 class GenStrategyTable;
+class IPageRepository;
 class QProcess;
 class WebsiteSettingsTable;
 namespace Ui { class PaneGeneration; }
@@ -61,6 +63,9 @@ private slots:
     void _onStrategySelectionChanged(const QModelIndex &current, const QModelIndex &previous);
     void _onPromptEdited();
     void _onSvgEdited();
+    void _onImageInstructionsEdited();
+    void _onImageCountMinEdited(int value);
+    void _onImageCountMaxEdited(int value);
 
 private:
     void _connectSlots();
@@ -73,9 +78,10 @@ private:
     void _startProcess(QStringList args);
 
     /**
-     * Persists textEditPrompt and textEditSvgInstructions to the currently selected
-     * strategy row.  No-op when no strategy is selected or the pane has not been set
-     * up.  Called from the destructor, setVisible(false), and before switching rows.
+     * Persists textEditPrompt, textEditSvgInstructions, and textEditImageInstructions
+     * to the currently selected strategy row.  No-op when no strategy is selected or
+     * the pane has not been set up.  Called from the destructor, setVisible(false),
+     * and before switching rows.
      */
     void _saveCurrentPrompts();
 
@@ -86,6 +92,10 @@ private:
      */
     QString _resolvedDbPath(int row) const;
 
+    // Formats a millisecond duration as a human-readable string (e.g. "45 s",
+    // "3 min 12 s") for reporting how long a generation run took.
+    static QString _formatElapsed(qint64 ms);
+
     // Returns "https://domain" for the editing language, or "" if not resolvable.
     QString _primaryDomain(AbstractEngine *engine, WebsiteSettingsTable *settingsTable) const;
 
@@ -94,6 +104,22 @@ private:
 
     /** Returns the AbstractCli currently selected in comboBoxCli, or nullptr if none. */
     AbstractCli *_selectedCli() const;
+
+    /**
+     * Counts AI-generated pages of typeId that must NOT be reported as done
+     * because at least one of their raster images is still Pending or went
+     * FailedFinal — an article with a broken image is not a finished article,
+     * and such a page cannot publish (PageGenerator's gate rejects it) while
+     * the retry queue still has repair work to do on it.
+     *
+     * Only pages with a generatedAt stamp are counted, matching what the "done"
+     * figure includes, so the subtraction can never make the count negative.
+     * When expectedPermalinks is non-empty the page's permalink must also be in
+     * it, mirroring countGeneratedMatchingPermalinks()'s own filter.
+     */
+    static int _unresolvedRasterCount(const IPageRepository &pageRepo,
+                                      const QString         &typeId,
+                                      const QSet<QString>   &expectedPermalinks);
 
     Ui::PaneGeneration *ui;
     QDir                m_workingDir;
