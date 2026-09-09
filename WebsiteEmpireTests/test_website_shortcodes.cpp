@@ -213,11 +213,15 @@ private slots:
     void test_imgfix_add_code_height_absent_not_in_html();
     void test_imgfix_add_code_appends_to_existing_html();
     void test_imgfix_add_code_does_not_touch_css();
-    void test_imgfix_add_code_does_not_touch_js();
     void test_imgfix_add_code_via_for_tag();
     void test_imgfix_add_code_caption_in_figcaption();
     void test_imgfix_add_code_caption_wraps_in_figure();
     void test_imgfix_add_code_caption_absent_no_figure();
+    void test_imgfix_add_code_pin_description_uses_caption();
+    void test_imgfix_add_code_pin_description_falls_back_to_alt();
+    void test_imgfix_add_code_pin_description_escapes_ampersand();
+    void test_imgfix_add_code_appends_pinit_script_to_js();
+    void test_imgfix_add_code_pinit_script_emitted_once_per_page();
 
     // --- ShortCodeImageFix: error cases ---
     void test_imgfix_add_code_missing_id_throws();
@@ -250,9 +254,10 @@ private slots:
     void test_imgtr_add_code_width_absent_not_in_html();
     void test_imgtr_add_code_appends_to_existing_html();
     void test_imgtr_add_code_does_not_touch_css();
-    void test_imgtr_add_code_does_not_touch_js();
     void test_imgtr_add_code_via_for_tag();
     void test_imgtr_add_code_caption_in_figcaption();
+    void test_imgtr_add_code_pin_description_falls_back_to_alt();
+    void test_imgtr_add_code_appends_pinit_script_to_js();
 
     // --- ShortCodeImageTr: error cases ---
     void test_imgtr_add_code_missing_id_throws();
@@ -1188,18 +1193,6 @@ void Test_Website_ShortCodes::test_imgfix_add_code_does_not_touch_css()
     QVERIFY(cssDoneIds.isEmpty());
 }
 
-void Test_Website_ShortCodes::test_imgfix_add_code_does_not_touch_js()
-{
-    ShortCodeImageFix sc;
-    QString html, css;
-    QString js = QStringLiteral("existing-js");
-    QSet<QString> cssDoneIds, jsDoneIds;
-    sc.addCode(QStringLiteral("[IMGFIX id=\"i\" fileName=\"f.jpg\" alt=\"A\"][/IMGFIX]"),
-               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
-    QCOMPARE(js, QStringLiteral("existing-js"));
-    QVERIFY(jsDoneIds.isEmpty());
-}
-
 void Test_Website_ShortCodes::test_imgfix_add_code_via_for_tag()
 {
     const AbstractShortCode *sc = AbstractShortCode::forTag(u"IMGFIX");
@@ -1231,6 +1224,61 @@ void Test_Website_ShortCodes::test_imgfix_add_code_caption_wraps_in_figure()
     const QString html = htmlFrom(sc, input);
     QVERIFY(html.contains(QStringLiteral("<figure>")));
     QVERIFY(html.contains(QStringLiteral("</figure>")));
+}
+
+void Test_Website_ShortCodes::test_imgfix_add_code_pin_description_uses_caption()
+{
+    ShortCodeImageFix sc;
+    const QString input = QStringLiteral(
+        "[IMGFIX id=\"plan\" fileName=\"plan.svg\" alt=\"Plan\" "
+        "caption=\"Your 60-second action plan\"][/IMGFIX]");
+    const QString html = htmlFrom(sc, input);
+    QVERIFY(html.contains(QStringLiteral(
+        "data-pin-description=\"Your 60-second action plan\"")));
+}
+
+void Test_Website_ShortCodes::test_imgfix_add_code_pin_description_falls_back_to_alt()
+{
+    ShortCodeImageFix sc;
+    const QString input = QStringLiteral(
+        "[IMGFIX id=\"i\" fileName=\"f.jpg\" alt=\"A fallback alt\"][/IMGFIX]");
+    const QString html = htmlFrom(sc, input);
+    QVERIFY(html.contains(QStringLiteral(
+        "data-pin-description=\"A fallback alt\"")));
+}
+
+void Test_Website_ShortCodes::test_imgfix_add_code_pin_description_escapes_ampersand()
+{
+    ShortCodeImageFix sc;
+    const QString input = QStringLiteral(
+        "[IMGFIX id=\"i\" fileName=\"f.jpg\" alt=\"A\" "
+        "caption=\"Tom & Jerry\"][/IMGFIX]");
+    const QString html = htmlFrom(sc, input);
+    QVERIFY(html.contains(QStringLiteral(
+        "data-pin-description=\"Tom &amp; Jerry\"")));
+}
+
+void Test_Website_ShortCodes::test_imgfix_add_code_appends_pinit_script_to_js()
+{
+    ShortCodeImageFix sc;
+    QString html, css, js;
+    QSet<QString> cssDoneIds, jsDoneIds;
+    sc.addCode(QStringLiteral("[IMGFIX id=\"i\" fileName=\"f.jpg\" alt=\"A\"][/IMGFIX]"),
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    QVERIFY(js.contains(QStringLiteral("assets.pinterest.com/js/pinit.js")));
+    QVERIFY(jsDoneIds.contains(QStringLiteral("pinterest_pinit")));
+}
+
+void Test_Website_ShortCodes::test_imgfix_add_code_pinit_script_emitted_once_per_page()
+{
+    ShortCodeImageFix sc;
+    QString html, css, js;
+    QSet<QString> cssDoneIds, jsDoneIds;
+    sc.addCode(QStringLiteral("[IMGFIX id=\"a\" fileName=\"a.jpg\" alt=\"A\"][/IMGFIX]"),
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    sc.addCode(QStringLiteral("[IMGFIX id=\"b\" fileName=\"b.jpg\" alt=\"B\"][/IMGFIX]"),
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    QCOMPARE(js.count(QStringLiteral("assets.pinterest.com/js/pinit.js")), 1);
 }
 
 void Test_Website_ShortCodes::test_imgfix_add_code_caption_absent_no_figure()
@@ -1485,18 +1533,6 @@ void Test_Website_ShortCodes::test_imgtr_add_code_does_not_touch_css()
     QVERIFY(cssDoneIds.isEmpty());
 }
 
-void Test_Website_ShortCodes::test_imgtr_add_code_does_not_touch_js()
-{
-    ShortCodeImageTr sc;
-    QString html, css;
-    QString js = QStringLiteral("existing-js");
-    QSet<QString> cssDoneIds, jsDoneIds;
-    sc.addCode(QStringLiteral("[IMGTR id=\"i\" fileName=\"f.jpg\" alt=\"A\"][/IMGTR]"),
-               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
-    QCOMPARE(js, QStringLiteral("existing-js"));
-    QVERIFY(jsDoneIds.isEmpty());
-}
-
 void Test_Website_ShortCodes::test_imgtr_add_code_via_for_tag()
 {
     const AbstractShortCode *sc = AbstractShortCode::forTag(u"IMGTR");
@@ -1517,6 +1553,27 @@ void Test_Website_ShortCodes::test_imgtr_add_code_caption_in_figcaption()
     const QString html = htmlFrom(sc, input);
     QVERIFY(html.contains(QStringLiteral(
         "<figcaption>Votre plan d'action</figcaption>")));
+}
+
+void Test_Website_ShortCodes::test_imgtr_add_code_pin_description_falls_back_to_alt()
+{
+    ShortCodeImageTr sc;
+    const QString input = QStringLiteral(
+        "[IMGTR id=\"i\" fileName=\"f.jpg\" alt=\"Alt fr\"][/IMGTR]");
+    const QString html = htmlFrom(sc, input);
+    QVERIFY(html.contains(QStringLiteral(
+        "data-pin-description=\"Alt fr\"")));
+}
+
+void Test_Website_ShortCodes::test_imgtr_add_code_appends_pinit_script_to_js()
+{
+    ShortCodeImageTr sc;
+    QString html, css, js;
+    QSet<QString> cssDoneIds, jsDoneIds;
+    sc.addCode(QStringLiteral("[IMGTR id=\"i\" fileName=\"f.jpg\" alt=\"A\"][/IMGTR]"),
+               engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    QVERIFY(js.contains(QStringLiteral("assets.pinterest.com/js/pinit.js")));
+    QVERIFY(jsDoneIds.contains(QStringLiteral("pinterest_pinit")));
 }
 
 // =============================================================================

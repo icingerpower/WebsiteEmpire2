@@ -7,10 +7,15 @@
  * Shared base for image shortcodes ([IMGFIX] and [IMGTR]).
  *
  * Both produce:
- *   <img src="TODO.webp" alt="alt" [width="w"] [height="h"] />
+ *   <img src="TODO.webp" alt="alt" data-pin-description="..." [width="w"] [height="h"] />
  *
  * TODO: replace "TODO.webp" with the resolved image path once the image
  *       lookup class (retrieving the file name from the id argument) is available.
+ *
+ * Every image also carries a data-pin-description attribute (caption, falling
+ * back to alt) and addCode() emits Pinterest's pinit.js widget once per page
+ * (guarded by jsDoneIds) so every image on the page gets a hover "Save"
+ * button — see addCode() doc below.
  *
  * Shared arguments:
  *   id       (mandatory) — image identifier used by the future lookup class
@@ -55,7 +60,7 @@ public:
 
     /**
      * Parses origContent and appends:
-     *   <img src="/fileName" alt="alt" [width="w"] [height="h"] />
+     *   <img src="/fileName" alt="alt" data-pin-description="..." [width="w"] [height="h"] />
      * or, when the caption argument is present:
      *   <figure><img .../><figcaption>caption</figcaption></figure>
      *
@@ -63,7 +68,23 @@ public:
      * filename (e.g. "hero.webp") stored in image_names.filename.
      * Drogon's ImageController resolves it to the correct blob at serve time.
      * width and height attributes are omitted when the corresponding arguments
-     * are absent.  css, js, cssDoneIds and jsDoneIds are left unchanged.
+     * are absent.  css and cssDoneIds are left unchanged.
+     *
+     * data-pin-description is set from caption when present, otherwise from
+     * alt (always present — mandatory argument), HTML-escaped since it sits
+     * inside a quoted attribute. This lets Pinterest's widget (see below)
+     * pre-fill a sensible description when a visitor pins the image.
+     *
+     * Also appends (once per page, guarded by jsDoneIds key "pinterest_pinit")
+     * inline JS that injects Pinterest's pinit.js widget script. That widget
+     * scans the page for images and adds a hover "Save" button automatically
+     * — no page URL/description needs to be threaded through addCode()'s
+     * scope, Pinterest's script reads document.location itself. The script
+     * tag itself cannot be appended directly to `js`: callers wrap the whole
+     * `js` accumulator in one page-level <script>...</script> block (see
+     * AbstractPageType::generate()), and a literal "</script>" substring
+     * inside that text would prematurely close it — so the widget is loaded
+     * via a dynamically created <script> DOM element instead.
      */
     void addCode(QStringView     origContent,
                  AbstractEngine &engine,

@@ -66,6 +66,8 @@ void AbstractShortCodeImage::addCode(QStringView     origContent,
     html += normalizedFileName(fileName);
     html += QStringLiteral("\" alt=\"");
     html += alt;
+    html += QStringLiteral("\" data-pin-description=\"");
+    html += (hasCaption ? caption : alt).toHtmlEscaped();
     html += QStringLiteral("\"");
     if (!width.isEmpty()) {
         html += QStringLiteral(" width=\"");
@@ -84,12 +86,28 @@ void AbstractShortCodeImage::addCode(QStringView     origContent,
         html += caption;
         html += QStringLiteral("</figcaption></figure>");
     }
+
+    // Pinterest "Save" hover-button widget — loaded once per page no matter
+    // how many images use this shortcode. Injected via a dynamically created
+    // <script> element rather than appending a literal <script> tag to `js`,
+    // because callers inline the whole `js` accumulator into one page-level
+    // <script>...</script> block; a literal "</script>" substring in there
+    // would close that block early.
+    if (!jsDoneIds.contains(QStringLiteral("pinterest_pinit"))) {
+        jsDoneIds.insert(QStringLiteral("pinterest_pinit"));
+        js += QStringLiteral(
+            "(function(){"
+                "var s=document.createElement('script');"
+                "s.async=true;s.defer=true;"
+                "s.src='https://assets.pinterest.com/js/pinit.js';"
+                "document.body.appendChild(s);"
+            "})();");
+    }
+
     Q_UNUSED(engine)
     Q_UNUSED(websiteIndex)
     Q_UNUSED(css)
-    Q_UNUSED(js)
     Q_UNUSED(cssDoneIds)
-    Q_UNUSED(jsDoneIds)
 }
 
 QString AbstractShortCodeImage::getTextBegin(const QDialog *dialog) const
