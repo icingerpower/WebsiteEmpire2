@@ -14,6 +14,7 @@
 #include "website/pages/FashionHubDirtySet.h"
 #include "website/pages/FashionTaxonomyHubSyncer.h"
 #include "website/pages/SymptomHubSyncer.h"
+#include "website/VerticalSyncPolicy.h"
 #include "website/pages/PageDb.h"
 #include "website/pages/PageGenerator.h"
 #include "website/pages/PageRepositoryDb.h"
@@ -774,12 +775,20 @@ void PaneDomains::deployLocally()
         CategoryHubSyncer   hubSyncer(pageRepo, categoryTable, hubDirtySet, generator);
         hubSyncer.syncStubs(m_engine->getLangCode(0));
         hubSyncer.markStaleByStats(m_workingDir);
-        FashionHubDirtySet       fashionHubDirtySet(m_workingDir);
-        FashionTaxonomyHubSyncer fashionHubSyncer(pageRepo, m_workingDir, fashionHubDirtySet, generator);
-        fashionHubSyncer.syncStubs(m_engine->getLangCode(0));
-        fashionHubSyncer.markStaleByStats(m_workingDir);
-        SymptomHubSyncer    symptomSyncer(pageRepo);
-        symptomSyncer.syncStubs(m_workingDir, m_engine->getLangCode(0));
+        // Vertical-specific syncers must be gated on the engine's generator id,
+        // exactly as LauncherPublish does — a local deploy that ran both would
+        // grow the other vertical's hub pages (see VerticalSyncPolicy).
+        const QString generatorId = m_engine->getGeneratorId();
+        if (VerticalSyncPolicy::needsFashionHubSync(generatorId)) {
+            FashionHubDirtySet       fashionHubDirtySet(m_workingDir);
+            FashionTaxonomyHubSyncer fashionHubSyncer(pageRepo, m_workingDir, fashionHubDirtySet, generator);
+            fashionHubSyncer.syncStubs(m_engine->getLangCode(0));
+            fashionHubSyncer.markStaleByStats(m_workingDir);
+        }
+        if (VerticalSyncPolicy::needsSymptomHubSync(generatorId)) {
+            SymptomHubSyncer symptomSyncer(pageRepo);
+            symptomSyncer.syncStubs(m_workingDir, m_engine->getLangCode(0));
+        }
 
         // ── Locate StaticWebsiteServe binary ─────────────────────────────────
         const QString appDir = QCoreApplication::applicationDirPath();

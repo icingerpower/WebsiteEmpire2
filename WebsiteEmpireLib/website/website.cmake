@@ -21,6 +21,8 @@ set(WEBSITE_FILES
     ${CMAKE_CURRENT_LIST_DIR}/EngineLanguages.cpp
     ${CMAKE_CURRENT_LIST_DIR}/EngineArticles.h
     ${CMAKE_CURRENT_LIST_DIR}/EngineArticles.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/VerticalSyncPolicy.h
+    ${CMAKE_CURRENT_LIST_DIR}/VerticalSyncPolicy.cpp
     ${CMAKE_CURRENT_LIST_DIR}/EngineArticlesFashion.h
     ${CMAKE_CURRENT_LIST_DIR}/EngineArticlesFashion.cpp
     ${CMAKE_CURRENT_LIST_DIR}/WebsiteSettingsTable.h

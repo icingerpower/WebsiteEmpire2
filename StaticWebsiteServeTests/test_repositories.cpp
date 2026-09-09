@@ -112,6 +112,123 @@ DROGON_TEST(test_pagerepository_findbypath_returns_nullopt_for_wrong_path)
 }
 
 // ---------------------------------------------------------------------------
+// PageRepositorySQLite — findByPath language-prefix fallback
+//
+// Reproduces the "every link 404s locally" bug. PageGenerator writes page
+// paths WITHOUT a language prefix ("/categories") but, since 7f10476, renders
+// link hrefs WITH one ("/es/categories") so they survive the nginx /es/ proxy
+// in production. nginx strips that prefix before proxying, so the server only
+// ever sees "/categories" there — but a local deploy has no nginx, so every
+// link on every non-primary-language page is a dead end. The repository now
+// emulates the proxy: strip a leading "/<lang>" when it matches the content's
+// own language.
+// ---------------------------------------------------------------------------
+
+DROGON_TEST(test_pagerepository_findbypath_strips_matching_lang_prefix)
+{
+    const std::string path = std::filesystem::temp_directory_path() / "test_pr_langprefix.db";
+    std::filesystem::remove(path);
+
+    ContentDb db(path);
+    const int64_t id = insertPage(db.database(), "/categories", "biomarky.com", "es",
+                                   "etag1", "2026-01-01");
+
+    PageRepositorySQLite repo(db);
+    const auto result = repo.findByPath("/es/categories");
+
+    REQUIRE(result.has_value());
+    CHECK(result->id   == id);
+    CHECK(result->path == "/categories");
+
+    std::filesystem::remove(path);
+}
+
+DROGON_TEST(test_pagerepository_findbypath_strips_lang_prefix_for_bare_root)
+{
+    // "/es" and "/es/" must both reach the language's root document.
+    const std::string path = std::filesystem::temp_directory_path() / "test_pr_langroot.db";
+    std::filesystem::remove(path);
+
+    ContentDb db(path);
+    insertPage(db.database(), "/index.html", "biomarky.com", "pt", "e", "2026-01-01");
+    const int64_t rootId = insertPage(db.database(), "/", "biomarky.com", "pt",
+                                       "e2", "2026-01-01");
+
+    PageRepositorySQLite repo(db);
+    const auto withSlash = repo.findByPath("/pt/");
+    const auto bare      = repo.findByPath("/pt");
+
+    REQUIRE(withSlash.has_value());
+    CHECK(withSlash->id == rootId);
+    REQUIRE(bare.has_value());
+    CHECK(bare->id == rootId);
+
+    std::filesystem::remove(path);
+}
+
+DROGON_TEST(test_pagerepository_findbypath_prefers_exact_match_over_stripping)
+{
+    // A real page whose own path begins with the language code must win over
+    // the stripped interpretation — stripping is only ever a fallback.
+    const std::string path = std::filesystem::temp_directory_path() / "test_pr_langexact.db";
+    std::filesystem::remove(path);
+
+    ContentDb db(path);
+    const int64_t stripped = insertPage(db.database(), "/guide", "biomarky.com", "es",
+                                         "e1", "2026-01-01");
+    const int64_t exact    = insertPage(db.database(), "/es/guide", "biomarky.com", "es",
+                                         "e2", "2026-01-01");
+
+    PageRepositorySQLite repo(db);
+    const auto result = repo.findByPath("/es/guide");
+
+    REQUIRE(result.has_value());
+    CHECK(result->id == exact);
+    CHECK(result->id != stripped);
+
+    std::filesystem::remove(path);
+}
+
+DROGON_TEST(test_pagerepository_findbypath_ignores_non_matching_lang_prefix)
+{
+    // Content is Spanish; a "/fr/" request is somebody else's language and must
+    // stay a 404 rather than silently serving the Spanish page.
+    const std::string path = std::filesystem::temp_directory_path() / "test_pr_langother.db";
+    std::filesystem::remove(path);
+
+    ContentDb db(path);
+    insertPage(db.database(), "/categories", "biomarky.com", "es", "e", "2026-01-01");
+
+    PageRepositorySQLite repo(db);
+    CHECK(!repo.findByPath("/fr/categories").has_value());
+
+    std::filesystem::remove(path);
+}
+
+DROGON_TEST(test_pagerepository_findbypath_lang_prefix_ignores_placeholder_lang)
+{
+    // PageGenerator writes a handful of shared rows with lang "_" (4 of 1258 in
+    // the real biomarky.com es deploy). The served language must be taken from
+    // the real content rows, never from that placeholder, or the fallback would
+    // key off "_" and never fire.
+    const std::string path = std::filesystem::temp_directory_path() / "test_pr_langplaceholder.db";
+    std::filesystem::remove(path);
+
+    ContentDb db(path);
+    insertPage(db.database(), "/robots.txt", "biomarky.com", "_", "e0", "2026-01-01");
+    const int64_t id = insertPage(db.database(), "/symptoms", "biomarky.com", "es",
+                                   "e1", "2026-01-01");
+
+    PageRepositorySQLite repo(db);
+    const auto result = repo.findByPath("/es/symptoms");
+
+    REQUIRE(result.has_value());
+    CHECK(result->id == id);
+
+    std::filesystem::remove(path);
+}
+
+// ---------------------------------------------------------------------------
 // PageRepositorySQLite — findVariant
 // ---------------------------------------------------------------------------
 

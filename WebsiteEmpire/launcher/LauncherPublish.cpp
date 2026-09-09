@@ -8,6 +8,7 @@
 #include "website/pages/CategoryHubSyncer.h"
 #include "website/pages/FashionHubDirtySet.h"
 #include "website/pages/FashionTaxonomyHubSyncer.h"
+#include "website/VerticalSyncPolicy.h"
 #include "website/pages/SymptomHubSyncer.h"
 #include "website/pages/TaxonomyIndexSyncer.h"
 #include "website/pages/PageGenerationState.h"
@@ -182,7 +183,7 @@ void LauncherPublish::run(const QString & /*value*/)
     // page, and a Health site must never run the Fashion tag hub sync.
     const QString generatorId = engine->getGeneratorId();
 
-    if (generatorId == QStringLiteral("fashion_taxonomy")) {
+    if (VerticalSyncPolicy::needsFashionHubSync(generatorId)) {
         out << QStringLiteral("Syncing fashion tag hub stubs...\n");
         out.flush();
         FashionHubDirtySet      fashionHubDirtySet(workingDir);
@@ -191,7 +192,7 @@ void LauncherPublish::run(const QString & /*value*/)
         fashionHubSyncer.markStaleByStats(workingDir);
     }
 
-    if (generatorId == QStringLiteral("health")) {
+    if (VerticalSyncPolicy::needsSymptomHubSync(generatorId)) {
         out << QStringLiteral("Syncing symptom hub stubs...\n");
         out.flush();
         SymptomHubSyncer symptomSyncer(pageRepo);
@@ -203,7 +204,7 @@ void LauncherPublish::run(const QString & /*value*/)
     TaxonomyIndexSyncer taxonomySyncer(pageRepo);
     taxonomySyncer.syncStubs(engine->getLangCode(0));
 
-    if (generatorId == QStringLiteral("health")) {
+    if (VerticalSyncPolicy::needsSymptomHubSync(generatorId)) {
         out << QStringLiteral("Syncing symptom index stub...\n");
         out.flush();
         const QList<PageRecord> all = pageRepo.findAll();

@@ -78,6 +78,7 @@ add_empire_test(Test_Website_TaxonomyTranslationFilter        test_taxonomy_tran
 add_empire_test(Test_Website_PageTypeArticleFashion            test_page_type_article_fashion.cpp)
 add_empire_test(Test_Website_EngineArticlesFashion             test_engine_articles_fashion.cpp)
 add_empire_test(Test_Website_RasterImageTracking              test_raster_image_tracking.cpp)
+add_empire_test(Test_Website_VerticalSyncPolicy                 test_vertical_sync_policy.cpp)
 
 # LauncherTranslate modes test compiles launcher code directly (no app binary needed).
 add_executable(Test_Website_LauncherTranslate_Modes
