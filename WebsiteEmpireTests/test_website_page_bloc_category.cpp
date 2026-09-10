@@ -367,7 +367,11 @@ void Test_Website_PageBlocCategory::test_pagebloccategory_translated_name_uses_e
 
     // Register /health.html as an available page for the "fr" language.
     QHash<QString, QSet<QString>> availablePages;
-    availablePages[QStringLiteral("fr")].insert(QStringLiteral("/health.html"));
+    // "/health", not "/health.html": e750fdf (2026-06-28) removed the .html
+    // suffix from category URLs. This registration and the assertion below were
+    // never updated, so the bloc correctly found the page unavailable and fell
+    // back to unlinked text.
+    availablePages[QStringLiteral("fr")].insert(QStringLiteral("/health"));
     engine.setAvailablePages(availablePages);
 
     // Set up a category "Health" with the French translation "Santé".
@@ -379,14 +383,30 @@ void Test_Website_PageBlocCategory::test_pagebloccategory_translated_name_uses_e
     PageBlocCategory bloc(categoryTable);
     bloc.load({{QLatin1String(PageBlocCategory::KEY_CATEGORIES), QString::number(id)}});
 
-    // Generate HTML for websiteIndex 0 (French).
+    // Resolve the French row instead of assuming index 0: engine.init() creates
+    // one row per supported language ordered by speaker count, so row 0 is "zh".
+    // Generating for index 0 looked up availablePages["zh"], found nothing, and
+    // the bloc correctly fell back to unlinked text — the test, not the bloc,
+    // was wrong.
+    int frIndex = -1;
+    for (int i = 0; i < engine.rowCount(); ++i) {
+        if (engine.getLangCode(i) == QStringLiteral("fr")) {
+            frIndex = i;
+            break;
+        }
+    }
+    QVERIFY2(frIndex >= 0, "No French engine row found");
+
     QString html, css, js;
     QSet<QString> cssDoneIds, jsDoneIds;
-    bloc.addCode(QStringView{}, engine, 0, html, css, js, cssDoneIds, jsDoneIds);
+    bloc.addCode(QStringView{}, engine, frIndex, html, css, js, cssDoneIds, jsDoneIds);
 
-    // The breadcrumb must contain the English-derived permalink "health.html".
-    QVERIFY2(html.contains(QStringLiteral("health.html")),
-             qPrintable(QStringLiteral("Expected 'health.html' in html, got: ") + html));
+    // The breadcrumb must link via the English-derived permalink "health",
+    // even though the visible text is the French translation.
+    QVERIFY2(html.contains(QStringLiteral("href=\"health\"")),
+             qPrintable(QStringLiteral("Expected href=\"health\" in html, got: ") + html));
+    QVERIFY2(html.contains(QStringLiteral("Sant")),
+             qPrintable(QStringLiteral("Expected the French link text, got: ") + html));
 
     // The French-derived slug "sant" must NOT appear as part of an href.
     // (The visible link text "Santé" is fine, but the href must be English-based.)

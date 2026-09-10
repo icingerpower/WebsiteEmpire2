@@ -108,11 +108,20 @@ private:
      * Kills any StaticWebsiteServe process whose working directory is
      * deployPath, then starts a fresh instance of binaryPath from deployPath
      * listening on port.
+     *
+     * pathPrefix is forwarded as --path-prefix and MUST be set to the language
+     * code for every non-primary language. Generated pages link to
+     * "/<lang>/some-page" (production serves all languages from one domain and
+     * nginx strips the prefix before proxying) while content.db stores paths
+     * bare, so a local instance launched without it 404s on every internal
+     * link — the site loads but nothing is clickable. Empty = production
+     * behaviour, correct only for the language served at the domain root.
      */
     void _restartLocalDrogon(const QString &deployPath,
                               const QString &binaryPath,
                               int            port = 8080,
-                              const QString &imagesDbPath = {});
+                              const QString &imagesDbPath = {},
+                              const QString &pathPrefix = {});
 
     /**
      * Runs rsync via sshpass to transfer a single file. src and dst may each be

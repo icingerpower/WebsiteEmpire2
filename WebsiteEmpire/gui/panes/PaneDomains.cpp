@@ -884,7 +884,11 @@ void PaneDomains::deployLocally()
             const int langPages = generator.generateAll(m_workingDir, ddir, t.domain, *m_engine, t.engineIndex, sitemapBase);
             totalPages += langPages;
 
-            _restartLocalDrogon(destDir, binaryPath, t.port, sharedImages);
+            // The root language is served without a prefix; every other language's
+            // pages link to "/<lang>/…", so its instance must strip that prefix
+            // exactly as nginx does in production.
+            const QString servedPrefix = (t.lang == primaryLang) ? QString{} : t.lang;
+            _restartLocalDrogon(destDir, binaryPath, t.port, sharedImages, servedPrefix);
 
             if (langPages > 0) {
                 urls.append(QStringLiteral("http://localhost:%1/index.html  [%2]")
@@ -1212,7 +1216,8 @@ bool PaneDomains::_deployNeeded() const
 void PaneDomains::_restartLocalDrogon(const QString &deployPath,
                                        const QString &binaryPath,
                                        int            port,
-                                       const QString &imagesDbPath)
+                                       const QString &imagesDbPath,
+                                       const QString &pathPrefix)
 {
     // Kill any StaticWebsiteServe process whose cwd is exactly deployPath.
     // Use pgrep -f (match full command line) because the 18-char name exceeds
@@ -1233,6 +1238,11 @@ void PaneDomains::_restartLocalDrogon(const QString &deployPath,
     QStringList args = {QStringLiteral("--port"), QString::number(port)};
     if (!imagesDbPath.isEmpty()) {
         args << QStringLiteral("--images-db") << imagesDbPath;
+    }
+    // Without this, every "/<lang>/…" link a generated page contains is a 404
+    // locally — see the doc comment on this function.
+    if (!pathPrefix.isEmpty()) {
+        args << QStringLiteral("--path-prefix") << pathPrefix;
     }
     QProcess::startDetached(binaryPath, args, deployPath);
 }

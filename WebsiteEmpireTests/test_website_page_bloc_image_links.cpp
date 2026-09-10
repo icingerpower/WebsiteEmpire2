@@ -1,9 +1,11 @@
 #include <QtTest>
 #include <QCryptographicHash>
+#include <QTemporaryDir>
 
 #include "website/pages/blocs/widgets/AbstractPageBlockWidget.h"
 #include "website/pages/blocs/PageBlocImageLinks.h"
 #include "website/EngineArticles.h"
+#include "website/HostTable.h"
 
 // =============================================================================
 // Helpers
@@ -959,8 +961,27 @@ void Test_Website_PageBlocImageLinks::test_imagelinks_alt_text_falls_back_to_eng
 
 void Test_Website_PageBlocImageLinks::test_imagelinks_translated_alt_text_used_when_stored()
 {
-    // Build a hash with the English source AND a pre-stored alt translation.
-    // The engine always uses websiteIndex=0 (lang "en") so we store the "en" translation.
+    // Needs its own INITIALISED engine, unlike the other tests in this file.
+    // The shared `engine` above is never init()ed, so it has no rows and
+    // getLangCode(0) is empty — the bloc then looks up "tr::item_0_alt" and no
+    // translation under any real language code can ever match. The old comment
+    // claimed "websiteIndex=0 (lang \"en\")", which was never true: init()
+    // orders rows by speaker count and appends the editing language, so row 0
+    // is "zh" and English is last.
+    QTemporaryDir  dir;
+    HostTable      hostTable(QDir(dir.path()));
+    EngineArticles localEngine;
+    localEngine.init(QDir(dir.path()), hostTable);
+
+    int frIndex = -1;
+    for (int i = 0; i < localEngine.rowCount(); ++i) {
+        if (localEngine.getLangCode(i) == QStringLiteral("fr")) {
+            frIndex = i;
+            break;
+        }
+    }
+    QVERIFY2(frIndex >= 0, "No French engine row found");
+
     // BlocTranslations map key format: "tr:<lang>:<fieldId>" / "tr:<lang>:<fieldId>:hash"
     QHash<QString, QString> h = oneItemHash(
         QStringLiteral("https://example.com/img.jpg"),
@@ -968,17 +989,23 @@ void Test_Website_PageBlocImageLinks::test_imagelinks_translated_alt_text_used_w
         QStringLiteral("https://example.com"),
         QStringLiteral("English alt"));
     h.insert(QStringLiteral("item_0_label"), QStringLiteral("Label"));
-    h.insert(QStringLiteral("tr:en:item_0_alt"),
+    h.insert(QStringLiteral("tr:fr:item_0_alt"),
              QStringLiteral("Translated alt"));
-    h.insert(QStringLiteral("tr:en:item_0_alt:hash"),
+    h.insert(QStringLiteral("tr:fr:item_0_alt:hash"),
              QString::fromLatin1(QCryptographicHash::hash(
                  QByteArrayLiteral("English alt"),
                  QCryptographicHash::Sha1).toHex()));
 
     PageBlocImageLinks bloc;
-    const auto &html = htmlFrom(bloc, h);
-    QVERIFY(html.contains(QStringLiteral("Translated alt")));    // 98
-    QVERIFY(!html.contains(QStringLiteral("English alt")));      // 99
+    bloc.load(h);
+    QString html, css, js;
+    QSet<QString> cssDoneIds, jsDoneIds;
+    bloc.addCode(QStringView{}, localEngine, frIndex, html, css, js, cssDoneIds, jsDoneIds);
+
+    QVERIFY2(html.contains(QStringLiteral("Translated alt")),
+             qPrintable(QStringLiteral("Expected the stored translation, got: ") + html));
+    QVERIFY2(!html.contains(QStringLiteral("English alt")),
+             qPrintable(QStringLiteral("English source must not survive, got: ") + html));
 }
 
 void Test_Website_PageBlocImageLinks::test_imagelinks_collect_translatables_includes_alt_fields()

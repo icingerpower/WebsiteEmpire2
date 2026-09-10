@@ -8,24 +8,14 @@
 /**
  * IPageRepository backed by a content.db SQLite file.
  *
- * findByPath() resolves a request path in two steps: an exact match first,
- * then — only on a miss — a retry with a leading "/<lang>" segment removed,
- * where <lang> is the language this content.db actually serves.
+ * findByPath() matches the stored path exactly, then falls back to resolving a
+ * directory-style request ("/", "/es/") to its index document.
  *
- * Why that fallback exists: PageGenerator writes page paths WITHOUT a language
- * prefix ("/categories"), but since 7f10476 it renders link hrefs WITH one
- * ("/es/categories") so the links survive the nginx path-prefix proxy used for
- * non-primary languages in production. nginx strips "/es" before proxying, so
- * in production the server only ever sees the unprefixed path and the two
- * agree. A local deploy has no nginx, so every link on every non-primary
- * language page pointed at a path that did not exist — the site was reachable
- * but unbrowsable. Stripping here makes the server behave the same with or
- * without a proxy in front, so local browsing matches production exactly
- * rather than approximating it.
- *
- * The exact match is always preferred, so a real page whose own path genuinely
- * begins with the language code (e.g. "/es/guide") still wins over the
- * stripped interpretation.
+ * Language prefixes are deliberately NOT handled here: stripping them is
+ * PageController::setPathPrefix()'s job, driven by the server's --path-prefix
+ * option, because only the caller knows which language this instance serves.
+ * Inferring it from the content would be a guess, and having two layers strip
+ * prefixes would make the behaviour impossible to reason about.
  */
 class PageRepositorySQLite : public IPageRepository
 {
@@ -41,17 +31,16 @@ private:
     std::optional<PageRecord> _selectByPath(const std::string &path) const;
 
     /**
-     * The language this content.db serves: the most common lang among its page
-     * rows, ignoring the "_" placeholder PageGenerator uses for a handful of
-     * shared rows (robots.txt and friends). Resolved once on first use and
-     * cached — a content.db is immutable for the lifetime of a served process.
+     * Resolves a directory-style request ("/", "/es/") to its index document by
+     * appending "index.html". Returns nullopt for any path not ending in '/'.
      *
-     * Returns an empty string for an empty database, which disables the
-     * prefix fallback entirely rather than guessing.
+     * PageGenerator writes the home page as "/index.html" and never as "/", so
+     * a request for a language root ("/es/", which PageController reduces to
+     * "/" once it strips the prefix) had nothing to match. nginx serves the
+     * index document itself in production, which is why only local deploys were
+     * affected.
      */
-    const std::string &_servedLang() const;
+    std::optional<PageRecord> _selectDirectoryIndex(const std::string &path) const;
 
-    ContentDb          &m_db;
-    mutable bool        m_servedLangResolved = false;
-    mutable std::string m_servedLang;
+    ContentDb &m_db;
 };

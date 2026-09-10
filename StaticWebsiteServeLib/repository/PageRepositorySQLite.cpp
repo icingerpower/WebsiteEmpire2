@@ -1,57 +1,9 @@
 #include "PageRepositorySQLite.h"
 
-namespace {
-
-/**
- * Removes a leading "/<lang>" segment from path when it is exactly that
- * segment, mirroring what the nginx path-prefix proxy does in production:
- *   ("/es/categories", "es") → "/categories"
- *   ("/es/",           "es") → "/"
- *   ("/es",            "es") → "/"
- *   ("/espanol",       "es") → "/espanol"   (segment boundary respected)
- *   ("/fr/categories", "es") → "/fr/categories"
- * Returns path unchanged when lang is empty or does not match.
- */
-std::string stripLangPrefix(const std::string &path, const std::string &lang)
-{
-    if (lang.empty()) {
-        return path;
-    }
-    const std::string prefix = "/" + lang;
-    if (path == prefix || path == prefix + "/") {
-        return "/";
-    }
-    // The trailing '/' check is what keeps "/espanol" from matching lang "es".
-    if (path.size() > prefix.size()
-        && path.compare(0, prefix.size(), prefix) == 0
-        && path[prefix.size()] == '/') {
-        return path.substr(prefix.size());
-    }
-    return path;
-}
-
-} // namespace
 
 PageRepositorySQLite::PageRepositorySQLite(ContentDb &db)
     : m_db(db)
 {
-}
-
-const std::string &PageRepositorySQLite::_servedLang() const
-{
-    if (m_servedLangResolved) {
-        return m_servedLang;
-    }
-    m_servedLangResolved = true;
-    // Ignore the "_" placeholder and empty langs: keying the fallback off "_"
-    // would mean it never fires for the real content.
-    SQLite::Statement q(m_db.database(),
-        "SELECT lang FROM pages WHERE lang != '_' AND lang != ''"
-        " GROUP BY lang ORDER BY COUNT(*) DESC LIMIT 1");
-    if (q.executeStep()) {
-        m_servedLang = q.getColumn(0).getString();
-    }
-    return m_servedLang;
 }
 
 std::optional<PageRecord> PageRepositorySQLite::findByPath(const std::string &path) const
@@ -59,13 +11,20 @@ std::optional<PageRecord> PageRepositorySQLite::findByPath(const std::string &pa
     if (auto exact = _selectByPath(path)) {
         return exact;
     }
-    // Only now consider the request a proxy-style prefixed path — an existing
-    // page always wins over the stripped interpretation.
-    const std::string stripped = stripLangPrefix(path, _servedLang());
-    if (stripped == path) {
+    return _selectDirectoryIndex(path);
+}
+
+std::optional<PageRecord> PageRepositorySQLite::_selectDirectoryIndex(
+    const std::string &path) const
+{
+    // PageGenerator writes the home page as "/index.html" and never as "/", so
+    // the bare host and any "/<lang>/" root 404'd without this. nginx supplies
+    // the index document in production, which is why only local deploys were
+    // affected; resolving it here makes the two behave the same.
+    if (path.empty() || path.back() != '/') {
         return std::nullopt;
     }
-    return _selectByPath(stripped);
+    return _selectByPath(path + "index.html");
 }
 
 std::optional<PageRecord> PageRepositorySQLite::_selectByPath(const std::string &path) const

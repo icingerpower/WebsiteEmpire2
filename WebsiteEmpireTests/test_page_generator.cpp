@@ -60,10 +60,26 @@ struct Fixture {
         , repo(db)
         , gen(repo, categoryTable)
     {
-        // Initialize so getLangCode(0) returns "en" — without this,
-        // generateAll's setAvailablePages/isPageAvailable check skips every page.
         engine.init(QDir(dir.path()), hostTable);
+
+        // Resolve the English row rather than assuming index 0. init() creates
+        // one row per supported language ordered by speaker count and APPENDS
+        // the editing language, so getLangCode(0) is "zh" and English is last
+        // (row 40 of 41). Tests that passed a hardcoded 0 were generating for
+        // Chinese: generateAll() keys availablePages by the page's own lang
+        // ("en") but isPageAvailable() looks it up under getLangCode(index)
+        // ("zh"), so every page was silently skipped and generateAll returned
+        // 0. That is what made 15 tests in this file fail.
+        for (int i = 0; i < engine.rowCount(); ++i) {
+            if (engine.getLangCode(i) == QStringLiteral("en")) {
+                enIndex = i;
+                break;
+            }
+        }
     }
+
+    // Engine row index of the English (source) language — see the constructor.
+    int enIndex = -1;
 
     // Creates an article page with the given text and returns its id.
     int addArticle(const QString &permalink, const QString &text)
@@ -314,20 +330,20 @@ void Test_PageGenerator::test_pagegen_generate_returns_correct_count()
     Fixture f;
     f.addArticle(QStringLiteral("/p1.html"), QStringLiteral("first"));
     f.addArticle(QStringLiteral("/p2.html"), QStringLiteral("second"));
-    QCOMPARE(f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0), 2);
+    QCOMPARE(f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex), 2);
 }
 
 void Test_PageGenerator::test_pagegen_generate_zero_pages_returns_zero()
 {
     Fixture f;
-    QCOMPARE(f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0), 0);
+    QCOMPARE(f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex), 0);
 }
 
 void Test_PageGenerator::test_pagegen_generate_creates_page_row_in_content_db()
 {
     Fixture f;
     f.addArticle(QStringLiteral("/p.html"), QStringLiteral("text"));
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
@@ -341,7 +357,7 @@ void Test_PageGenerator::test_pagegen_generate_stores_correct_permalink()
 {
     Fixture f;
     f.addArticle(QStringLiteral("/my-article.html"), QStringLiteral("text"));
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
@@ -355,7 +371,7 @@ void Test_PageGenerator::test_pagegen_generate_stores_correct_domain()
 {
     Fixture f;
     f.addArticle(QStringLiteral("/p.html"), QStringLiteral("text"));
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("mysite.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("mysite.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
@@ -369,7 +385,7 @@ void Test_PageGenerator::test_pagegen_generate_stores_correct_lang()
 {
     Fixture f;
     f.addArticle(QStringLiteral("/p.html"), QStringLiteral("text"));
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
@@ -383,7 +399,7 @@ void Test_PageGenerator::test_pagegen_generate_creates_variant_row()
 {
     Fixture f;
     f.addArticle(QStringLiteral("/p.html"), QStringLiteral("text"));
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
@@ -400,7 +416,7 @@ void Test_PageGenerator::test_pagegen_generate_html_gz_is_non_empty()
 {
     Fixture f;
     f.addArticle(QStringLiteral("/p.html"), QStringLiteral("text"));
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
@@ -417,7 +433,7 @@ void Test_PageGenerator::test_pagegen_generate_etag_matches_compressed_html()
 {
     Fixture f;
     f.addArticle(QStringLiteral("/p.html"), QStringLiteral("text"));
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
@@ -436,7 +452,7 @@ void Test_PageGenerator::test_pagegen_generate_variant_is_active()
 {
     Fixture f;
     f.addArticle(QStringLiteral("/p.html"), QStringLiteral("text"));
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
@@ -453,7 +469,7 @@ void Test_PageGenerator::test_pagegen_generate_variant_label_is_control()
 {
     Fixture f;
     f.addArticle(QStringLiteral("/p.html"), QStringLiteral("text"));
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
@@ -473,7 +489,7 @@ void Test_PageGenerator::test_pagegen_generate_html_contains_text_content()
     // verify indirectly: the etag changes if we generate a different text.
     Fixture f;
     f.addArticle(QStringLiteral("/p.html"), QStringLiteral("unique-marker-xyz"));
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     Fixture f2;
     f2.addArticle(QStringLiteral("/p.html"), QStringLiteral("different-content-abc"));
@@ -503,7 +519,7 @@ void Test_PageGenerator::test_pagegen_generate_redirect_row_for_old_permalink()
     // Mark as published so updatePermalink records a history entry.
     f.repo.setPublishedAt(id, QStringLiteral("2024-01-01T00:00:00Z"));
     f.repo.updatePermalink(id, QStringLiteral("/new.html"));
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
@@ -519,14 +535,14 @@ void Test_PageGenerator::test_pagegen_generate_second_run_updates_existing_rows(
 {
     Fixture f;
     const int id = f.addArticle(QStringLiteral("/p.html"), QStringLiteral("v1"));
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     // Update text and regenerate.
     f.repo.saveData(id, {
         {QStringLiteral("1_") + QLatin1String(PageBlocText::KEY_TEXT), QStringLiteral("v2")},
         {QStringLiteral("0_categories"), QString()},
     });
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
@@ -544,7 +560,7 @@ void Test_PageGenerator::test_pagegen_subset_empty_list_returns_zero()
 {
     Fixture f;
     QCOMPARE(f.gen.generateSubset({}, QDir(f.dir.path()),
-                                   QStringLiteral("example.com"), f.engine, 0), 0);
+                                   QStringLiteral("example.com"), f.engine, f.enIndex), 0);
 }
 
 void Test_PageGenerator::test_pagegen_subset_writes_specified_page_to_content_db()
@@ -552,7 +568,7 @@ void Test_PageGenerator::test_pagegen_subset_writes_specified_page_to_content_db
     Fixture f;
     const int id = f.addArticle(QStringLiteral("/p.html"), QStringLiteral("text"));
     f.gen.generateSubset({id}, QDir(f.dir.path()),
-                          QStringLiteral("example.com"), f.engine, 0);
+                          QStringLiteral("example.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
@@ -568,14 +584,14 @@ void Test_PageGenerator::test_pagegen_subset_returns_count_of_written_pages()
     const int id1 = f.addArticle(QStringLiteral("/p1.html"), QStringLiteral("a"));
     const int id2 = f.addArticle(QStringLiteral("/p2.html"), QStringLiteral("b"));
     QCOMPARE(f.gen.generateSubset({id1, id2}, QDir(f.dir.path()),
-                                   QStringLiteral("example.com"), f.engine, 0), 2);
+                                   QStringLiteral("example.com"), f.engine, f.enIndex), 2);
 }
 
 void Test_PageGenerator::test_pagegen_subset_unknown_id_is_skipped()
 {
     Fixture f;
     QCOMPARE(f.gen.generateSubset({9999}, QDir(f.dir.path()),
-                                   QStringLiteral("example.com"), f.engine, 0), 0);
+                                   QStringLiteral("example.com"), f.engine, f.enIndex), 0);
 }
 
 void Test_PageGenerator::test_pagegen_subset_only_renders_listed_ids()
@@ -585,7 +601,7 @@ void Test_PageGenerator::test_pagegen_subset_only_renders_listed_ids()
     f.addArticle(QStringLiteral("/p2.html"), QStringLiteral("b"));
     // Only render id1 — p2.html must not appear in content.db.
     f.gen.generateSubset({id1}, QDir(f.dir.path()),
-                          QStringLiteral("example.com"), f.engine, 0);
+                          QStringLiteral("example.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
@@ -627,7 +643,7 @@ void Test_PageGenerator::test_pagegen_article_untranslated_lang_excluded_from_av
     QVERIFY(frIndex >= 0); // sanity: engine must have a "fr" row after init()
 
     // Act: run a full generation pass for the English domain (index 0).
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     // Assert: because no _tr:fr: key exists the generator must NOT have added
     // "/p.html" to availablePages["fr"].
@@ -666,7 +682,7 @@ void Test_PageGenerator::test_pagegen_taxonomy_index_excludes_pending_category_h
                   QStringLiteral("/categories"),
                   QStringLiteral("en"));
 
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
@@ -696,7 +712,7 @@ void Test_PageGenerator::test_pagegen_taxonomy_index_includes_pending_symptom_hu
                   QStringLiteral("/categories"),
                   QStringLiteral("en"));
 
-    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, 0);
+    f.gen.generateAll(QDir(f.dir.path()), QStringLiteral("example.com"), f.engine, f.enIndex);
 
     const QString &conn = f.openContentDb();
     QSqlQuery q(QSqlDatabase::database(conn));
