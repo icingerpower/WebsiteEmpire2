@@ -262,8 +262,23 @@ bool PageGenerator::_writePage(AbstractPageType &type,
             redirect.prepare(QStringLiteral(
                 "INSERT OR IGNORE INTO redirects (old_path, new_path, status_code)"
                 " VALUES (:old_path, :new_path, :code)"));
+            // Same rule as the translated-slug redirect above: new_path is
+            // copied verbatim into the Location header, so it must be the URL
+            // the BROWSER should request and therefore has to carry the
+            // /<lang> prefix. Emitting the bare path here sent every visitor
+            // (and Googlebot) from a translated page's old URL to the ENGLISH
+            // domain root, where the translated slug does not exist.
+            // Confirmed live before the fix:
+            //   /es/rheumatoid-arthritis
+            //     → 301 /artritis-reumatoide-genes-biomarcadores → 404
+            // while the slug-redirect path correctly produced
+            //   /es/rheumatoid-arthritis-genes-biomarkers
+            //     → 301 /es/artritis-reumatoide-genes-biomarcadores → 200
+            // resolveLinkHref() is a no-op for the prefix-less primary
+            // language, so English redirects are unchanged.
             redirect.bindValue(QStringLiteral(":old_path"), entry.permalink);
-            redirect.bindValue(QStringLiteral(":new_path"), outPath);
+            redirect.bindValue(QStringLiteral(":new_path"),
+                               engine.resolveLinkHref(outPath, websiteIndex));
             redirect.bindValue(QStringLiteral(":code"),     code);
         }
         redirect.exec();

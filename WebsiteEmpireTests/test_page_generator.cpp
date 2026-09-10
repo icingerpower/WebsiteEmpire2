@@ -230,6 +230,7 @@ private slots:
     void test_pagegen_translated_article_still_emits_hreflang_alternates();
     void test_pagegen_translated_slug_emits_redirect_from_english_permalink();
     void test_pagegen_redirect_target_includes_lang_prefix_on_subpath_deployment();
+    void test_pagegen_history_redirect_target_includes_lang_prefix();
 
     // --- robots.txt advertises every deployed language's sitemap ---
     void test_pagegen_robots_lists_sitemap_for_every_deployed_language();
@@ -1607,6 +1608,62 @@ void Test_PageGenerator::test_pagegen_redirect_target_includes_lang_prefix_on_su
     q.exec(QStringLiteral(
         "SELECT new_path FROM redirects WHERE old_path = '/master-sleep'"));
     QVERIFY2(q.next(), "no redirect recorded for the old English permalink");
+    QCOMPARE(q.value(0).toString(), QStringLiteral("/fr/maitriser-le-sommeil"));
+    f.closeContentDb(conn);
+}
+
+void Test_PageGenerator::test_pagegen_history_redirect_target_includes_lang_prefix()
+{
+    // Same production shape and same rule as
+    // test_pagegen_redirect_target_includes_lang_prefix_on_subpath_deployment,
+    // but for the OTHER redirect writer: the permalink_history loop. That one
+    // emitted a bare new_path, so a visitor arriving on a translated page's old
+    // URL was 301'd to the ENGLISH domain root where the translated slug does
+    // not exist. Confirmed live on biomarky.com before the fix:
+    //   /es/rheumatoid-arthritis
+    //     -> 301 /artritis-reumatoide-genes-biomarcadores -> 404
+    Fixture f;
+
+    const QString enText = QStringLiteral("<h1>Master Sleep</h1><p>English.</p>");
+    const QString frText = QStringLiteral("<h1>Maitriser le sommeil</h1><p>Francais.</p>");
+
+    const int id = f.repo.create(QStringLiteral("article"),
+                                  QStringLiteral("/old-english-slug"),
+                                  QStringLiteral("en"));
+    f.repo.saveData(id, {
+        {QStringLiteral("1_text"),                enText},
+        {QStringLiteral("0_categories"),           QString()},
+        {QStringLiteral("1_tr:fr:text"),           frText},
+        {QStringLiteral("1_tr:fr:text:hash"),      Fixture::sha1(enText)},
+        {QStringLiteral("tr:fr:_permalink_slug"),  QStringLiteral("maitriser-le-sommeil")},
+    });
+    f.repo.setLangCodesToTranslate(id, {QStringLiteral("fr")});
+    // Published, so renaming records a permalink_history entry.
+    f.repo.setPublishedAt(id, QStringLiteral("2024-01-01T00:00:00Z"));
+    f.repo.updatePermalink(id, QStringLiteral("/master-sleep"));
+
+    int frIndex = -1;
+    for (int i = 0; i < f.engine.rowCount(); ++i) {
+        if (f.engine.getLangCode(i) == QStringLiteral("fr")) {
+            frIndex = i;
+            break;
+        }
+    }
+    QVERIFY2(frIndex >= 0, "No French engine row found");
+    f.engine.setData(f.engine.index(frIndex, AbstractEngine::COL_DOMAIN),
+                     QStringLiteral("example.com"));
+
+    f.gen.generateAll(QDir(f.dir.path()), QDir(f.dir.path()),
+                      QStringLiteral("example.com"), f.engine, frIndex,
+                      QStringLiteral("https://example.com/fr"));
+
+    const QString &conn = f.openContentDb();
+    QSqlQuery q(QSqlDatabase::database(conn));
+    q.exec(QStringLiteral(
+        "SELECT new_path FROM redirects WHERE old_path = '/old-english-slug'"));
+    QVERIFY2(q.next(), "no redirect recorded for the renamed permalink");
+    // Must carry the /fr prefix: PageController copies new_path verbatim into
+    // the Location header, so it is the URL the BROWSER requests.
     QCOMPARE(q.value(0).toString(), QStringLiteral("/fr/maitriser-le-sommeil"));
     f.closeContentDb(conn);
 }
