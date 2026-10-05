@@ -1,6 +1,8 @@
 include(${CMAKE_CURRENT_LIST_DIR}/widgets/commonblocwidgets.cmake)
 
 set(COMMONBLOCS_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocPageLabels.h
+    ${CMAKE_CURRENT_LIST_DIR}/CommonBlocPageLabels.cpp
     ${CMAKE_CURRENT_LIST_DIR}/MenuItem.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractCommonBloc.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractCommonBloc.cpp

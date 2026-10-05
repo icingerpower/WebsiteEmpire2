@@ -2,6 +2,7 @@
 #define PAGETYPETAXONOMYINDEX_H
 
 #include "website/pages/AbstractPageType.h"
+#include "website/commonblocs/CommonBlocPageLabels.h"
 #include "website/pages/blocs/PageBlocMeta.h"
 #include "website/pages/blocs/PageBlocSocial.h"
 #include "website/pages/blocs/PageBlocText.h"
@@ -113,6 +114,7 @@ private:
     QList<const AbstractPageBloc *>  m_blocs;
 
     IPageRepository *m_repo = nullptr;
+    CommonBlocPageLabels m_pageLabels;
 };
 
 #endif // PAGETYPETAXONOMYINDEX_H

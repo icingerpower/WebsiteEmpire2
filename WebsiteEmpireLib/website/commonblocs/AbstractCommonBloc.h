@@ -95,6 +95,9 @@ public:
      */
     virtual QHash<QString, QString> sourceTexts() const;
 
+    /// Source language for CLI jobs; fixed built-in labels may override the theme's language.
+    virtual QString translationSourceLang(const QString &themeSourceLang) const;
+
     /**
      * Returns the stored translation for fieldId in langCode, or an empty
      * string when no translation has been saved yet.

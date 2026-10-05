@@ -5,10 +5,11 @@
 #include "website/social/AbstractSocialMedia.h"
 #include "website/taxonomy/TaxonomyDb.h"
 
-#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QHash>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QList>
 #include <QPair>
 #include <QSqlDatabase>
@@ -45,6 +46,7 @@ void PageTypeSymptomIndex::bindGenerationContext(IPageRepository & /*repo*/,
                                                   const QDir       &workingDir)
 {
     m_workingDir = workingDir;
+    m_pageLabels.load(workingDir);
 }
 
 // =============================================================================
@@ -221,16 +223,15 @@ QString PageTypeSymptomIndex::buildHeadMetaTags(const QString &baseUrl,
         // Count symptoms from the taxonomy vocabulary.
         const int symCount = TaxonomyDb(m_workingDir).load(QStringLiteral("symptoms")).size();
         if (symCount > 0) {
-            title = QCoreApplication::translate("PageTypeSymptomIndex",
-                        "Browse conditions by symptom — %1 symptoms").arg(symCount);
+            title = m_pageLabels.text(QLatin1String(CommonBlocPageLabels::BROWSE_SYMPTOMS_COUNT),
+                                      langCode).arg(symCount);
         } else {
-            title = QCoreApplication::translate("PageTypeSymptomIndex",
-                        "Browse conditions by symptom");
+            title = m_pageLabels.text(QLatin1String(CommonBlocPageLabels::BROWSE_SYMPTOMS), langCode);
         }
     }
 
     result += QStringLiteral("<title>");
-    result += title;
+    result += title.toHtmlEscaped();
     result += QStringLiteral("</title>");
 
     const QString desc = m_metaBloc.seoDescription(langCode);
@@ -278,24 +279,19 @@ QString PageTypeSymptomIndex::buildHeadMetaTags(const QString &baseUrl,
                              ? m_updatedByLang.value(langCode)
                              : m_updatedByLang.value(m_sourceLang);
     if (!updated.isEmpty()) {
-        result += QStringLiteral("<script type=\"application/ld+json\">"
-                                  "{\"@context\":\"https://schema.org\","
-                                  "\"@type\":\"WebPage\","
-                                  "\"dateModified\":\"");
-        result += updated;
-        result += QLatin1Char('"');
+        QJsonObject schema{{QStringLiteral("@context"), QStringLiteral("https://schema.org")},
+                           {QStringLiteral("@type"), QStringLiteral("WebPage")},
+                           {QStringLiteral("dateModified"), updated}};
         if (!canonicalPath.isEmpty() && !baseUrl.isEmpty()) {
-            result += QStringLiteral(",\"url\":\"");
-            result += baseUrl;
-            result += canonicalPath;
-            result += QLatin1Char('"');
+            schema.insert(QStringLiteral("url"), baseUrl + canonicalPath);
         }
         if (!title.isEmpty()) {
-            result += QStringLiteral(",\"name\":\"");
-            result += title;
-            result += QLatin1Char('"');
+            schema.insert(QStringLiteral("name"), title);
         }
-        result += QStringLiteral("}</script>\n");
+        result += QStringLiteral("<script type=\"application/ld+json\">");
+        result += QString::fromUtf8(QJsonDocument(schema).toJson(QJsonDocument::Compact))
+                      .replace(QLatin1Char('<'), QStringLiteral("\\u003c"));
+        result += QStringLiteral("</script>\n");
     }
 
     return result;

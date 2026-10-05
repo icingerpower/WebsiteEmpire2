@@ -10,6 +10,11 @@ QHash<QString, QString> AbstractCommonBloc::sourceTexts() const
     return {};
 }
 
+QString AbstractCommonBloc::translationSourceLang(const QString &themeSourceLang) const
+{
+    return themeSourceLang;
+}
+
 QString AbstractCommonBloc::translatedText(const QString &fieldId,
                                            const QString &langCode) const
 {

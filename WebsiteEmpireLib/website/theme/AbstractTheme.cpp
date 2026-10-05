@@ -208,8 +208,15 @@ QList<AbstractCommonBloc *> AbstractTheme::getArticleBlocs()
     return {};
 }
 
+QList<AbstractCommonBloc *> AbstractTheme::getTranslationBlocs()
+{
+    return getTopBlocs() + getBottomBlocs() + getArticleBlocs()
+           + QList<AbstractCommonBloc *>{&m_pageLabels};
+}
+
 void AbstractTheme::saveBlocsData()
 {
+    m_pageLabels.save(m_workingDir);
     QSettings settings(_blocsSettingsPath(), QSettings::IniFormat);
     const auto persist = [&settings](const QList<AbstractCommonBloc *> &blocs) {
         for (AbstractCommonBloc *bloc : blocs) {
@@ -229,6 +236,7 @@ void AbstractTheme::saveBlocsData()
 
 void AbstractTheme::_loadBlocsData()
 {
+    m_pageLabels.load(m_workingDir);
     QSettings settings(_blocsSettingsPath(), QSettings::IniFormat);
     const auto hydrate = [&settings](const QList<AbstractCommonBloc *> &blocs) {
         for (AbstractCommonBloc *bloc : blocs) {

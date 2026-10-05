@@ -21,6 +21,7 @@ void PageBlocConditionList::setRenderContext(const QString &permalink,
 {
     m_permalink    = permalink;
     m_workingDir   = workingDir;
+    m_pageLabels.load(workingDir);
     m_contextBound = true;
 }
 
@@ -450,7 +451,7 @@ void PageBlocConditionList::addCode(QStringView,
     }
 
     html += QStringLiteral("<h2>");
-    html += QCoreApplication::translate("PageBlocConditionList", "Possible conditions");
+    html += m_pageLabels.text(QLatin1String(CommonBlocPageLabels::POSSIBLE_CONDITIONS), lang).toHtmlEscaped();
     html += QStringLiteral("</h2>");
 
     html += QStringLiteral("<div class=\"hub-grid\">");
@@ -470,7 +471,7 @@ void PageBlocConditionList::addCode(QStringView,
         html += QStringLiteral("<a href=\"");
         html += indexResolved;
         html += QStringLiteral("\" class=\"symptom-back-link\">← ");
-        html += QCoreApplication::translate("PageBlocConditionList", "All symptoms");
+        html += m_pageLabels.text(QLatin1String(CommonBlocPageLabels::ALL_SYMPTOMS), lang).toHtmlEscaped();
         html += QStringLiteral("</a>");
     }
 }

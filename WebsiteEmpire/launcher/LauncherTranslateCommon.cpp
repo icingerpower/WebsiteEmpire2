@@ -82,7 +82,7 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
 
     // -------------------------------------------------------------------------
     // Collect target languages: --language <code> narrows to one; otherwise all
-    // engine languages except the source lang are used.
+    // engine languages are used; each translator skips its own source language.
     // -------------------------------------------------------------------------
     const QStringList args = QCoreApplication::arguments();
     const int langIdx = args.indexOf(QStringLiteral("--") + OPTION_LANGUAGE);
@@ -114,15 +114,13 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
 
     QStringList targetLangs;
     if (!languageFilter.isEmpty()) {
-        if (languageFilter != sourceLang) {
-            targetLangs.append(languageFilter);
-        }
+        targetLangs.append(languageFilter);
     } else {
         QSet<QString> seen;
         const int rowCount = engine->rowCount();
         for (int i = 0; i < rowCount; ++i) {
             const QString lang = engine->getLangCode(i);
-            if (!lang.isEmpty() && lang != sourceLang && !seen.contains(lang)) {
+            if (!lang.isEmpty() && !seen.contains(lang)) {
                 seen.insert(lang);
                 targetLangs.append(lang);
             }
@@ -140,7 +138,7 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
     // Build jobs and run — blocs → categories → taxonomy → hub SEO (sequential)
     // -------------------------------------------------------------------------
     const QList<AbstractCommonBloc *> blocs =
-        theme->getTopBlocs() + theme->getBottomBlocs() + theme->getArticleBlocs();
+        theme->getTranslationBlocs();
     const QList<CommonBlocTranslator::TranslationJob> blocJobs =
         CommonBlocTranslator::buildJobs(blocs, sourceLang, targetLangs);
 

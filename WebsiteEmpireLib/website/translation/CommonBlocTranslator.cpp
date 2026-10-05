@@ -51,14 +51,15 @@ CommonBlocTranslator::buildJobs(const QList<AbstractCommonBloc *> &blocs,
         if (!bloc || bloc->sourceTexts().isEmpty()) {
             continue;
         }
+        const QString blocSourceLang = bloc->translationSourceLang(sourceLang);
         for (const QString &targetLang : std::as_const(targetLangs)) {
-            if (targetLang == sourceLang) {
+            if (targetLang == blocSourceLang) {
                 continue;
             }
-            if (!bloc->missingTranslations(targetLang, sourceLang).isEmpty()) {
+            if (!bloc->missingTranslations(targetLang, blocSourceLang).isEmpty()) {
                 TranslationJob job;
                 job.blocId     = bloc->getId();
-                job.sourceLang = sourceLang;
+                job.sourceLang = blocSourceLang;
                 job.targetLang = targetLang;
                 jobs.append(job);
             }
@@ -108,7 +109,7 @@ void CommonBlocTranslator::_processNextJob()
              .arg(m_currentJob.blocId, m_currentJob.targetLang));
 
     const QList<AbstractCommonBloc *> allBlocs =
-        m_theme.getTopBlocs() + m_theme.getBottomBlocs() + m_theme.getArticleBlocs();
+        m_theme.getTranslationBlocs();
     for (AbstractCommonBloc *b : std::as_const(allBlocs)) {
         if (b && b->getId() == m_currentJob.blocId) {
             m_currentBloc = b;
@@ -125,12 +126,14 @@ void CommonBlocTranslator::_processNextJob()
     }
 
     const QHash<QString, QString> &sources = m_currentBloc->sourceTexts();
+    const QStringList missing = m_currentBloc->missingTranslations(
+        m_currentJob.targetLang, m_currentJob.sourceLang);
     QList<TranslatableField> fields;
     for (auto it = sources.cbegin(); it != sources.cend(); ++it) {
         if (it.value().isEmpty()) {
             continue;
         }
-        if (!m_currentBloc->translatedText(it.key(), m_currentJob.targetLang).isEmpty()) {
+        if (!missing.contains(it.key())) {
             continue;
         }
         TranslatableField f;

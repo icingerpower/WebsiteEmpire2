@@ -118,9 +118,7 @@ void PaneTranslations::_initModels()
 
     QList<AbstractCommonBloc *> blocs;
     if (m_theme) {
-        blocs += m_theme->getTopBlocs();
-        blocs += m_theme->getBottomBlocs();
-        blocs += m_theme->getArticleBlocs();
+        blocs = m_theme->getTranslationBlocs();
     }
 
     m_fieldModel = std::make_unique<TranslationFieldTable>(blocs, langs);

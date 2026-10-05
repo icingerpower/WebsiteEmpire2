@@ -16,6 +16,7 @@
 #include "website/taxonomy/TaxonomyDb.h"
 #include "website/EngineArticles.h"
 #include "website/HostTable.h"
+#include "website/commonblocs/CommonBlocPageLabels.h"
 
 // ---------------------------------------------------------------------------
 // Fixture
@@ -142,6 +143,16 @@ struct Fixture {
 // engine index and sets frIndex.
 void setupFrenchSymptomHub(Fixture &f, int &frIndex)
 {
+    CommonBlocPageLabels labels;
+    labels.setTranslation(QStringLiteral("possible_conditions"), QStringLiteral("fr"),
+                          QStringLiteral("Affections possibles"));
+    labels.setTranslation(QStringLiteral("all_symptoms"), QStringLiteral("fr"),
+                          QStringLiteral("Tous les symptômes"));
+    labels.setTranslation(QStringLiteral("browse_symptoms"), QStringLiteral("fr"),
+                          QStringLiteral("Parcourir les affections par symptôme"));
+    labels.setTranslation(QStringLiteral("browse_symptoms_count"), QStringLiteral("fr"),
+                          QStringLiteral("Parcourir les affections par symptôme — %1 symptômes"));
+    labels.save(QDir(f.dir.path()));
     TaxonomyDb taxDb(QDir(f.dir.path()));
     taxDb.sync(QStringLiteral("symptoms"), {QStringLiteral("Hot Flashes")});
     taxDb.setTranslation(QStringLiteral("symptoms"), QStringLiteral("Hot Flashes"),
@@ -796,6 +807,8 @@ void Test_PageGenerator::test_pagegen_symptom_hub_article_card_appears_on_transl
 
     QVERIFY2(html.contains("hot-flashes-article"),
              "article card must appear in French symptom hub (English slug used for lookup)");
+    QVERIFY(html.contains("<h2>Affections possibles</h2>"));
+    QVERIFY(!html.contains("Possible conditions"));
 }
 
 void Test_PageGenerator::test_pagegen_symptom_hub_h1_uses_taxonomy_translation_on_translated_domain()

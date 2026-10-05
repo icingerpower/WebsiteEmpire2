@@ -6,8 +6,9 @@
 #include "website/pages/PageTypeCategory.h"
 #include "website/social/AbstractSocialMedia.h"
 
-#include <QCoreApplication>
 #include <QHash>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QList>
 #include <QSet>
 
@@ -54,9 +55,10 @@ const QList<const AbstractPageBloc *> &PageTypeTaxonomyIndex::getPageBlocs() con
 // =============================================================================
 
 void PageTypeTaxonomyIndex::bindGenerationContext(IPageRepository &repo,
-                                                   const QDir       & /*workingDir*/)
+                                                   const QDir       &workingDir)
 {
     m_repo = &repo;
+    m_pageLabels.load(workingDir);
 }
 
 // =============================================================================
@@ -297,12 +299,11 @@ QString PageTypeTaxonomyIndex::buildHeadMetaTags(const QString &baseUrl,
 
     const QString storedTitle = m_metaBloc.seoTitle(langCode);
     const QString title = storedTitle.isEmpty()
-        ? QCoreApplication::translate("PageTypeTaxonomyIndex",
-                                      "Browse all categories")
+        ? m_pageLabels.text(QLatin1String(CommonBlocPageLabels::BROWSE_CATEGORIES), langCode)
         : storedTitle;
 
     result += QStringLiteral("<title>");
-    result += title;
+    result += title.toHtmlEscaped();
     result += QStringLiteral("</title>");
 
     const QString &desc = m_metaBloc.seoDescription(langCode);
@@ -348,25 +349,19 @@ QString PageTypeTaxonomyIndex::buildHeadMetaTags(const QString &baseUrl,
                              ? m_updatedByLang.value(langCode)
                              : m_updatedByLang.value(m_sourceLang);
     if (!updated.isEmpty()) {
-        result += QStringLiteral(
-            "<script type=\"application/ld+json\">"
-            "{\"@context\":\"https://schema.org\","
-            "\"@type\":\"WebPage\","
-            "\"dateModified\":\"");
-        result += updated;
-        result += QLatin1Char('"');
+        QJsonObject schema{{QStringLiteral("@context"), QStringLiteral("https://schema.org")},
+                           {QStringLiteral("@type"), QStringLiteral("WebPage")},
+                           {QStringLiteral("dateModified"), updated}};
         if (!canonicalPath.isEmpty() && !baseUrl.isEmpty()) {
-            result += QStringLiteral(",\"url\":\"");
-            result += baseUrl;
-            result += canonicalPath;
-            result += QLatin1Char('"');
+            schema.insert(QStringLiteral("url"), baseUrl + canonicalPath);
         }
         if (!title.isEmpty()) {
-            result += QStringLiteral(",\"name\":\"");
-            result += title;
-            result += QLatin1Char('"');
+            schema.insert(QStringLiteral("name"), title);
         }
-        result += QStringLiteral("}</script>\n");
+        result += QStringLiteral("<script type=\"application/ld+json\">");
+        result += QString::fromUtf8(QJsonDocument(schema).toJson(QJsonDocument::Compact))
+                      .replace(QLatin1Char('<'), QStringLiteral("\\u003c"));
+        result += QStringLiteral("</script>\n");
     }
 
     return result;

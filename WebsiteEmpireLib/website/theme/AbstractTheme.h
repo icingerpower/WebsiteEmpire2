@@ -2,6 +2,7 @@
 #define ABSTRACTTHEME_H
 
 #include "website/theme/Param.h"
+#include "website/commonblocs/CommonBlocPageLabels.h"
 
 #include <QAbstractTableModel>
 #include <QDir>
@@ -102,6 +103,9 @@ public:
      * Default: returns an empty list (no article-specific blocs).
      */
     virtual QList<AbstractCommonBloc *> getArticleBlocs();
+
+    /// Includes shared page labels as well as all rendered common blocs.
+    QList<AbstractCommonBloc *> getTranslationBlocs();
 
     /**
      * Full list of configurable parameters for this theme.
@@ -254,6 +258,7 @@ protected:
     const QDir &workingDir() const;
 
 private:
+    CommonBlocPageLabels m_pageLabels;
     QDir    m_workingDir;
     QString m_sourceLangCode;
     QString m_faviconSvg;

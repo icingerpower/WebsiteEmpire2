@@ -2,6 +2,7 @@
 #define PAGEBLOCONDITIONLIST_H
 
 #include "website/pages/blocs/AbstractPageBloc.h"
+#include "website/commonblocs/CommonBlocPageLabels.h"
 
 #include <QDir>
 #include <QHash>
@@ -118,6 +119,7 @@ private:
                                                const QString     &lang) const;
 
     mutable QString m_permalink;
+    mutable CommonBlocPageLabels m_pageLabels;
     mutable QDir    m_workingDir;
     mutable bool    m_contextBound = false;
     mutable QString m_lastRenderedDisplayName;

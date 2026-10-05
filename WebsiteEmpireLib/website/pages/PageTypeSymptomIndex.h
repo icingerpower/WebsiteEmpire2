@@ -2,6 +2,7 @@
 #define PAGETYPESYMPTOMINDEX_H
 
 #include "website/pages/AbstractPageType.h"
+#include "website/commonblocs/CommonBlocPageLabels.h"
 #include "website/pages/blocs/PageBlocMeta.h"
 #include "website/pages/blocs/PageBlocSocial.h"
 #include "website/pages/blocs/PageBlocText.h"
@@ -88,6 +89,7 @@ private:
     PageBlocMeta                     m_metaBloc;
     QList<const AbstractPageBloc *>  m_blocs;
     QDir                             m_workingDir;
+    CommonBlocPageLabels              m_pageLabels;
 };
 
 #endif // PAGETYPESYMPTOMINDEX_H
