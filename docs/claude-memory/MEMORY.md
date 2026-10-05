@@ -1,0 +1,31 @@
+# Memory Index
+
+- [StaticWebsiteServe architecture](project_static_website_serve.md) — Drogon server; two-pass rendering, SQLite rsync, redirects table, repository pattern
+- [3-level pipeline architecture](project_pipeline_architecture.md) — Level 1→2→3 pipeline; Level 2 DB schema (pages, variants, blocs, permalinks, menus), A/B testing, AI queue, GSC feedback loop
+- [Test target naming](feedback_test_target_naming.md) — WebsiteEmpireTests targets and class names must start with Test_Website_
+- [File creation rule](feedback_file_creation.md) — Always use Write tool + scp/rsync, never cat heredoc (copy-paste always fails)
+- [Hosting architecture](project_hosting_architecture.md) — Two Contabo VPS 10: VPS 1 for Drogon static sites, VPS 2 for Django e-commerce
+- [VPS biomarky.com](project_vps_biomarky.md) — IP 161.97.153.237, root, ports en=8080 fr=8081 de=8082 ja=8083
+- [Bug-proven unit test workflow](project_bug_tests_workflow.md) — BUG_TESTS/BUG_TESTS.csv, run ID wf_69cf5435-561, 7 PROVEN tests, 9 NOT_PROVEN to retry
+- [Translation via CLI](feedback_translation_cli.md) — All customer-visible content (emails, campaigns) translated via AiJob CLI runner, never direct API
+- [Antigravity CLI fixed](project_cli_antigravity_broken.md) — agy ignores stdin, --print takes prompt as flag value; fixed 2026-07-11 via configurePromptProcess
+- [Generation never overwrites text](project_generation_never_overwrites_text.md) — generate runs don't overwrite existing 1_text; --update changes survive
+- [Aspire import future](project_aspire_import_future.md) — aspired-sites data location; import still out of scope until Cédric lifts it
+- [Product URL scheme](project_product_url_scheme.md) — /product/<slug> byte-exact (no trailing slash); image-order scraper fix; cutover gates (D4 redirects, publication)
+- [Admin redesign program](project_admin_redesign.md) — ADR-045 full custom admin UI rebuild; phases, approved decisions (Chart.js, gross sales), skinning approach
+- [Fashion taxonomy round 2](project_fashion_taxonomy_round2.md) — VOCAB_ROUND .r2 job-id mechanism; 19 combo tables, 1.35M candidates; never hand-edit the .ini
+- [Raster image generation pipeline](project_raster_image_generation.md) — strategy-driven AI photo gen, generate/review/retry loop, publish-time durability gate
+- [Article page type verticals](project_article_verticals.md) — PageTypeArticleBase split into Health/Fashion, per-engine page-type scoping (EngineArticlesFashion), PaneTaxonomies engine-aware
+- [No raw JSON in admin](feedback_no_raw_json_admin.md) — replace *_json textareas with UI editors (SmartRulesBuilderWidget/CsvListWidget/structured forms) or hide inert ones
+- [Buyer-currency charging](project_buyer_currency_charging.md) — ADR-064 amends ADR-062: charge in buyer display currency when provider supports it; flag OFF, cleared-to-enable + checklist
+- [Email templates i18n](project_email_templates_i18n.md) — ADR-065 per-store seeded templates + AiJob CLI auto-translation; symmetric validator + send fallback
+- [Local :8099 scratch env](project_local_8099_scratch_env.md) — :8099 runs on scratch_settings with a SEPARATE DB ($SCRATCH_TMP/scratch_default.sqlite3); data ops must target it, not db.sqlite3
+- [Storefront PWA](project_pwa.md) — ADR-067 installable + offline SW (never-cache prices/PII); Web Push ADR-068 built, enable-ready, flag OFF
+- [Review moderation](project_review_moderation.md) — Phase A (Hidden status, reply, Approve/Hide/Reply, storefront placeholder+reply, hover preview) DONE; Phase B review/reply translation remaining
+- [Admin polish sweep](project_admin_polish_sweep.md) — bring every admin changelist to adminui standard; core.admin.AdminUIListPolishMixin; done = product/collection/staticpage + 8; remaining = StoreCurrencySetting decision + super-admin + translations
+- [French /fr edition](project_french_edition.md) — /fr storefront; runbook + ADR-074 locale-aware sizes (cm-only fr, FR-first labels) + chantier-1 i18n; remaining gaps (type/tags translation, auto-queue, legal pages, .po ~10%)
+- [AI self-review loop](project_ai_self_review_loop.md) — ADR-073 opt-in produce→critic→fix in worker/CLI; hold-for-review on give-up; --review default OFF; F-3 email-template sanitize follow-up
+- [Remote job worker](project_remote_job_worker.md) — ADR-072 token-authed /api/worker/jobs/ + scripts/worker/run_job.sh; laptop pulls jobs, runs agy/claude locally; nh3 sanitizer (F1); before online: chmod 600 wrapper
+- [AI Job Launcher](project_ai_job_launcher.md) — ADR-071 super-admin page to run/stop registered job types; cancellation engine (AiJobStatus.CANCELLED); no global spend ceiling (provision StoreAiQuota)
+- [Shipping-country override](project_shipping_country_override.md) — platform defaults (per lang_code) + per-store override; resolver stores/shipping_targets.py; broad China-dropship default list (~104, scratch-only, durability pending)
+- [Shared-cwd hazard](feedback_shared_cwd_hazard.md) — my own concurrent subagents share one cwd; a subagent's git stash (e.g. for a "baseline" run) can wipe siblings' uncommitted work — commit promptly / use worktree isolation; never ask an agent for a pre-changes baseline
