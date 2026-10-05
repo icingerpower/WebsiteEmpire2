@@ -71,6 +71,7 @@ add_empire_test(Test_Website_SitemapOrchestrator             test_website_sitema
 add_empire_test(Test_Website_StatsDbMerger                   test_stats_db_merger.cpp)
 add_empire_test(Test_Website_PagesStatsWidget                test_pages_stats_widget.cpp)
 add_empire_test(Test_Website_CliAntigravity                  test_cli_antigravity.cpp)
+add_empire_test(Test_Website_RasterCliProtocol                 test_raster_cli_protocol.cpp)
 add_empire_test(Test_Website_CliCodex                        test_cli_codex.cpp)
 add_empire_test(Test_Website_GenPageQueueRaster               test_gen_page_queue_raster.cpp)
 add_empire_test(Test_Website_AbstractPageBlocTaxonomies       test_abstract_page_bloc_taxonomies.cpp)

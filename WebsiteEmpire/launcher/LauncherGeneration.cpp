@@ -6,6 +6,7 @@
 #include "website/HostTable.h"
 #include "website/WebsiteSettingsTable.h"
 #include "website/ImageWriter.h"
+#include "website/RasterCliProtocol.h"
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/GenPageQueue.h"
 #include "website/pages/GenScheduler.h"
@@ -47,6 +48,7 @@
 #include <QCoro/QCoroTimer>
 
 #include "aicli/AbstractCli.h"
+#include "aicli/CliAntigravity.h"
 
 const QString LauncherGeneration::OPTION_NAME     = QStringLiteral("generation");
 const QString LauncherGeneration::OPTION_SESSIONS = QStringLiteral("sessions");
@@ -300,10 +302,11 @@ static CliCallOutcome classifyCliResponse(const QString &response, AbstractCli *
     if (kind == CliErrorKind::QuotaExceeded || kind == CliErrorKind::AuthRequired) {
         return CliCallOutcome::QuotaOrAuth;
     }
-    // Matches the exact strings runBoundedClaudePrompt() emits for these two
-    // conditions; anything else is treated as a content failure as before.
+    // Infrastructure failures say nothing about whether the outfit is correct.
     if (response.contains(QStringLiteral("timed out after"))
-     || response.contains(QStringLiteral("executable not found in PATH"))) {
+     || response.contains(QStringLiteral("executable not found in PATH"))
+     || response.contains(QStringLiteral("interrupted"), Qt::CaseInsensitive)
+     || response.contains(QStringLiteral("IMAGE_TOOL_UNAVAILABLE"))) {
         return CliCallOutcome::Transient;
     }
     return CliCallOutcome::OtherError;
@@ -317,7 +320,8 @@ static CliCallOutcome classifyCliResponse(const QString &response, AbstractCli *
 static QCoro::Task<QString> runBoundedClaudePrompt(QString      preparedPrompt,
                                                     AbstractCli *cli,
                                                     int          timeoutMs,
-                                                    QString      workDir)
+                                                    QString      workDir,
+                                                    QString      inspectionPath = {})
 {
     QString result;
     QDir().mkpath(workDir);
@@ -336,8 +340,16 @@ static QCoro::Task<QString> runBoundedClaudePrompt(QString      preparedPrompt,
     QProcess process;
     process.setWorkingDirectory(workDir);
     process.setProgram(cli->getExecutable());
-    cli->configurePromptProcess(&process, cli->promptArgs(), preparedPrompt, promptPath);
+    const bool antigravity = dynamic_cast<CliAntigravity *>(cli) != nullptr;
+    QStringList args = cli->promptArgs();
+    if (antigravity) {
+        args << QStringLiteral("--output-format") << QStringLiteral("stream-json")
+             << QStringLiteral("--log-file") << workDir + QStringLiteral("/agy.log");
+    }
+    cli->configurePromptProcess(&process, args, preparedPrompt, promptPath);
     process.setStandardOutputFile(outputPath);
+    const QString stderrPath = workDir + QStringLiteral("/stderr.txt");
+    process.setStandardErrorFile(stderrPath);
 
     co_await qCoro(process).start();
     const bool finished = co_await qCoro(process).waitForFinished(timeoutMs);
@@ -353,14 +365,30 @@ static QCoro::Task<QString> runBoundedClaudePrompt(QString      preparedPrompt,
         co_return QStringLiteral("__ERROR__: %1 executable not found in PATH")
                      .arg(cli->getExecutable());
     }
+    QFile f(outputPath);
+    if (!f.open(QIODevice::ReadOnly)) {
+        co_return QStringLiteral("__ERROR__: IMAGE_TOOL_UNAVAILABLE: cannot read CLI output");
+    }
+    const QByteArray raw = f.readAll();
+    result = antigravity
+        ? RasterCliProtocol::decodeAntigravity(raw, preparedPrompt.contains(
+              QString::fromLatin1(RASTER_IMAGE_PROMPT_MARKER)), inspectionPath)
+        : QString::fromUtf8(raw).trimmed();
+    // A structured tool error may contain the only quota/reset details, even
+    // when the process also fails. Do not truncate those to the first 300 bytes.
+    if (antigravity && result.startsWith(QStringLiteral("__ERROR__"))
+        && cli->classifyError(result) != CliErrorKind::Other) {
+        co_return result;
+    }
     if (process.exitCode() != 0) {
-        const QString errMsg = QString::fromUtf8(process.readAllStandardError()).trimmed();
+        QFile stderrFile(stderrPath);
+        QString errMsg;
+        if (stderrFile.open(QIODevice::ReadOnly)) {
+            errMsg = QString::fromUtf8(stderrFile.readAll()).trimmed();
+        }
         QString detail = errMsg;
         if (detail.isEmpty()) {
-            QFile f(outputPath);
-            if (f.open(QIODevice::ReadOnly)) {
-                detail = QString::fromUtf8(f.readAll()).trimmed().left(300);
-            }
+            detail = result;
         }
         if (detail.isEmpty()) {
             detail = QStringLiteral("exit code %1").arg(process.exitCode());
@@ -368,10 +396,6 @@ static QCoro::Task<QString> runBoundedClaudePrompt(QString      preparedPrompt,
         co_return QStringLiteral("__ERROR__: ") + detail;
     }
 
-    QFile f(outputPath);
-    if (f.open(QIODevice::ReadOnly)) {
-        result = QString::fromUtf8(f.readAll()).trimmed();
-    }
     co_return result;
 }
 
@@ -391,6 +415,10 @@ static QString buildRasterImageReviewPrompt(const QString &imagePath,
         "You are reviewing an AI-generated image for a web article.\n\n"
         "Open and inspect the image file at this exact path using your file-reading "
         "or vision tool: %1\n\n"
+        "Use your image-viewing tool on this image only. Do not run shell commands, create crops, "
+        "search the filesystem/web, read other prompts/reviews, or edit any file. "
+        "Judge only the actual visible pixels and the requirements below. "
+        "Do not infer defects from unseen details.\n\n"
         "The image should show: %2\n")
         .arg(imagePath, description);
     if (!articleSection.isEmpty()) {
@@ -411,7 +439,15 @@ static QString buildRasterImageReviewPrompt(const QString &imagePath,
         "recommendation (e.g. the exact colors/garments named) — not a generic or "
         "mismatched substitute.\n"
         "4. The image follows the style requirements above (when given).\n"
-        "5. The image contains no text, watermark, or logo.\n\n"
+        "5. The image contains no text, watermark, or logo.\n"
+        "6. Count ALL people in the ENTIRE frame, including distant or blurred "
+        "bystanders, silhouettes and reflections. If exactly one or two people are "
+        "required, any additional background person is a FAIL. Inspect the background "
+        "separately from the main models.\n"
+        "7. Check each required garment, its color, visible texture, accessories and "
+        "footwear individually. Optional alternative outfits in the prose do not all "
+        "need to appear simultaneously. Heritage is casting context, not visually "
+        "verifiable ancestry; assess the requested observable traits.\n\n"
         "Respond with ONLY one of:\n"
         "- \"OK\" — if all conditions above are met.\n"
         "- \"FAIL: <reason>\" — if any condition is not met. Be specific.\n"
@@ -425,9 +461,8 @@ static QString buildRasterImageReviewPrompt(const QString &imagePath,
 enum class RasterAttemptResult { Success, RetryableFailure, TransientFailure, QuotaOrAuthPause };
 
 // One full generate-then-review cycle for a single raster image ref.
-// tempDir must outlive the returned QImage's use — the caller loads the file
-// on success and stores it via ImageWriter before this function's own
-// temporary directory (owned by the caller) is destroyed.
+// Each attempt retains its candidate, prompt, stdout and stderr below the
+// selected working directory, including when a tool fails or review rejects it.
 static QCoro::Task<RasterAttemptResult> runOneRasterAttempt(
     const GenPageQueue::ImgFixRef &ref,
     const QString                 &articleText,
@@ -440,13 +475,25 @@ static QCoro::Task<RasterAttemptResult> runOneRasterAttempt(
     ImageWriter                   &imageWriter,
     QTextStream                   *out,
     int                             sNum,
+    QString                        *previousCandidate,
+    bool                           *reviewPending,
     QString                        *lastError)
 {
-    QTemporaryDir tempDir;
+    const QString attemptsDir = WorkingDirectoryManager::instance()->workingDir().filePath(
+        QStringLiteral("image-generation-attempts"));
+    if (!QDir().mkpath(attemptsDir)) {
+        *lastError = QStringLiteral("cannot create image generation diagnostics directory");
+        co_return RasterAttemptResult::TransientFailure;
+    }
+    QTemporaryDir tempDir(attemptsDir + QStringLiteral("/attempt-XXXXXX"));
     if (!tempDir.isValid()) {
         *lastError = QStringLiteral("could not create temp dir");
-        co_return RasterAttemptResult::RetryableFailure;
+        co_return RasterAttemptResult::TransientFailure;
     }
+    tempDir.setAutoRemove(false);
+    *out << QStringLiteral("[S%1] Raster artifacts for %2: %3\n")
+                .arg(QString::number(sNum), ref.fileName, tempDir.path());
+    out->flush();
 
     // The AI is expected to have given a non-.svg fileName already (callers
     // filter .svg refs out before reaching this function) — normalize just in
@@ -457,50 +504,92 @@ static QCoro::Task<RasterAttemptResult> runOneRasterAttempt(
     if (!validExts.contains(ext)) {
         ext = QStringLiteral("png");
     }
-    const QString outputPath = tempDir.path() + QStringLiteral("/output.") + ext;
+    const QString outputPath = *reviewPending
+        ? *previousCandidate : tempDir.path() + QStringLiteral("/output.") + ext;
 
-    QString prompt = queue->buildRasterImagePrompt(ref, articleText, lang, outputPath);
-    if (!reviewFeedback.isEmpty()) {
-        prompt += QStringLiteral(
-            "\n\nA previous attempt at this image failed review for this reason: %1\n"
-            "Fix this specific issue in the new image.").arg(reviewFeedback);
-    }
-    const QString prepared = cli->preparePrompt(prompt);
+    if (!*reviewPending) {
+        QString prompt = queue->buildRasterImagePrompt(ref, articleText, lang, outputPath);
+        if (dynamic_cast<CliAntigravity *>(cli) != nullptr
+            && !reviewFeedback.isEmpty() && !previousCandidate->isEmpty()) {
+            prompt += QStringLiteral(
+                "\nUse this previous native image as an ACTUAL reference-image input to "
+                "generate_image: %1\nEdit it to fix the review discrepancies below. "
+                "Preserve correct subjects, garments, colors, composition and lighting. "
+                "Save the edited result to the NEW output path above; never overwrite "
+                "the reference image.\n").arg(*previousCandidate);
+        }
+        if (!reviewFeedback.isEmpty()) {
+            prompt += QStringLiteral(
+                "\n\nA previous attempt at this image failed review for this reason: %1\n"
+                "Fix this specific issue in the new image.").arg(reviewFeedback);
+        }
+        const bool antigravity = dynamic_cast<CliAntigravity *>(cli) != nullptr;
+        const bool referenceEdit = antigravity && !reviewFeedback.isEmpty()
+            && !previousCandidate->isEmpty();
+        // The normal Antigravity preamble forbids viewing existing images.
+        // A corrective edit must first load its reference into vision context.
+        QString prepared = referenceEdit ? prompt : cli->preparePrompt(prompt);
+        if (referenceEdit) {
+            prepared.prepend(QStringLiteral(
+                "First use view_file on ONLY the specified previous image, then use "
+                "native generate_image to edit that reference. Do not merely recreate "
+                "the outfit from text.\n\n"));
+        }
+        if (dynamic_cast<CliAntigravity *>(cli) != nullptr) {
+            prepared.prepend(QStringLiteral(
+                "Use ONLY native generate_image. Never substitute Python/Pillow, SVG, "
+                "procedural drawing, image downloads, Pollinations or another service. "
+                "If the tool fails, STOP and report its exact error, including quota/auth details. "
+                "Never create a placeholder. After native generation succeeds, copying or converting "
+                "its output to the requested path is permitted. "
+                "Preserve EVERY requirement when composing the native tool's prompt: "
+                "exact garment colors/materials, accessories, framing and subject count. "
+                "A specified person count applies to the ENTIRE frame, including background "
+                "bystanders, silhouettes and reflections. Explicitly request a background "
+                "empty of other people when no additional people are allowed. "
+                "If a graphic garment is required alongside a no-text/no-logo rule, "
+                "use a visible non-lettering abstract graphic, not a plain garment. "
+                "Background storefronts must have blank, unbranded signage.\n\n"));
+        }
 
-    *out << QStringLiteral("[S%1] Generating raster image: %2...\n").arg(sNum).arg(ref.fileName);
-    out->flush();
-
-    const QString genResponse = co_await runBoundedClaudePrompt(
-        prepared, cli, kRasterImageTimeoutMs, tempDir.path() + QStringLiteral("/gen"));
-
-    const CliCallOutcome genOutcome = classifyCliResponse(genResponse, cli);
-    if (genOutcome == CliCallOutcome::QuotaOrAuth) {
-        *lastError = genResponse;
-        co_return RasterAttemptResult::QuotaOrAuthPause;
-    }
-    if (genOutcome == CliCallOutcome::Transient) {
-        *lastError = genResponse;
-        *out << QStringLiteral("[S%1] WARN (raster gen, transient — no attempt spent): %2 — %3\n")
-                    .arg(sNum).arg(ref.fileName, genResponse);
+        *out << QStringLiteral("[S%1] Generating raster image: %2...\n").arg(sNum).arg(ref.fileName);
         out->flush();
-        co_return RasterAttemptResult::TransientFailure;
-    }
-    if (genResponse.startsWith(QStringLiteral("__ERROR__"))) {
-        *lastError = genResponse;
-        *out << QStringLiteral("[S%1] WARN (raster gen): %2 — %3\n")
-                    .arg(sNum).arg(ref.fileName, genResponse);
-        out->flush();
-        co_return RasterAttemptResult::RetryableFailure;
+
+        const QString genResponse = co_await runBoundedClaudePrompt(
+            prepared, cli, kRasterImageTimeoutMs, tempDir.path() + QStringLiteral("/gen"));
+
+        const CliCallOutcome genOutcome = classifyCliResponse(genResponse, cli);
+        if (genOutcome == CliCallOutcome::QuotaOrAuth) {
+            *lastError = genResponse;
+            co_return RasterAttemptResult::QuotaOrAuthPause;
+        }
+        if (genOutcome == CliCallOutcome::Transient) {
+            *lastError = genResponse;
+            *out << QStringLiteral("[S%1] WARN (raster gen, transient — no attempt spent): %2 — %3\n")
+                        .arg(sNum).arg(ref.fileName, genResponse);
+            out->flush();
+            co_return RasterAttemptResult::TransientFailure;
+        }
+        if (genResponse.startsWith(QStringLiteral("__ERROR__"))) {
+            *lastError = genResponse;
+            *out << QStringLiteral("[S%1] WARN (raster gen): %2 — %3\n")
+                        .arg(sNum).arg(ref.fileName, genResponse);
+            out->flush();
+            co_return RasterAttemptResult::RetryableFailure;
+        }
     }
 
     QImage image(outputPath);
     if (image.isNull()) {
+        *reviewPending = false;
         *lastError = QStringLiteral("no valid image file produced at the expected path");
         *out << QStringLiteral("[S%1] WARN (raster gen): %2 — %3\n")
                     .arg(sNum).arg(ref.fileName, *lastError);
         out->flush();
         co_return RasterAttemptResult::RetryableFailure;
     }
+    *previousCandidate = outputPath;
+    *reviewPending = true;
 
     *out << QStringLiteral("[S%1] Reviewing raster image: %2...\n").arg(sNum).arg(ref.fileName);
     out->flush();
@@ -508,7 +597,7 @@ static QCoro::Task<RasterAttemptResult> runOneRasterAttempt(
         buildRasterImageReviewPrompt(outputPath, ref.alt, imageInstructions,
                                       GenPageQueue::extractRelevantSection(articleText, ref.id));
     const QString reviewResponse = co_await runBoundedClaudePrompt(
-        reviewPrompt, cli, kRasterImageTimeoutMs, tempDir.path() + QStringLiteral("/review"));
+        reviewPrompt, cli, kRasterImageTimeoutMs, tempDir.path() + QStringLiteral("/review"), outputPath);
 
     const CliCallOutcome reviewOutcome = classifyCliResponse(reviewResponse, cli);
     if (reviewOutcome == CliCallOutcome::QuotaOrAuth) {
@@ -525,18 +614,19 @@ static QCoro::Task<RasterAttemptResult> runOneRasterAttempt(
         co_return RasterAttemptResult::TransientFailure;
     }
     if (reviewResponse.startsWith(QStringLiteral("__ERROR__"))
-        || !reviewResponse.startsWith(QStringLiteral("OK"), Qt::CaseInsensitive)) {
+        || reviewResponse.trimmed().compare(QStringLiteral("OK"), Qt::CaseInsensitive) != 0) {
         *lastError = reviewResponse.startsWith(QStringLiteral("FAIL:"), Qt::CaseInsensitive)
                         ? reviewResponse.mid(5).trimmed()
                         : reviewResponse;
+        *reviewPending = false;
         *out << QStringLiteral("[S%1] WARN (raster review): %2 — %3\n")
                     .arg(sNum).arg(ref.fileName, *lastError);
         out->flush();
         co_return RasterAttemptResult::RetryableFailure;
     }
 
-    // image was loaded from a file inside tempDir, which is still alive here
-    // (destructs when this function returns) — safe to hand to ImageWriter now.
+    // Only a reviewed image is stored in the publishing database. Diagnostic
+    // candidates remain separate, including rejected or incomplete attempts.
     imageWriter.writeQImage(image, domain, ref.fileName);
     *out << QStringLiteral("[S%1] Raster image saved: %2\n").arg(sNum).arg(ref.fileName);
     out->flush();
@@ -551,7 +641,7 @@ static QCoro::Task<RasterAttemptResult> runOneRasterAttempt(
 // (via PageGenerator's publish-time gate) ever letting a page with unresolved
 // images go live.
 //
-// Returns false when a CLI usage-limit/auth error means the WHOLE session
+// Returns false when quota/auth or repeated infrastructure errors mean the session
 // should stop attempting further images/pages now — the caller must check
 // this and break out, exactly like the existing g_stopRequested convention.
 static QCoro::Task<bool> runRasterImageGeneration(
@@ -575,6 +665,8 @@ static QCoro::Task<bool> runRasterImageGeneration(
     }
 
     QString reviewFeedback;
+    QString previousCandidate;
+    bool reviewPending = false;
     // attempt is advanced only by CONTENT failures, so a timeout or a missing
     // CLI cannot walk an image to FailedFinal. transientTries is the separate,
     // smaller budget for those; exhausting it leaves the row Pending.
@@ -588,7 +680,7 @@ static QCoro::Task<bool> runRasterImageGeneration(
         QString lastError;
         const RasterAttemptResult outcome = co_await runOneRasterAttempt(
             ref, articleText, imageInstructions, lang, domain, reviewFeedback,
-            queue, cli, imageWriter, out, sNum, &lastError);
+            queue, cli, imageWriter, out, sNum, &previousCandidate, &reviewPending, &lastError);
 
         if (outcome == RasterAttemptResult::TransientFailure) {
             ++transientTries;
@@ -598,15 +690,17 @@ static QCoro::Task<bool> runRasterImageGeneration(
                 // an infrastructure problem.
                 *out << QStringLiteral(
                     "[S%1] Raster image deferred after %2 transient failure(s): %3 — "
-                    "stays pending for the next run (%4)\n")
-                    .arg(sNum).arg(kRasterMaxTransientRetries).arg(ref.fileName, lastError);
+                    "stays pending; pausing generation (%4)\n")
+                    .arg(sNum).arg(transientTries).arg(ref.fileName, lastError);
                 out->flush();
-                co_return true;
+                g_stopRequested = 1;
+                co_return false;
             }
             continue; // retry WITHOUT advancing attempt
         }
 
         if (outcome == RasterAttemptResult::QuotaOrAuthPause) {
+            g_stopRequested = 1; // stop other sessions too; preserve pending images
             *out << QStringLiteral(
                 "[S%1] Usage limit hit or auth required (%2) — pausing raster "
                 "image generation for %3; will resume on next run.\n")

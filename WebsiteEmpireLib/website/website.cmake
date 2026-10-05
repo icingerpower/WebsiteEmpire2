@@ -10,6 +10,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/sitemap/sitemap.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/taxonomy/taxonomy.cmake)
 
 set(WEBSITE_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/RasterCliProtocol.h
+    ${CMAKE_CURRENT_LIST_DIR}/RasterCliProtocol.cpp
     ${CMAKE_CURRENT_LIST_DIR}/WebCodeAdder.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractEngine.h
     ${CMAKE_CURRENT_LIST_DIR}/AbstractEngine.cpp
