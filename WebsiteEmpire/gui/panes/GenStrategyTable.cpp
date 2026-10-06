@@ -29,9 +29,9 @@ static const QString JSON_KEY_PRIORITY             = QStringLiteral("priority");
 static const QString JSON_KEY_N_DONE               = QStringLiteral("nDone");
 static const QString JSON_KEY_N_TOTAL              = QStringLiteral("nTotal");
 
-GenStrategyTable::GenStrategyTable(const QDir &workingDir, QObject *parent)
+GenStrategyTable::GenStrategyTable(const QDir &workingDir, QObject *parent, const QString &fileName)
     : QAbstractTableModel(parent)
-    , m_filePath(workingDir.absoluteFilePath(QStringLiteral("strategies.json")))
+    , m_filePath(workingDir.absoluteFilePath(fileName))
 {
     _load();
 }

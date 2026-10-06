@@ -37,7 +37,8 @@ public:
      * Injects the page permalink and working directory.
      * Declared const so the page type's const addCode() override can call it.
      */
-    void setRenderContext(const QString &permalink, const QDir &workingDir) const;
+    void setRenderContext(const QString &permalink, const QDir &workingDir,
+                          bool showHeading = true) const;
 
     /**
      * Queries PageAttributesHealthCondition.db and returns the number of
@@ -122,6 +123,7 @@ private:
     mutable CommonBlocPageLabels m_pageLabels;
     mutable QDir    m_workingDir;
     mutable bool    m_contextBound = false;
+    mutable bool    m_showHeading = true;
     mutable QString m_lastRenderedDisplayName;
 };
 

@@ -5,7 +5,7 @@
 #include "website/pages/blocs/PageBlocConditionList.h"
 #include "website/pages/blocs/PageBlocMeta.h"
 #include "website/pages/blocs/PageBlocSocial.h"
-#include "website/pages/blocs/PageBlocText.h"
+#include "website/pages/blocs/PageBlocTaxonomyArticle.h"
 
 /**
  * One page per symptom, auto-generated from the aspire database.
@@ -99,7 +99,7 @@ protected:
     const PageBlocMeta &metaBloc() const { return m_metaBloc; }
 
 private:
-    PageBlocText                     m_textBloc;
+    PageBlocTaxonomyArticle          m_textBloc;
     PageBlocConditionList            m_conditionListBloc;
     PageBlocSocial                   m_socialTextBloc;
     PageBlocMeta                     m_metaBloc;

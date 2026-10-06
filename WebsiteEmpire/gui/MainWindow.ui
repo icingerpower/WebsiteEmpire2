@@ -45,6 +45,11 @@
         <string>Taxonomies</string>
        </attribute>
       </widget>
+      <widget class="PanePageTaxonomy" name="tabPageTaxonomy">
+       <attribute name="title">
+        <string>Taxonomy pages</string>
+       </attribute>
+      </widget>
       <widget class="PaneGeneration" name="tabGeneration">
        <attribute name="title">
         <string>Generation</string>
@@ -87,6 +92,12 @@
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
  <customwidgets>
+  <customwidget>
+   <class>PanePageTaxonomy</class>
+   <extends>QWidget</extends>
+   <header>gui/panes/PanePageTaxonomy.h</header>
+   <container>1</container>
+  </customwidget>
   <customwidget>
    <class>PaneDomains</class>
    <extends>QWidget</extends>

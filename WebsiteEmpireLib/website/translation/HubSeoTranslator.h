@@ -43,6 +43,7 @@ public:
     struct TranslationJob {
         QString                  typeId;
         QString                  targetLang;
+        QString                  sourceLang; ///< source language of configured text
         QList<TranslatableField> fields; ///< one field per untranslated template key
     };
 

@@ -5,6 +5,7 @@
 #include "website/pages/blocs/PageBlocFashionHubGrid.h"
 #include "website/pages/blocs/PageBlocSocial.h"
 #include "website/pages/blocs/PageBlocSocialMedia.h"
+#include "website/pages/blocs/PageBlocTaxonomyArticle.h"
 
 class CategoryTable;
 
@@ -48,6 +49,7 @@ public:
     QString getDisplayName() const override;
 
     const QList<const AbstractPageBloc *> &getPageBlocs() const override;
+    QList<const AbstractPageBloc *> getRenderBlocs() const override;
 
     void bindGenerationContext(IPageRepository &repo, const QDir &workingDir) override;
 
@@ -86,6 +88,8 @@ protected:
     QString autoSeoDescription(const QString &langCode) const override;
 
 private:
+    // Append at index 3: existing persisted grid/social keys must never move.
+    PageBlocTaxonomyArticle          m_articleBloc;
     PageBlocFashionHubGrid           m_hubGridBloc;
     PageBlocSocial                   m_socialTextBloc;
     PageBlocSocialMedia              m_socialBloc;

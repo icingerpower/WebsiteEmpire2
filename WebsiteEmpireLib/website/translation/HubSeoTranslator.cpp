@@ -83,6 +83,8 @@ HubSeoTranslator::buildJobs(const QMap<QString, QMap<QString, QString>> &pageTyp
                 TranslationJob job;
                 job.typeId     = typeId;
                 job.targetLang = targetLang;
+                job.sourceLang = typeId.startsWith(QStringLiteral("taxonomy_closing_"))
+                    ? sourceLang : QStringLiteral("en");
                 job.fields     = std::move(fields);
                 jobs.append(job);
             }
@@ -134,13 +136,13 @@ void HubSeoTranslator::_processNextJob()
 
     // Prepend context about %N placeholders so Claude preserves them.
     const QString context =
-        QStringLiteral("Context: These are SEO template strings. "
+        QStringLiteral("Context: These are website text strings (SEO templates or closing paragraphs). "
                         "Keep all %1, %2, %3 Qt-style placeholders exactly as-is "
                         "in the translated output — they will be replaced at runtime "
                         "with dynamic values like names and counts.\n\n");
 
     const QString prompt = TranslationProtocol::buildPrompt(
-        m_currentJob.fields, QStringLiteral("en"), m_currentJob.targetLang);
+        m_currentJob.fields, m_currentJob.sourceLang, m_currentJob.targetLang);
 
     const QString fullPrompt = context + prompt;
 

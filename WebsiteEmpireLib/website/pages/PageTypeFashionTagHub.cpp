@@ -10,6 +10,7 @@ PageTypeFashionTagHub::PageTypeFashionTagHub(CategoryTable & /*categoryTable*/)
     m_blocs.append(&m_hubGridBloc);    // 0
     m_blocs.append(&m_socialTextBloc); // 1 — text metadata, first pass
     m_blocs.append(&m_socialBloc);     // 2 — image variants, second pass
+    m_blocs.append(&m_articleBloc);    // 3 — optional full taxonomy article
 }
 
 QString PageTypeFashionTagHub::getTypeId()      const { return QLatin1String(TYPE_ID); }
@@ -24,6 +25,7 @@ void PageTypeFashionTagHub::bindGenerationContext(IPageRepository &repo, const Q
 {
     AbstractPageType::bindGenerationContext(repo, workingDir);
     m_hubGridBloc.bindContext(repo, workingDir);
+    m_articleBloc.bindContext(workingDir, m_hubGridBloc.dimension());
 }
 
 // =============================================================================
@@ -149,3 +151,8 @@ QString PageTypeFashionTagHub::buildHeadMetaTags(const QString &baseUrl, const Q
 }
 
 DECLARE_PAGE_TYPE_AUTO_MANAGED(PageTypeFashionTagHub)
+
+QList<const AbstractPageBloc *> PageTypeFashionTagHub::getRenderBlocs() const
+{
+    return {&m_articleBloc, &m_hubGridBloc, &m_socialTextBloc, &m_socialBloc};
+}

@@ -30,6 +30,9 @@ int main(int argc, char *argv[])
     parser.setApplicationDescription(
         QCoreApplication::tr("WebsiteEmpire - website building tool"));
     parser.addHelpOption();
+    parser.addOption(QCommandLineOption(QStringLiteral("page-taxonomy"),
+        QCoreApplication::tr("Generate full articles for the selected taxonomy."),
+        QStringLiteral("taxonomy-id")));
 
     const QCommandLineOption workingDirOption(
         AbstractLauncher::OPTION_WORKING_DIR,

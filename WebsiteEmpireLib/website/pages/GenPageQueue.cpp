@@ -440,12 +440,15 @@ QString GenPageQueue::buildMetadataPrompt(const PageRecord &page,
     const QHash<QString, QString> &schema = _schema();
     const QHash<QString, QString> &clues  = _aiKeyClues();
 
-    // Build metadata-only schema: exclude all keys starting with "1_".
+    // Text and hub identity are authored outside the metadata call. Social
+    // metadata can live at index 1 on hub types, so do not exclude that index.
     // Substitute the AI hint as the value where one is available so Claude sees
     // field guidance inline (e.g. "Comma-separated IDs. Choose ONLY from: 1=X, 2=Y").
     QJsonObject metaSkeleton;
     for (auto it = schema.cbegin(); it != schema.cend(); ++it) {
-        if (!it.key().startsWith(QStringLiteral("1_"))) {
+        if (!it.key().endsWith(QStringLiteral("_text"))
+            && it.key() != QStringLiteral("0_dimension")
+            && it.key() != QStringLiteral("0_tag_value")) {
             metaSkeleton[it.key()] = clues.value(it.key(), it.value());
         }
     }
@@ -476,6 +479,10 @@ bool GenPageQueue::processContentAndMetadata(int              pageId,
 
     // Start with the full schema (all keys empty) and fill in what we have.
     QHash<QString, QString> data = _schema();
+    const auto existingData = pageRepo.loadData(pageId);
+    for (auto it = existingData.cbegin(); it != existingData.cend(); ++it) {
+        data[it.key()] = it.value();
+    }
 
     // 1_text: the article body from the content call, sanitized.
     // Step 1: remove inline <svg>…</svg> blocks Claude may have embedded.
@@ -530,14 +537,24 @@ bool GenPageQueue::processContentAndMetadata(int              pageId,
         return false;
     }
 
-    data[QStringLiteral("1_text")] = cleanText;
+    const QString textKey = m_pageTypeId == QStringLiteral("symptom_hub")
+        ? QStringLiteral("0_text")
+        : m_pageTypeId == QStringLiteral("fashion_tag_hub")
+            ? QStringLiteral("3_text") : QStringLiteral("1_text");
+    data[textKey] = cleanText;
+    if (m_pageTypeId == QStringLiteral("symptom_hub")
+        || m_pageTypeId == QStringLiteral("fashion_tag_hub")) {
+        data[QStringLiteral("_taxonomyArticle")] = QStringLiteral("1");
+    }
 
     // Metadata fields: parsed from the metadata JSON call.
     if (!metadataJson.isEmpty()) {
         const QHash<QString, QString> meta = _parseJson(metadataJson);
         for (auto it = meta.cbegin(); it != meta.cend(); ++it) {
             // Never overwrite 1_text with anything from the metadata call.
-            if (!it.key().startsWith(QStringLiteral("1_")) && data.contains(it.key())) {
+            if (it.key() != textKey && !it.key().endsWith(QStringLiteral("_text"))
+                && it.key() != QStringLiteral("0_dimension")
+                && it.key() != QStringLiteral("0_tag_value") && data.contains(it.key())) {
                 data[it.key()] = it.value();
             }
         }

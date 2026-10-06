@@ -8,6 +8,7 @@
 #include "panes/PanePages.h"
 #include "panes/PaneGeneratedPages.h"
 #include "panes/PaneTaxonomies.h"
+#include "panes/PanePageTaxonomy.h"
 #include "panes/PaneSettings.h"
 #include "panes/PaneTheme.h"
 #include "panes/PaneTranslations.h"
@@ -66,6 +67,7 @@ void MainWindow::_init()
     ui->tabPages->setup(workingDir, m_engine.data(), m_settingsTable.data());
     ui->tabGeneratedPages->setup(workingDir, m_engine.data(), m_settingsTable.data());
     ui->tabTaxonomies->setup(workingDir, m_engine.data());
+    ui->tabPageTaxonomy->setup(workingDir, m_engine.data(), m_settingsTable.data());
     ui->tabGeneration->setup(workingDir, m_engine.data(), m_settingsTable.data());
     ui->tabUpdate->setup(workingDir, m_engine.data(), m_settingsTable.data());
     ui->tabTheme->setTheme(m_theme.data());

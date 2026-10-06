@@ -18,7 +18,7 @@ class Test_Website_PageTypeFashionTagHub : public QObject
 private slots:
     void test_fashiontaghub_get_type_id();
     void test_fashiontaghub_get_display_name_non_empty();
-    void test_fashiontaghub_has_exactly_three_blocs();
+    void test_fashiontaghub_appends_article_without_moving_existing_blocs();
     void test_fashiontaghub_first_bloc_is_hub_grid();
     void test_fashiontaghub_registered_in_all_type_ids();
     void test_fashiontaghub_create_for_type_id_returns_instance();
@@ -45,12 +45,14 @@ void Test_Website_PageTypeFashionTagHub::test_fashiontaghub_get_display_name_non
     QVERIFY(!hub.getDisplayName().isEmpty());
 }
 
-void Test_Website_PageTypeFashionTagHub::test_fashiontaghub_has_exactly_three_blocs()
+void Test_Website_PageTypeFashionTagHub::test_fashiontaghub_appends_article_without_moving_existing_blocs()
 {
     QTemporaryDir dir;
     CategoryTable categoryTable{QDir(dir.path())};
     PageTypeFashionTagHub hub{categoryTable};
-    QCOMPARE(hub.getPageBlocs().size(), 3);
+    QCOMPARE(hub.getPageBlocs().size(), 4);
+    QVERIFY(dynamic_cast<const PageBlocText *>(hub.getPageBlocs().at(3)));
+    QCOMPARE(hub.getRenderBlocs().first(), hub.getPageBlocs().at(3));
 }
 
 void Test_Website_PageTypeFashionTagHub::test_fashiontaghub_first_bloc_is_hub_grid()

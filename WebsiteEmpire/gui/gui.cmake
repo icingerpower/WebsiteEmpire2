@@ -1,4 +1,7 @@
 set(GUI_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageTaxonomy.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageTaxonomy.h
+    ${CMAKE_CURRENT_LIST_DIR}/panes/PanePageTaxonomy.ui
     ${CMAKE_CURRENT_LIST_DIR}/MainWindow.cpp
     ${CMAKE_CURRENT_LIST_DIR}/MainWindow.h
     ${CMAKE_CURRENT_LIST_DIR}/MainWindow.ui

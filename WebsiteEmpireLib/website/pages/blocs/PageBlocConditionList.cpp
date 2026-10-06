@@ -17,12 +17,14 @@
 // =============================================================================
 
 void PageBlocConditionList::setRenderContext(const QString &permalink,
-                                              const QDir    &workingDir) const
+                                              const QDir    &workingDir,
+                                              bool showHeading) const
 {
     m_permalink    = permalink;
     m_workingDir   = workingDir;
     m_pageLabels.load(workingDir);
     m_contextBound = true;
+    m_showHeading = showHeading;
 }
 
 // =============================================================================
@@ -444,7 +446,7 @@ void PageBlocConditionList::addCode(QStringView,
             ".symptom-back-link:hover{text-decoration:underline}");
     }
 
-    if (!symptomDisplayName.isEmpty()) {
+    if (m_showHeading && !symptomDisplayName.isEmpty()) {
         html += QStringLiteral("<h1>");
         html += symptomDisplayName.toHtmlEscaped();
         html += QStringLiteral("</h1>");

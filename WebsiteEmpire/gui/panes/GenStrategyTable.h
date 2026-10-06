@@ -31,7 +31,8 @@ public:
     static constexpr int COL_N_DONE           = 7;
     static constexpr int COL_N_TOTAL          = 8;
 
-    explicit GenStrategyTable(const QDir &workingDir, QObject *parent = nullptr);
+    explicit GenStrategyTable(const QDir &workingDir, QObject *parent = nullptr,
+                              const QString &fileName = QStringLiteral("strategies.json"));
 
     // Appends a new fully-populated row, saves, and returns its stable id.
     // themeId may be empty to mean "all themes".

@@ -2,6 +2,7 @@
 
 #include "aspire/attributes/AbstractPageAttributes.h"
 #include "gui/panes/GenStrategyTable.h"
+#include "website/taxonomy/TaxonomyPageSettings.h"
 #include "website/AbstractEngine.h"
 #include "website/HostTable.h"
 #include "website/WebsiteSettingsTable.h"
@@ -786,7 +787,10 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
         // SocialMedia flag was set by --review or the UI, requesting the second
         // pass.  Skip content regeneration and run only the social-media second
         // pass.
-        if (page.id != 0) {
+        const bool taxonomyUpgrade = (page.typeId == QStringLiteral("symptom_hub")
+            || page.typeId == QStringLiteral("fashion_tag_hub"))
+            && page.generationState == PageGenerationState::Pending;
+        if (page.id != 0 && !taxonomyUpgrade) {
             const int     pageId = page.id;
             const QString domain = engine->data(
                 engine->index(websiteIndex, AbstractEngine::COL_DOMAIN)).toString();
@@ -798,7 +802,10 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
 
             // Load existing article text to find the SVG filename.
             const QHash<QString, QString> retryData = pageRepo.loadData(pageId);
-            const QString retryText = retryData.value(QStringLiteral("1_text"));
+            const QString retryText = retryData.value(
+                page.typeId == QStringLiteral("symptom_hub") ? QStringLiteral("0_text")
+                : page.typeId == QStringLiteral("fashion_tag_hub") ? QStringLiteral("3_text")
+                : QStringLiteral("1_text"));
             if (retryText.isEmpty()) {
                 *(state->out) << QStringLiteral("[S%1] SKIP retry (no 1_text): %2\n")
                                      .arg(sNum).arg(page.permalink);
@@ -1508,6 +1515,9 @@ void LauncherGeneration::run(const QString & /*value*/)
 
     // ---- Parse sub-options from raw args ----------------------------------
     const QStringList args = QCoreApplication::arguments();
+    const int taxonomyArg = args.indexOf(QStringLiteral("--page-taxonomy"));
+    const QString taxonomyId = taxonomyArg >= 0 && taxonomyArg + 1 < args.size()
+        ? args.at(taxonomyArg + 1) : QString{};
 
     int         numSessions      = 1;
     int         jobsLimit        = -1;
@@ -1557,6 +1567,9 @@ void LauncherGeneration::run(const QString & /*value*/)
     }
     // --new-only and --retry-only are flags (no value), check for presence separately.
     newOnly    = args.contains(QStringLiteral("--") + OPTION_NEW_ONLY);
+    if (!taxonomyId.isEmpty()) {
+        newOnly = true; // taxonomy articles have no image-repair strategy
+    }
     retryOnly  = args.contains(QStringLiteral("--") + OPTION_RETRY_ONLY);
 
     // Resolve CLI: fall back to the first registered CLI (CliClaude) when not specified.
@@ -1650,7 +1663,19 @@ void LauncherGeneration::run(const QString & /*value*/)
     out->flush();
 
     // ---- Strategy table and scheduler -------------------------------------
-    auto *strategyTable = new GenStrategyTable(workingDir, holder);
+    auto *strategyTable = new GenStrategyTable(workingDir, holder,
+        taxonomyId.isEmpty() ? QStringLiteral("strategies.json")
+                             : QStringLiteral("taxonomy_strategies.json"));
+    if (!taxonomyId.isEmpty()) {
+        strategyFilter = TaxonomyPageSettings(workingDir).strategyId(taxonomyId);
+        if (strategyTable->rowForId(strategyFilter) < 0) {
+            *out << QStringLiteral("ERROR: no strategy configured for taxonomy %1.\n").arg(taxonomyId);
+            holder->deleteLater();
+            QMetaObject::invokeMethod(QCoreApplication::instance(),
+                [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
+            return;
+        }
+    }
 
     // Use a temporary page DB for scheduling (read-only queries).
     PageDb           schedDb(workingDir);
@@ -2032,6 +2057,15 @@ void LauncherGeneration::run(const QString & /*value*/)
         }
 
         // ---- Housekeeping: advance MainImageReady without SocialMedia flag ----
+        if (!taxonomyId.isEmpty()) {
+            QList<PageRecord> pages = TaxonomyPageSettings(workingDir).pendingPages(
+                taxonomyId, editingLang, schedRepo);
+            if (jobsLimit >= 0 && pages.size() > jobsLimit) {
+                pages = pages.mid(0, jobsLimit);
+            }
+            info.pendingCountOverride = pages.size();
+            virtualPagesByStrategyId.insert(info.strategyId, pages);
+        }
         // Pages left in MainImageReady by an interrupted run or old pipeline
         // that did not set the SocialMedia flag should be promoted to Complete
         // so they are not stuck in the retry queue indefinitely.

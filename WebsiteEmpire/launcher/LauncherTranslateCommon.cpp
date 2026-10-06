@@ -7,6 +7,7 @@
 #include "website/pages/AbstractPageType.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/taxonomy/TaxonomyDb.h"
+#include "website/taxonomy/TaxonomyPageSettings.h"
 #include "website/taxonomy/TaxonomyTranslationFilter.h"
 #include "website/taxonomy/TaxonomyTranslator.h"
 #include "website/theme/AbstractTheme.h"
@@ -168,6 +169,10 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
         }
     }
 
+    const auto closingTemplates = TaxonomyPageSettings(workingDir).translationTemplates();
+    for (auto it = closingTemplates.cbegin(); it != closingTemplates.cend(); ++it) {
+        hubTemplates.insert(it.key(), it.value());
+    }
     auto *hubSeoTranslator = new HubSeoTranslator(workingDir, cli, holder);
     const QList<HubSeoTranslator::TranslationJob> hubJobs =
         hubSeoTranslator->buildJobs(hubTemplates, sourceLang, targetLangs);

@@ -1,4 +1,6 @@
 set(TAXONOMY_FILES
+    ${CMAKE_CURRENT_LIST_DIR}/TaxonomyPageSettings.h
+    ${CMAKE_CURRENT_LIST_DIR}/TaxonomyPageSettings.cpp
     ${CMAKE_CURRENT_LIST_DIR}/TaxonomyDescriptor.h
     ${CMAKE_CURRENT_LIST_DIR}/TaxonomyDb.h
     ${CMAKE_CURRENT_LIST_DIR}/TaxonomyDb.cpp

@@ -38,6 +38,7 @@ void PageTypeSymptomHub::bindGenerationContext(IPageRepository &repo,
                                                const QDir      &workingDir)
 {
     AbstractPageType::bindGenerationContext(repo, workingDir);
+    m_textBloc.bindContext(workingDir, QStringLiteral("symptoms"));
 }
 
 // =============================================================================
@@ -54,7 +55,8 @@ void PageTypeSymptomHub::addCode(QStringView     origContent,
                                   QSet<QString>  &jsDoneIds) const
 {
     // m_permalink is set by setGenerationContext() before addCode() is called.
-    m_conditionListBloc.setRenderContext(m_permalink, m_workingDir);
+    m_conditionListBloc.setRenderContext(m_permalink, m_workingDir,
+        !m_textBloc.text().startsWith(QStringLiteral("[TITLE level=\"1\"]")));
     AbstractPageType::addCode(origContent, engine, websiteIndex, html, css, js, cssDoneIds, jsDoneIds);
 }
 

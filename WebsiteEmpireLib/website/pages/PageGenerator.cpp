@@ -460,7 +460,10 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                 const QString hubSlug = r.permalink.startsWith(hubPrefix)
                     ? r.permalink.mid(hubPrefix.length())
                     : QString{};
-                if (hubSlug.isEmpty() || !articleSymptomSlugs.contains(hubSlug)) {
+                const auto hubData = m_pageRepo.loadData(r.id);
+                const bool hasArticle = hubData.value(QStringLiteral("_taxonomyArticle")) == QStringLiteral("1")
+                    && !hubData.value(QStringLiteral("0_text")).isEmpty();
+                if (hubSlug.isEmpty() || (!hasArticle && !articleSymptomSlugs.contains(hubSlug))) {
                     continue;
                 }
             }
@@ -504,6 +507,9 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                         }
                     }
                 } else if (r.typeId == QStringLiteral("symptom_hub")) {
+                    const auto hubData = m_pageRepo.loadData(r.id);
+                    const bool hasArticle = hubData.value(QStringLiteral("_taxonomyArticle")) == QStringLiteral("1")
+                        && !hubData.value(QStringLiteral("0_text")).isEmpty();
                     // Symptom hub pages render their condition list dynamically (no inline
                     // translation data required), but only mark a language available when
                     // at least one article with this symptom has been translated — prevents
@@ -513,7 +519,12 @@ int PageGenerator::generateAll(const QDir     &workingDir,
                         ? r.permalink.mid(hubPrefix.length())
                         : QString{};
                     for (const QString &lang : std::as_const(r.langCodesToTranslate)) {
-                        if (!hubSlug.isEmpty()
+                        if (hasArticle) {
+                            const QString key = QStringLiteral("0_tr:") + lang + QStringLiteral(":text");
+                            if (!hubData.value(key).isEmpty()) {
+                                availablePages[lang].insert(r.permalink);
+                            }
+                        } else if (!hubSlug.isEmpty()
                                 && translatedSymptomSlugs.value(lang).contains(hubSlug)) {
                             availablePages[lang].insert(r.permalink);
                         }

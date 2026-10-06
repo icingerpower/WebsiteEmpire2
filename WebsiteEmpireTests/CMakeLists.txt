@@ -59,6 +59,7 @@ add_empire_test(Test_Website_CategoryHub_DirtySet            test_category_hub_d
 add_empire_test(Test_Website_CategoryHub_Syncer              test_category_hub_syncer.cpp)
 add_empire_test(Test_Website_FashionTaxonomyHub_Syncer        test_fashion_taxonomy_hub_syncer.cpp)
 add_empire_test(Test_Website_PageTypeFashionTagHub            test_page_type_fashion_tag_hub.cpp)
+add_empire_test(Test_Website_TaxonomyPages                    test_taxonomy_pages.cpp)
 add_empire_test(Test_Website_PageBlocFashionHubGrid           test_page_bloc_fashion_hub_grid.cpp)
 add_empire_test(Test_Website_SocialMedia                     test_social_media.cpp)
 add_empire_test(Test_Website_ReviewAction                    test_website_review_action.cpp)
