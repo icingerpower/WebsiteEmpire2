@@ -20,6 +20,10 @@ private slots:
     void test_articlevalidator_hasmarkdownartifact_newline_token_detected();
     void test_articlevalidator_hasmarkdownartifact_newline_token_case_insensitive();
 
+    void test_articlevalidator_isvalid_rejects_markdown_links_data();
+    void test_articlevalidator_isvalid_rejects_markdown_links();
+    void test_articlevalidator_isvalid_accepts_shortcode_links();
+
     // --- isValid(): the exact real-world regression ---
     void test_articlevalidator_isvalid_rejects_healybio_osteoarthritis_regression();
 
@@ -69,6 +73,47 @@ void Test_Website_ArticleContentValidator::test_articlevalidator_hasmarkdownarti
 {
     const QString text = QStringLiteral("First line.[newline]Second line.");
     QVERIFY(ArticleContentValidator::hasMarkdownArtifact(text));
+}
+
+void Test_Website_ArticleContentValidator::test_articlevalidator_isvalid_rejects_markdown_links_data()
+{
+    QTest::addColumn<QString>("citation");
+    QTest::newRow("healybio-patellar-regression")
+        << QStringLiteral("A [systematic review in Sports Medicine confirms is the clinical gold standard]"
+                          "(https://pubmed.ncbi.nlm.nih.gov/23494258/) for restoring tendon capacity.");
+    QTest::newRow("http") << QStringLiteral("[Study](http://example.org/study)");
+    QTest::newRow("angle-brackets-and-title")
+        << QStringLiteral("[Study]( <https://example.org/study> \"Study title\")");
+    QTest::newRow("case-insensitive-scheme") << QStringLiteral("[Study](HTTPS://example.org/study)");
+    QTest::newRow("relative-path") << QStringLiteral("[Related condition](/conditions/knee)");
+    QTest::newRow("parent-path") << QStringLiteral("[Related condition](../conditions/knee)");
+    QTest::newRow("fragment") << QStringLiteral("[Treatment](#treatment)");
+    QTest::newRow("mailto") << QStringLiteral("[Contact](mailto:editor@example.org)");
+    QTest::newRow("missing-closing-parenthesis")
+        << QStringLiteral("[Study](https://example.org/study");
+    QTest::newRow("inside-shortcode")
+        << QStringLiteral("[BOLD]See [the study](https://example.org/study).[/BOLD]");
+}
+
+void Test_Website_ArticleContentValidator::test_articlevalidator_isvalid_rejects_markdown_links()
+{
+    QFETCH(QString, citation);
+    QString body = QStringLiteral("[TITLE level=\"1\"]A Complete Article[/TITLE]\n");
+    body += QString(2100, QLatin1Char('x'));
+    body += citation;
+    QVERIFY(!ArticleContentValidator::isValid(body));
+}
+
+void Test_Website_ArticleContentValidator::test_articlevalidator_isvalid_accepts_shortcode_links()
+{
+    QString body = QStringLiteral("[TITLE level=\"1\"]A Complete Article[/TITLE]\n");
+    body += QString(2100, QLatin1Char('x'));
+    body += QStringLiteral(
+        "[LINKFIX url=\"https://pubmed.ncbi.nlm.nih.gov/23494258/\"]the study[/LINKFIX]"
+        "[LINKTR url=\"/conditions/knee\"]related condition[/LINKTR]"
+        "[BOLD]Evidence[/BOLD](limited). [BOLD](Discuss with your doctor.)[/BOLD]"
+        "[BOLD](Note: benefits are uncertain.)[/BOLD]");
+    QVERIFY(ArticleContentValidator::isValid(body));
 }
 
 // =============================================================================

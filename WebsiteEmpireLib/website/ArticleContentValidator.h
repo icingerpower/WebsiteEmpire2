@@ -27,9 +27,12 @@ public:
 
     /**
      * Returns true when text contains a Markdown table (a row matching the
-     * "| --- | --- |" header-separator convention) or a literal "[NEWLINE]"
-     * placeholder token. Both are tell-tale signs that the AI wrote free-form
-     * Markdown instead of using the shortcode-only format this system
+     * "| --- | --- |" header-separator convention), a Markdown link with a
+     * scheme, absolute/relative path prefix or fragment destination, or a
+     * literal "[NEWLINE]" placeholder token. Links must use LINKFIX/LINKTR;
+     * Markdown links would otherwise render as literal text (as happened on
+     * the Healybio patellar tendinitis page). These indicate that the AI wrote
+     * free-form Markdown instead of using the shortcode-only format this system
      * renders — the pipe characters and literal token text leak straight
      * into the rendered HTML unescaped (see the Healybio osteoarthritis
      * article regression: Antigravity wrote a Markdown summary table with

@@ -16,6 +16,17 @@ bool ArticleContentValidator::hasMarkdownArtifact(const QString &text)
         return true;
     }
 
+    // The renderer expands LINKFIX/LINKTR, not [label](url). Detect URL-like
+    // destinations (including relative paths and anchors) without treating
+    // a shortcode followed by ordinary parenthetical prose as a link.
+    // Checking the prefix also rejects truncated links missing the final ')'.
+    static const QRegularExpression reMarkdownLink(
+        QStringLiteral(R"(\[[^\]\r\n]+\]\(\s*<?(?:[a-z][a-z0-9+.-]*://|mailto:|tel:|/|\.{1,2}/|#))"),
+        QRegularExpression::CaseInsensitiveOption);
+    if (reMarkdownLink.match(text).hasMatch()) {
+        return true;
+    }
+
     // Literal "[NEWLINE]" placeholder — some models emit this instead of an
     // actual newline character when forced to write multi-line content inside
     // a single Markdown table cell. It is not a known shortcode, so it would

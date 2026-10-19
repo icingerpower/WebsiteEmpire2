@@ -31,6 +31,8 @@ set(WEBSITE_FILES
     ${CMAKE_CURRENT_LIST_DIR}/WebsiteSettingsTable.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ArticleContentValidator.h
     ${CMAKE_CURRENT_LIST_DIR}/ArticleContentValidator.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ArticleLinkValidator.h
+    ${CMAKE_CURRENT_LIST_DIR}/ArticleLinkValidator.cpp
     ${SHORTCODES_FILES}
     ${PAGES_FILES}
     ${SOCIAL_FILES}
