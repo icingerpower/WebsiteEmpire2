@@ -14,6 +14,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QNetworkAccessManager>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSet>
@@ -25,6 +26,7 @@
 
 #include "aicli/AbstractCli.h"
 #include "website/ArticleContentValidator.h"
+#include "website/ArticleLinkValidator.h"
 
 const QString LauncherUpdate::OPTION_NAME     = QStringLiteral("update");
 const QString LauncherUpdate::OPTION_STRATEGY = QStringLiteral("strategy");
@@ -77,7 +79,53 @@ static bool isCommaSeparatedIntsValid(const QString &text)
 
 // Print a heartbeat line every 2 minutes while waiting for the Claude subprocess
 // so PaneUpdate's 25-minute inactivity timer does not fire on slow responses.
-static constexpr int kClaudeHeartbeatMs = 2 * 60 * 1000;
+static constexpr int kDefaultClaudeHeartbeatMs = 2 * 60 * 1000;
+// Hard ceiling: if the CLI subprocess produces no result after 60 minutes, it is
+// assumed stuck (e.g. hung network, deadlocked CLI process).
+static constexpr int kDefaultClaudeTimeoutMs   = 60 * 60 * 1000;
+
+static int s_claudeHeartbeatMs = kDefaultClaudeHeartbeatMs;
+static int s_claudeTimeoutMs   = kDefaultClaudeTimeoutMs;
+
+void LauncherUpdate::setSubprocessTimeoutMsForTest(int ms)
+{
+    s_claudeTimeoutMs = ms;
+}
+
+void LauncherUpdate::setHeartbeatMsForTest(int ms)
+{
+    s_claudeHeartbeatMs = ms;
+}
+
+void LauncherUpdate::resetTimeoutsForTest()
+{
+    s_claudeHeartbeatMs = kDefaultClaudeHeartbeatMs;
+    s_claudeTimeoutMs   = kDefaultClaudeTimeoutMs;
+}
+
+static QString cliModelDescriptor(const AbstractCli *cli)
+{
+    if (!cli) {
+        return QStringLiteral("CLI: Unknown");
+    }
+    const QString model = cli->getModel();
+    if (!model.isEmpty()) {
+        return QStringLiteral("CLI: %1, Model: %2").arg(cli->getName(), model);
+    }
+    return QStringLiteral("CLI: %1").arg(cli->getName());
+}
+
+static QString cliCallingDescriptor(const AbstractCli *cli)
+{
+    if (!cli) {
+        return QStringLiteral("unknown CLI");
+    }
+    const QString model = cli->getModel();
+    if (!model.isEmpty()) {
+        return QStringLiteral("%1 [Model: %2]").arg(cli->getName(), model);
+    }
+    return cli->getName();
+}
 
 static QString runUpdateClaudePrompt(const QString &prompt,
                                       AbstractCli   *cli,
@@ -117,14 +165,28 @@ static QString runUpdateClaudePrompt(const QString &prompt,
     // Poll in short intervals and emit a heartbeat so the parent GUI process
     // knows the subprocess is alive and does not trigger its inactivity timer.
     int elapsedMs = 0;
-    while (!process.waitForFinished(kClaudeHeartbeatMs)) {
+    while (!process.waitForFinished(s_claudeHeartbeatMs)) {
         if (process.state() == QProcess::NotRunning) {
             break;
         }
-        elapsedMs += kClaudeHeartbeatMs;
+        if (g_updateStopRequested) {
+            process.kill();
+            process.waitForFinished(5000);
+            return {};
+        }
+        elapsedMs += s_claudeHeartbeatMs;
         *out << QStringLiteral("  Still waiting for %1... (%2 min elapsed)\n")
-                    .arg(cli->getName()).arg(elapsedMs / 60000);
+                    .arg(cliCallingDescriptor(cli)).arg(elapsedMs / 60000);
         out->flush();
+
+        if (elapsedMs >= s_claudeTimeoutMs) {
+            *out << QStringLiteral("  Timed out waiting for %1 after %2 min. Killing process.\n")
+                        .arg(cliCallingDescriptor(cli)).arg(elapsedMs / 60000);
+            out->flush();
+            process.kill();
+            process.waitForFinished(5000);
+            return QStringLiteral("__TIMEOUT__");
+        }
     }
 
     if (process.error() == QProcess::FailedToStart) {
@@ -184,14 +246,28 @@ static QString runSvgClaudePrompt(const QString &prompt,
     process.waitForStarted(-1);
 
     int elapsedMs = 0;
-    while (!process.waitForFinished(kClaudeHeartbeatMs)) {
+    while (!process.waitForFinished(s_claudeHeartbeatMs)) {
         if (process.state() == QProcess::NotRunning) {
             break;
         }
-        elapsedMs += kClaudeHeartbeatMs;
+        if (g_updateStopRequested) {
+            process.kill();
+            process.waitForFinished(5000);
+            return {};
+        }
+        elapsedMs += s_claudeHeartbeatMs;
         *out << QStringLiteral("  Still waiting for %1... (%2 min elapsed)\n")
-                    .arg(cli->getName()).arg(elapsedMs / 60000);
+                    .arg(cliCallingDescriptor(cli)).arg(elapsedMs / 60000);
         out->flush();
+
+        if (elapsedMs >= s_claudeTimeoutMs) {
+            *out << QStringLiteral("  Timed out waiting for %1 after %2 min. Killing process.\n")
+                        .arg(cliCallingDescriptor(cli)).arg(elapsedMs / 60000);
+            out->flush();
+            process.kill();
+            process.waitForFinished(5000);
+            return QStringLiteral("__TIMEOUT__");
+        }
     }
 
     if (process.error() == QProcess::FailedToStart) {
@@ -364,6 +440,8 @@ static void runUpdateSession(const QString                          &pageTypeId,
 
     const int batchSize  = pages.size();
     const int batchStart = state->jobsCompleted;
+    QNetworkAccessManager linkNetwork;
+    ArticleLinkValidator linkValidator(linkNetwork);
 
     for (const PageRecord &page : std::as_const(pages)) {
         if (g_updateStopRequested) {
@@ -373,177 +451,566 @@ static void runUpdateSession(const QString                          &pageTypeId,
             break;
         }
 
-        *(state->out) << QStringLiteral("Updating %1 with prompt %2...\n")
-                             .arg(page.permalink, promptId);
-        state->out->flush();
+        static constexpr int kMaxTimeoutRestarts = 2;
+        int timeoutRestarts = 0;
+        bool pageFinished = false;
 
-        QHash<QString, QString> data = pageRepo.loadData(page.id);
-
-        const bool alreadyProcessedByThisPrompt =
-            !pageRepo.lastUpdateAttemptAt(page.id, promptId).isEmpty();
-        if (skipIfSet
-                && alreadyProcessedByThisPrompt
-                && !data.value(effectiveSaveKey).trimmed().isEmpty()) {
-            *(state->out) << QStringLiteral("SKIP %1: %2 already set.\n")
-                                 .arg(page.permalink, effectiveSaveKey);
-            state->out->flush();
-            continue;
-        }
-
-        const QString existingText = data.value(QStringLiteral("1_text"));
-        if (existingText.isEmpty()) {
-            *(state->out) << QStringLiteral("SKIP %1: no 1_text found.\n")
-                                 .arg(page.permalink);
-            state->out->flush();
-            continue;
-        }
-
-        static const int kMaxAttempts = 3;
-        QString result;
-        bool valid = false;
-
-        if (prompt.updateSvg) {
-            // SVG path: find [IMGFIX fileName="*.svg"] shortcodes, load the blob
-            // from images.db, ask Claude to regenerate, save back to images.db.
-            // Does NOT touch 1_text.
-            static const QRegularExpression reImgFix(
-                QStringLiteral("\\[IMGFIX\\b[^\\]]*fileName=\"([^\"]+\\.svg)\""),
-                QRegularExpression::CaseInsensitiveOption);
-            static const QRegularExpression reSvgStart(
-                QStringLiteral("\\A\\s*<svg\\b"),
-                QRegularExpression::CaseInsensitiveOption);
-
-            QStringList svgFilenames;
-            {
-                auto it = reImgFix.globalMatch(existingText);
-                while (it.hasNext()) {
-                    const QString fn = it.next().captured(1);
-                    if (!svgFilenames.contains(fn)) {
-                        svgFilenames.append(fn);
-                    }
-                }
+        while (!pageFinished && timeoutRestarts <= kMaxTimeoutRestarts) {
+            if (g_updateStopRequested) {
+                break;
             }
 
-            if (svgFilenames.isEmpty()) {
-                *(state->out) << QStringLiteral("SKIP %1: no [IMGFIX] SVG shortcode found.\n")
+            if (timeoutRestarts > 0) {
+                *(state->out) << QStringLiteral("Restarting update for %1 with prompt %2 [%3] (retry %4/%5 after timeout)...\n")
+                                     .arg(page.permalink, promptId, cliModelDescriptor(cli))
+                                     .arg(timeoutRestarts).arg(kMaxTimeoutRestarts);
+            } else {
+                *(state->out) << QStringLiteral("Updating %1 with prompt %2 [%3]...\n")
+                                     .arg(page.permalink, promptId, cliModelDescriptor(cli));
+            }
+            state->out->flush();
+
+            QHash<QString, QString> data = pageRepo.loadData(page.id);
+
+            const bool alreadyProcessedByThisPrompt =
+                !pageRepo.lastUpdateAttemptAt(page.id, promptId).isEmpty();
+            if (skipIfSet
+                    && alreadyProcessedByThisPrompt
+                    && !data.value(effectiveSaveKey).trimmed().isEmpty()) {
+                *(state->out) << QStringLiteral("SKIP %1: %2 already set.\n")
+                                     .arg(page.permalink, effectiveSaveKey);
+                state->out->flush();
+                pageFinished = true;
+                break;
+            }
+
+            const QString existingText = data.value(QStringLiteral("1_text"));
+            if (existingText.isEmpty()) {
+                *(state->out) << QStringLiteral("SKIP %1: no 1_text found.\n")
                                      .arg(page.permalink);
                 state->out->flush();
-                continue;
+                pageFinished = true;
+                break;
             }
 
-            const QString imgDbPath = workDir.filePath(QStringLiteral("images.db"));
-            bool allValid = true;
+            static const int kMaxAttempts = 3;
+            QString result;
+            bool valid = false;
+            bool timedOut = false;
 
-            for (const QString &svgFilename : std::as_const(svgFilenames)) {
-                if (g_updateStopRequested) {
-                    allValid = false;
-                    break;
-                }
+            if (prompt.updateSvg) {
+                // SVG path: find [IMGFIX fileName="*.svg"] shortcodes, load the blob
+                // from images.db, ask Claude to regenerate, save back to images.db.
+                // Does NOT touch 1_text.
+                static const QRegularExpression reImgFix(
+                    QStringLiteral("\\[IMGFIX\\b[^\\]]*fileName=\"([^\"]+\\.svg)\""),
+                    QRegularExpression::CaseInsensitiveOption);
+                static const QRegularExpression reSvgStart(
+                    QStringLiteral("\\A\\s*<svg\\b"),
+                    QRegularExpression::CaseInsensitiveOption);
 
-                // Load existing SVG blob from images.db.
-                QString existingSvg;
-                int imageId = -1;
-                const QString readConn = QStringLiteral("svg_read_") + svgFilename;
+                QStringList svgFilenames;
                 {
-                    QSqlDatabase imgDb = QSqlDatabase::addDatabase(
-                        QStringLiteral("QSQLITE"), readConn);
-                    imgDb.setDatabaseName(imgDbPath);
-                    if (imgDb.open()) {
-                        QSqlQuery q(imgDb);
-                        q.prepare(QStringLiteral(
-                            "SELECT b.id, b.blob FROM images b"
-                            " JOIN image_names n ON n.image_id = b.id"
-                            " WHERE n.filename = :fn LIMIT 1"));
-                        q.bindValue(QStringLiteral(":fn"), svgFilename);
-                        if (q.exec() && q.next()) {
-                            imageId     = q.value(0).toInt();
-                            existingSvg = QString::fromUtf8(q.value(1).toByteArray());
+                    auto it = reImgFix.globalMatch(existingText);
+                    while (it.hasNext()) {
+                        const QString fn = it.next().captured(1);
+                        if (!svgFilenames.contains(fn)) {
+                            svgFilenames.append(fn);
                         }
                     }
                 }
-                QSqlDatabase::removeDatabase(readConn);
 
-                // Choose the right preamble: "improve" when the SVG exists,
-                // "create" when it does not.  Using the improve preamble for a
-                // missing SVG tells Claude to "only modify <svg> elements" while
-                // simultaneously asking it to output a complete SVG — a
-                // contradiction that causes it to spin indefinitely.
-                const QString svgInstructions = existingSvg.isEmpty()
-                    ? QStringLiteral(
-                          "Your sole task is to create a new SVG image for this article. "
-                          "Do not modify any article text, headings, paragraphs, or shortcodes. "
-                          "Only produce the SVG image as described in the instructions below.\n\n")
-                      + instructions
-                    : QStringLiteral(
-                          "Your sole task is to produce an improved version of the SVG image shown below. "
-                          "Do not modify any article text, headings, paragraphs, or shortcodes — "
-                          "only produce the new SVG markup.\n\n")
-                      + instructions;
+                if (svgFilenames.isEmpty()) {
+                    *(state->out) << QStringLiteral("SKIP %1: no [IMGFIX] SVG shortcode found.\n")
+                                         .arg(page.permalink);
+                    state->out->flush();
+                    pageFinished = true;
+                    break;
+                }
 
-                // Send the full article so the model has complete context for the SVG
-                // content (the SVG may summarise any part of the article).  This is
-                // safe because runSvgClaudePrompt uses non-agentic mode — without
-                // --dangerously-skip-permissions the model outputs SVG text directly
-                // and cannot enter the coding loop that caused 30-minute runtimes.
-                const QString &articleForPrompt = existingText;
+                const QString imgDbPath = workDir.filePath(QStringLiteral("images.db"));
+                bool allValid = true;
 
-                // Build prompt: article excerpt/full + current SVG (if any) + instructions.
-                const QString svgPrompt =
-                    (page.permalink.isEmpty()
-                        ? QString{}
-                        : QStringLiteral("Page permalink: ") + page.permalink + QStringLiteral("\n\n"))
-                    + QStringLiteral("SVG filename to produce: ") + svgFilename + QStringLiteral("\n\n")
-                    + QStringLiteral("Article context:\n\n<article>\n")
-                    + articleForPrompt
-                    + QStringLiteral("\n</article>\n\n")
-                    + (existingSvg.isEmpty()
-                        ? QString{}
-                        : QStringLiteral("Current SVG (filename: ") + svgFilename
-                          + QStringLiteral("):\n\n<current_svg>\n") + existingSvg
-                          + QStringLiteral("\n</current_svg>\n\n"))
-                    + svgInstructions
-                    + QStringLiteral(
-                        "\n\nRespond with ONLY the raw SVG markup, starting with <svg and ending "
-                        "with </svg>. Do NOT write any code, do NOT use any tools or shell "
-                        "commands, do NOT explain anything. Your entire response must be the SVG "
-                        "markup and nothing else.");
+                for (const QString &svgFilename : std::as_const(svgFilenames)) {
+                    if (g_updateStopRequested || timedOut) {
+                        allValid = false;
+                        break;
+                    }
 
-                *(state->out) << QStringLiteral("  SVG prompt ready (%1 chars) for %2 — calling %3...\n")
-                                     .arg(svgPrompt.size()).arg(svgFilename, cli->getName());
+                    // Load existing SVG blob from images.db.
+                    QString existingSvg;
+                    int imageId = -1;
+                    const QString readConn = QStringLiteral("svg_read_") + svgFilename;
+                    {
+                        QSqlDatabase imgDb = QSqlDatabase::addDatabase(
+                            QStringLiteral("QSQLITE"), readConn);
+                        imgDb.setDatabaseName(imgDbPath);
+                        if (imgDb.open()) {
+                            QSqlQuery q(imgDb);
+                            q.prepare(QStringLiteral(
+                                "SELECT b.id, b.blob FROM images b"
+                                " JOIN image_names n ON n.image_id = b.id"
+                                " WHERE n.filename = :fn LIMIT 1"));
+                            q.bindValue(QStringLiteral(":fn"), svgFilename);
+                            if (q.exec() && q.next()) {
+                                imageId     = q.value(0).toInt();
+                                existingSvg = QString::fromUtf8(q.value(1).toByteArray());
+                            }
+                        }
+                    }
+                    QSqlDatabase::removeDatabase(readConn);
+
+                    // Choose the right preamble: "improve" when the SVG exists,
+                    // "create" when it does not.  Using the improve preamble for a
+                    // missing SVG tells Claude to "only modify <svg> elements" while
+                    // simultaneously asking it to output a complete SVG — a
+                    // contradiction that causes it to spin indefinitely.
+                    const QString svgInstructions = existingSvg.isEmpty()
+                        ? QStringLiteral(
+                              "Your sole task is to create a new SVG image for this article. "
+                              "Do not modify any article text, headings, paragraphs, or shortcodes. "
+                              "Only produce the SVG image as described in the instructions below.\n\n")
+                          + instructions
+                        : QStringLiteral(
+                              "Your sole task is to produce an improved version of the SVG image shown below. "
+                              "Do not modify any article text, headings, paragraphs, or shortcodes — "
+                              "only produce the new SVG markup.\n\n")
+                          + instructions;
+
+                    // Send the full article so the model has complete context for the SVG
+                    // content (the SVG may summarise any part of the article).  This is
+                    // safe because runSvgClaudePrompt uses non-agentic mode — without
+                    // --dangerously-skip-permissions the model outputs SVG text directly
+                    // and cannot enter the coding loop that caused 30-minute runtimes.
+                    const QString &articleForPrompt = existingText;
+
+                    // Build prompt: article excerpt/full + current SVG (if any) + instructions.
+                    const QString svgPrompt =
+                        (page.permalink.isEmpty()
+                            ? QString{}
+                            : QStringLiteral("Page permalink: ") + page.permalink + QStringLiteral("\n\n"))
+                        + QStringLiteral("SVG filename to produce: ") + svgFilename + QStringLiteral("\n\n")
+                        + QStringLiteral("Article context:\n\n<article>\n")
+                        + articleForPrompt
+                        + QStringLiteral("\n</article>\n\n")
+                        + (existingSvg.isEmpty()
+                            ? QString{}
+                            : QStringLiteral("Current SVG (filename: ") + svgFilename
+                              + QStringLiteral("):\n\n<current_svg>\n") + existingSvg
+                              + QStringLiteral("\n</current_svg>\n\n"))
+                        + svgInstructions
+                        + QStringLiteral(
+                            "\n\nRespond with ONLY the raw SVG markup, starting with <svg and ending "
+                            "with </svg>. Do NOT write any code, do NOT use any tools or shell "
+                            "commands, do NOT explain anything. Your entire response must be the SVG "
+                            "markup and nothing else.");
+
+                    *(state->out) << QStringLiteral("  SVG prompt ready (%1 chars) for %2 — calling %3...\n")
+                                         .arg(svgPrompt.size()).arg(svgFilename, cliCallingDescriptor(cli));
+                    state->out->flush();
+
+                    QString svgResult;
+                    bool    svgValid        = false;
+                    QString reviewerFeedback;
+
+                    for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
+                        if (g_updateStopRequested) {
+                            break;
+                        }
+
+                        QString attemptPrompt;
+                        if (attempt == 1) {
+                            attemptPrompt = svgPrompt;
+                        } else if (!reviewerFeedback.isEmpty()) {
+                            attemptPrompt =
+                                QStringLiteral(
+                                    "Your previous SVG was reviewed and rejected.\n"
+                                    "Reviewer feedback: ")
+                                + reviewerFeedback
+                                + QStringLiteral("\n\nPlease generate a corrected SVG.\n\n")
+                                + svgPrompt;
+                        } else {
+                            attemptPrompt =
+                                QStringLiteral(
+                                    "Your previous response was invalid. "
+                                    "It must start with <svg and end with </svg>.\n"
+                                    "Previous response started with: \"%1\"\n\n"
+                                    "Please try again.\n\n")
+                                .arg(svgResult.left(200))
+                                + svgPrompt;
+                        }
+
+                        const QString raw = runSvgClaudePrompt(attemptPrompt, cli, state->out);
+                        if (raw == QStringLiteral("__TIMEOUT__")) {
+                            timedOut = true;
+                            break;
+                        }
+                        if (raw.startsWith(QStringLiteral("__ERROR__"))) {
+                            *(state->out) << QStringLiteral("  FAIL (attempt %1): %2\n")
+                                                 .arg(attempt).arg(raw);
+                            state->out->flush();
+                            break;
+                        }
+
+                        svgResult = raw.trimmed();
+                        if (!reSvgStart.match(svgResult).hasMatch()
+                                || !svgResult.endsWith(QStringLiteral("</svg>"),
+                                                        Qt::CaseInsensitive)) {
+                            reviewerFeedback.clear();
+                            *(state->out) << QStringLiteral(
+                                                 "  WARN (attempt %1/%2): not a valid SVG — starts with: %3\n")
+                                                 .arg(attempt).arg(kMaxAttempts).arg(svgResult.left(120));
+                            state->out->flush();
+                            continue;
+                        }
+
+                        // Fast programmatic check: require a minimum number of non-empty
+                        // <text> elements before spending an LLM call on the reviewer.
+                        if (!hasSufficientSvgContent(svgResult)) {
+                            reviewerFeedback = QStringLiteral(
+                                "The SVG has too few text elements with actual content — "
+                                "the data rows appear empty. Fill in every row with the "
+                                "real names, values, and descriptions from the article.");
+                            *(state->out) << QStringLiteral(
+                                                 "  WARN (attempt %1/%2): SVG content check failed"
+                                                 " — too few populated <text> elements\n")
+                                                 .arg(attempt).arg(kMaxAttempts);
+                            state->out->flush();
+                            continue;
+                        }
+
+                        // Programmatic check passed — run the LLM reviewer for deeper
+                        // content accuracy and instruction compliance.
+                        *(state->out) << QStringLiteral("  Reviewing SVG (attempt %1)...\n").arg(attempt);
+                        state->out->flush();
+
+                        const QString review = runSvgReview(
+                            svgResult, articleForPrompt, svgInstructions, cli, state->out);
+
+                        if (review == QStringLiteral("__TIMEOUT__")) {
+                            timedOut = true;
+                            break;
+                        }
+
+                        if (review.startsWith(QStringLiteral("OK"), Qt::CaseInsensitive)) {
+                            svgValid = true;
+                            break;
+                        }
+
+                        reviewerFeedback = review.startsWith(QStringLiteral("FAIL:"),
+                                                              Qt::CaseInsensitive)
+                            ? review.mid(5).trimmed()
+                            : review.trimmed();
+
+                        *(state->out) << QStringLiteral(
+                                             "  WARN (attempt %1/%2): reviewer rejected — %3\n")
+                                             .arg(attempt).arg(kMaxAttempts)
+                                             .arg(reviewerFeedback.left(200));
+                        state->out->flush();
+                    }
+
+                    if (timedOut || !svgValid) {
+                        allValid = false;
+                        break;
+                    }
+
+                    // Save updated SVG blob to images.db.
+                    bool saved = false;
+                    const QString writeConn = QStringLiteral("svg_write_") + svgFilename;
+                    {
+                        QSqlDatabase imgDb = QSqlDatabase::addDatabase(
+                            QStringLiteral("QSQLITE"), writeConn);
+                        imgDb.setDatabaseName(imgDbPath);
+                        if (imgDb.open()) {
+                            QSqlQuery q(imgDb);
+                            if (imageId >= 0) {
+                                q.prepare(QStringLiteral(
+                                    "UPDATE images SET blob = :blob WHERE id = :id"));
+                                q.bindValue(QStringLiteral(":blob"), svgResult.toUtf8());
+                                q.bindValue(QStringLiteral(":id"),   imageId);
+                                saved = q.exec();
+                            } else {
+                                // New image: include both NOT NULL columns.
+                                q.prepare(QStringLiteral(
+                                    "INSERT INTO images (blob, mime_type)"
+                                    " VALUES (:blob, 'image/svg+xml')"));
+                                q.bindValue(QStringLiteral(":blob"), svgResult.toUtf8());
+                                if (q.exec()) {
+                                    // Update outer imageId so the invalidation step can protect
+                                    // this newly created row.
+                                    imageId = q.lastInsertId().toInt();
+                                    QSqlQuery q2(imgDb);
+                                    // domain='' marks a canonical (non-translated) entry.
+                                    q2.prepare(QStringLiteral(
+                                        "INSERT OR IGNORE INTO image_names (domain, filename, image_id)"
+                                        " VALUES ('', :fn, :id)"));
+                                    q2.bindValue(QStringLiteral(":fn"), svgFilename);
+                                    q2.bindValue(QStringLiteral(":id"), imageId);
+                                    saved = q2.exec();
+                                }
+                            }
+                            if (!saved) {
+                                *(state->out) << QStringLiteral("  FAIL SVG save: %1\n")
+                                                     .arg(q.lastError().text());
+                                state->out->flush();
+                            }
+                        } else {
+                            *(state->out) << QStringLiteral("  FAIL SVG save: cannot open images.db\n");
+                            state->out->flush();
+                        }
+                    }
+                    QSqlDatabase::removeDatabase(writeConn);
+
+                    if (!saved) {
+                        allValid = false;
+                        break;
+                    }
+
+                    // Invalidate all other image_names rows for this filename (translated
+                    // variants stored under different image_ids) so PageTranslator
+                    // re-generates them.  We protect the row we just wrote by filtering on
+                    // image_id != imageId — domain != '' would delete every row because
+                    // image_names.domain is always a real hostname, never an empty string.
+                    {
+                        const QString invConn = QStringLiteral("svg_inv_") + svgFilename;
+                        {
+                            QSqlDatabase invDb = QSqlDatabase::addDatabase(
+                                QStringLiteral("QSQLITE"), invConn);
+                            invDb.setDatabaseName(imgDbPath);
+                            if (invDb.open()) {
+                                QSqlQuery qInv(invDb);
+                                qInv.prepare(QStringLiteral(
+                                    "DELETE FROM image_names"
+                                    " WHERE filename = :fn AND image_id != :id"));
+                                qInv.bindValue(QStringLiteral(":fn"), svgFilename);
+                                qInv.bindValue(QStringLiteral(":id"), imageId);
+                                qInv.exec();
+
+                                // Register the SVG under every real hostname found in
+                                // images.db so the image server and generation pipeline
+                                // (which always query by real domain) can find it.
+                                // Must run after the DELETE so INSERT OR IGNORE is not
+                                // blocked by stale rows pointing to old image_ids.
+                                {
+                                    QSqlQuery qDomains(invDb);
+                                    if (qDomains.exec(QStringLiteral(
+                                            "SELECT DISTINCT domain"
+                                            " FROM image_names WHERE domain != ''"))) {
+                                        while (qDomains.next()) {
+                                            const QString dom = qDomains.value(0).toString();
+                                            QSqlQuery qReg(invDb);
+                                            qReg.prepare(QStringLiteral(
+                                                "INSERT OR IGNORE INTO image_names"
+                                                " (domain, filename, image_id)"
+                                                " VALUES (:domain, :fn, :id)"));
+                                            qReg.bindValue(QStringLiteral(":domain"), dom);
+                                            qReg.bindValue(QStringLiteral(":fn"),     svgFilename);
+                                            qReg.bindValue(QStringLiteral(":id"),     imageId);
+                                            qReg.exec();
+                                        }
+                                    }
+                                }
+
+                                QSqlQuery qOrph(invDb);
+                                qOrph.exec(QStringLiteral(
+                                    "DELETE FROM images"
+                                    " WHERE id NOT IN (SELECT image_id FROM image_names)"));
+                            }
+                        }
+                        QSqlDatabase::removeDatabase(invConn);
+                    }
+
+                    *(state->out) << QStringLiteral("  SVG saved: %1 (%2 chars)\n")
+                                         .arg(svgFilename).arg(svgResult.size());
+                    state->out->flush();
+                }
+
+                if (timedOut) {
+                    // Handled by timeout restart logic below
+                } else if (!allValid) {
+                    *(state->out) << QStringLiteral("FAIL %1: SVG update failed.\n")
+                                         .arg(page.permalink);
+                    state->out->flush();
+                    pageFinished = true;
+                    break;
+                } else {
+                    // SVG changed → social media image variants are stale; reset state so
+                    // the second pass re-runs, and clear per-language completion flags.
+                    pageRepo.setGenerationState(page.id, PageGenerationState::ContentReady);
+                    pageRepo.invalidateTranslationImages(page.id);
+
+                    // Record the attempt without touching 1_text.
+                    pageRepo.recordUpdateAttempt(page.id, promptId);
+                    ++state->jobsCompleted;
+                    {
+                        const int done      = state->jobsCompleted - batchStart;
+                        const int remaining = batchSize - done;
+                        *(state->out) << QStringLiteral("OK: %1 [%2] — %3/%4 done (%5 remaining)\n")
+                                             .arg(page.permalink, cliModelDescriptor(cli))
+                                             .arg(done).arg(batchSize).arg(remaining);
+                    }
+                    state->out->flush();
+                    pageFinished = true;
+                    break;
+                }
+            } else if (isTwoCall) {
+                // --- Call 1: analysis ---
+                QString call1Prompt;
+                if (!page.permalink.isEmpty()) {
+                    call1Prompt += QStringLiteral("Page permalink: ") + page.permalink
+                                 + QStringLiteral("\n\n");
+                }
+                call1Prompt += QStringLiteral(
+                        "Here is the current version of a web article:\n\n"
+                        "<article>\n")
+                    + existingText
+                    + QStringLiteral("\n</article>\n\n");
+                if (!aiKeyClue.isEmpty()) {
+                    call1Prompt += QStringLiteral("Vocabulary hint: ") + aiKeyClue + QStringLiteral("\n\n");
+                }
+                call1Prompt += instructions;
+
+                *(state->out) << QStringLiteral("  Call 1 (analysis, %1 chars) — calling %2...\n")
+                                     .arg(call1Prompt.size()).arg(cliCallingDescriptor(cli));
                 state->out->flush();
 
-                QString svgResult;
-                bool    svgValid        = false;
-                QString reviewerFeedback;
+                const QString analysis = runUpdateClaudePrompt(call1Prompt, cli, state->out);
 
+                if (analysis == QStringLiteral("__TIMEOUT__")) {
+                    timedOut = true;
+                } else if (analysis.startsWith(QStringLiteral("__ERROR__"))) {
+                    *(state->out) << QStringLiteral("  FAIL call 1: %1\n").arg(analysis);
+                    state->out->flush();
+                    pageFinished = true;
+                    break;
+                } else {
+                    // --- Call 2: format (up to kMaxAttempts) ---
+                    QString call2Base =
+                        QStringLiteral("Analysis result:\n") + analysis + QStringLiteral("\n\n");
+                    if (!aiKeyClue.isEmpty()) {
+                        call2Base += QStringLiteral("Vocabulary hint: ") + aiKeyClue + QStringLiteral("\n\n");
+                    }
+                    call2Base += formatPrompt;
+
+                    for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
+                        if (g_updateStopRequested) {
+                            break;
+                        }
+
+                        const QString attemptPrompt = (attempt == 1)
+                            ? call2Base
+                            : QStringLiteral(
+                                  "Your previous response was invalid: \"%1\"\n\n"
+                                  "Please try again.\n\n")
+                                  .arg(result.left(200))
+                              + call2Base;
+
+                        *(state->out) << QStringLiteral("  Call 2 attempt %1/%2 — calling %3...\n")
+                                             .arg(attempt).arg(kMaxAttempts).arg(cliCallingDescriptor(cli));
+                        state->out->flush();
+
+                        const QString raw = runUpdateClaudePrompt(attemptPrompt, cli, state->out);
+
+                        if (raw == QStringLiteral("__TIMEOUT__")) {
+                            timedOut = true;
+                            break;
+                        }
+                        if (raw.startsWith(QStringLiteral("__ERROR__"))) {
+                            *(state->out) << QStringLiteral("  FAIL call 2 (attempt %1): %2\n")
+                                                 .arg(attempt).arg(raw);
+                            state->out->flush();
+                            break;
+                        }
+
+                        result = raw;
+
+                        bool formatOk = false;
+                        if (validator == AbstractPageBloc::AiUpdateSpec::Validator::CommaSeparatedInts) {
+                            formatOk = isCommaSeparatedIntsValid(result);
+                        } else if (validator == AbstractPageBloc::AiUpdateSpec::Validator::CommaSeparatedVocabulary) {
+                            const QString trimmed = result.trimmed();
+                            if (trimmed.isEmpty()) {
+                                formatOk = true; // empty = no items, which is valid
+                            } else {
+                                const QStringList tokens = trimmed.split(QLatin1Char(','), Qt::SkipEmptyParts);
+                                formatOk = true;
+                                for (const QString &tok : tokens) {
+                                    if (!allowedValues.contains(tok.trimmed())) {
+                                        formatOk = false;
+                                        break;
+                                    }
+                                }
+                            }
+                        } else {
+                            formatOk = !result.trimmed().isEmpty();
+                        }
+
+                        if (formatOk) {
+                            valid = true;
+                            break;
+                        }
+
+                        *(state->out) << QStringLiteral("  WARN call 2 (attempt %1/%2): invalid — got: %3\n")
+                                             .arg(attempt).arg(kMaxAttempts).arg(result.left(120));
+                        state->out->flush();
+                    }
+                }
+            } else {
+                // --- Single call: article rewrite ---
+                const QString singlePrompt =
+                    QStringLiteral(
+                        "Here is the current version of a web article:\n\n"
+                        "<article>\n")
+                    + existingText
+                    + QStringLiteral(
+                        "\n</article>\n\n"
+                        "Please update the article according to these instructions:\n")
+                    + instructions
+                    + QStringLiteral(
+                        "\n\n"
+                        "Output ONLY the complete updated article, starting with "
+                        "[TITLE level=\"1\"] on the very first line. "
+                        "Do not include any explanation, preamble, or commentary — "
+                        "only the article itself. "
+                        "Keep using the existing shortcode format — never write raw "
+                        "HTML, Markdown tables (\"| col | col |\", \"| --- | --- |\"), "
+                        "\"**bold**\", or \"[NEWLINE]\"/similar placeholder tokens; "
+                        "there is no table shortcode, so any tabular content must be "
+                        "written as plain sentences instead. "
+                        "For external citations, open the source and verify its identity "
+                        "and support for the surrounding claim. A working URL alone is "
+                        "not evidence of relevance. Correct confirmed broken or unrelated "
+                        "references; do not invent URLs or remove citations merely to "
+                        "avoid checks. Use [LINKFIX url=\"URL\"]descriptive text[/LINKFIX] "
+                        "for citations. The application checks destinations before saving.");
+
+                *(state->out) << QStringLiteral("  Prompt ready (%1 chars) — calling %2...\n")
+                                     .arg(singlePrompt.size()).arg(cliCallingDescriptor(cli));
+                state->out->flush();
+
+                QString validationFeedback;
                 for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
                     if (g_updateStopRequested) {
                         break;
                     }
 
-                    QString attemptPrompt;
-                    if (attempt == 1) {
-                        attemptPrompt = svgPrompt;
-                    } else if (!reviewerFeedback.isEmpty()) {
-                        attemptPrompt =
-                            QStringLiteral(
-                                "Your previous SVG was reviewed and rejected.\n"
-                                "Reviewer feedback: ")
-                            + reviewerFeedback
-                            + QStringLiteral("\n\nPlease generate a corrected SVG.\n\n")
-                            + svgPrompt;
-                    } else {
-                        attemptPrompt =
-                            QStringLiteral(
-                                "Your previous response was invalid. "
-                                "It must start with <svg and end with </svg>.\n"
-                                "Previous response started with: \"%1\"\n\n"
-                                "Please try again.\n\n")
-                            .arg(svgResult.left(200))
-                            + svgPrompt;
-                    }
+                    const QString attemptPrompt = (attempt == 1)
+                        ? singlePrompt
+                        : validationFeedback + QStringLiteral(
+                              "Your previous response was invalid.\n"
+                              "It started with: \"%1\"\n\n"
+                              "A valid article must start with [TITLE level=\"1\"] "
+                              "on the very first line.\n\n"
+                              "Please write the COMPLETE updated article from the beginning.\n\n")
+                              .arg(result.left(200))
+                          + singlePrompt;
 
-                    const QString raw = runSvgClaudePrompt(attemptPrompt, cli, state->out);
+                    const QString raw = runUpdateClaudePrompt(attemptPrompt, cli, state->out);
+
+                    if (raw == QStringLiteral("__TIMEOUT__")) {
+                        timedOut = true;
+                        break;
+                    }
                     if (raw.startsWith(QStringLiteral("__ERROR__"))) {
                         *(state->out) << QStringLiteral("  FAIL (attempt %1): %2\n")
                                              .arg(attempt).arg(raw);
@@ -551,380 +1018,89 @@ static void runUpdateSession(const QString                          &pageTypeId,
                         break;
                     }
 
-                    svgResult = raw.trimmed();
-                    if (!reSvgStart.match(svgResult).hasMatch()
-                            || !svgResult.endsWith(QStringLiteral("</svg>"),
-                                                    Qt::CaseInsensitive)) {
-                        reviewerFeedback.clear();
-                        *(state->out) << QStringLiteral(
-                                             "  WARN (attempt %1/%2): not a valid SVG — starts with: %3\n")
-                                             .arg(attempt).arg(kMaxAttempts).arg(svgResult.left(120));
+                    result = raw;
+                    if (isUpdatedArticleValid(result)) {
+                        const auto links = linkValidator.check(result,
+                            []() { return g_updateStopRequested != 0; },
+                            [state](const QString &url) {
+                                *(state->out) << QObject::tr("  Checking link: %1\n").arg(url);
+                                state->out->flush();
+                            });
+                        for (const QString &warning : links.warnings) {
+                            *(state->out) << QObject::tr("  WARN unverified link: %1\n").arg(warning);
+                        }
                         state->out->flush();
-                        continue;
-                    }
-
-                    // Fast programmatic check: require a minimum number of non-empty
-                    // <text> elements before spending an LLM call on the reviewer.
-                    if (!hasSufficientSvgContent(svgResult)) {
-                        reviewerFeedback = QStringLiteral(
-                            "The SVG has too few text elements with actual content — "
-                            "the data rows appear empty. Fill in every row with the "
-                            "real names, values, and descriptions from the article.");
-                        *(state->out) << QStringLiteral(
-                                             "  WARN (attempt %1/%2): SVG content check failed"
-                                             " — too few populated <text> elements\n")
-                                             .arg(attempt).arg(kMaxAttempts);
-                        state->out->flush();
-                        continue;
-                    }
-
-                    // Programmatic check passed — run the LLM reviewer for deeper
-                    // content accuracy and instruction compliance.
-                    *(state->out) << QStringLiteral("  Reviewing SVG (attempt %1)...\n").arg(attempt);
-                    state->out->flush();
-
-                    const QString review = runSvgReview(
-                        svgResult, articleForPrompt, svgInstructions, cli, state->out);
-
-                    if (review.startsWith(QStringLiteral("OK"), Qt::CaseInsensitive)) {
-                        svgValid = true;
+                        if (links.cancelled) {
+                            break;
+                        }
+                        if (!links.accepted()) {
+                            validationFeedback = links.retryInstructions();
+                            *(state->out) << QObject::tr("  REJECT (attempt %1/%2): %3\n")
+                                .arg(attempt).arg(kMaxAttempts).arg(links.errors.join(QLatin1Char('\n')));
+                            state->out->flush();
+                            continue;
+                        }
+                        // Fix a known AI mistake: title starting with the raw
+                        // permalink slug instead of a human-readable topic name.
+                        // No-op when the title is clean.
+                        result = GenPageQueue::fixSlugTitle(result, page.permalink, page.endPermalink);
+                        valid = true;
                         break;
                     }
 
-                    reviewerFeedback = review.startsWith(QStringLiteral("FAIL:"),
-                                                          Qt::CaseInsensitive)
-                        ? review.mid(5).trimmed()
-                        : review.trimmed();
-
-                    *(state->out) << QStringLiteral(
-                                         "  WARN (attempt %1/%2): reviewer rejected — %3\n")
-                                         .arg(attempt).arg(kMaxAttempts)
-                                         .arg(reviewerFeedback.left(200));
+                    *(state->out) << QStringLiteral("  WARN (attempt %1/%2): invalid — starts with: %3\n")
+                                         .arg(attempt).arg(kMaxAttempts).arg(result.left(120));
                     state->out->flush();
                 }
-
-                if (!svgValid) {
-                    allValid = false;
-                    break;
-                }
-
-                // Save updated SVG blob to images.db.
-                bool saved = false;
-                const QString writeConn = QStringLiteral("svg_write_") + svgFilename;
-                {
-                    QSqlDatabase imgDb = QSqlDatabase::addDatabase(
-                        QStringLiteral("QSQLITE"), writeConn);
-                    imgDb.setDatabaseName(imgDbPath);
-                    if (imgDb.open()) {
-                        QSqlQuery q(imgDb);
-                        if (imageId >= 0) {
-                            q.prepare(QStringLiteral(
-                                "UPDATE images SET blob = :blob WHERE id = :id"));
-                            q.bindValue(QStringLiteral(":blob"), svgResult.toUtf8());
-                            q.bindValue(QStringLiteral(":id"),   imageId);
-                            saved = q.exec();
-                        } else {
-                            // New image: include both NOT NULL columns.
-                            q.prepare(QStringLiteral(
-                                "INSERT INTO images (blob, mime_type)"
-                                " VALUES (:blob, 'image/svg+xml')"));
-                            q.bindValue(QStringLiteral(":blob"), svgResult.toUtf8());
-                            if (q.exec()) {
-                                // Update outer imageId so the invalidation step can protect
-                                // this newly created row.
-                                imageId = q.lastInsertId().toInt();
-                                QSqlQuery q2(imgDb);
-                                // domain='' marks a canonical (non-translated) entry.
-                                q2.prepare(QStringLiteral(
-                                    "INSERT OR IGNORE INTO image_names (domain, filename, image_id)"
-                                    " VALUES ('', :fn, :id)"));
-                                q2.bindValue(QStringLiteral(":fn"), svgFilename);
-                                q2.bindValue(QStringLiteral(":id"), imageId);
-                                saved = q2.exec();
-                            }
-                        }
-                        if (!saved) {
-                            *(state->out) << QStringLiteral("  FAIL SVG save: %1\n")
-                                                 .arg(q.lastError().text());
-                            state->out->flush();
-                        }
-                    } else {
-                        *(state->out) << QStringLiteral("  FAIL SVG save: cannot open images.db\n");
-                        state->out->flush();
-                    }
-                }
-                QSqlDatabase::removeDatabase(writeConn);
-
-                if (!saved) {
-                    allValid = false;
-                    break;
-                }
-
-                // Invalidate all other image_names rows for this filename (translated
-                // variants stored under different image_ids) so PageTranslator
-                // re-generates them.  We protect the row we just wrote by filtering on
-                // image_id != imageId — domain != '' would delete every row because
-                // image_names.domain is always a real hostname, never an empty string.
-                {
-                    const QString invConn = QStringLiteral("svg_inv_") + svgFilename;
-                    {
-                        QSqlDatabase invDb = QSqlDatabase::addDatabase(
-                            QStringLiteral("QSQLITE"), invConn);
-                        invDb.setDatabaseName(imgDbPath);
-                        if (invDb.open()) {
-                            QSqlQuery qInv(invDb);
-                            qInv.prepare(QStringLiteral(
-                                "DELETE FROM image_names"
-                                " WHERE filename = :fn AND image_id != :id"));
-                            qInv.bindValue(QStringLiteral(":fn"), svgFilename);
-                            qInv.bindValue(QStringLiteral(":id"), imageId);
-                            qInv.exec();
-
-                            // Register the SVG under every real hostname found in
-                            // images.db so the image server and generation pipeline
-                            // (which always query by real domain) can find it.
-                            // Must run after the DELETE so INSERT OR IGNORE is not
-                            // blocked by stale rows pointing to old image_ids.
-                            {
-                                QSqlQuery qDomains(invDb);
-                                if (qDomains.exec(QStringLiteral(
-                                        "SELECT DISTINCT domain"
-                                        " FROM image_names WHERE domain != ''"))) {
-                                    while (qDomains.next()) {
-                                        const QString dom = qDomains.value(0).toString();
-                                        QSqlQuery qReg(invDb);
-                                        qReg.prepare(QStringLiteral(
-                                            "INSERT OR IGNORE INTO image_names"
-                                            " (domain, filename, image_id)"
-                                            " VALUES (:domain, :fn, :id)"));
-                                        qReg.bindValue(QStringLiteral(":domain"), dom);
-                                        qReg.bindValue(QStringLiteral(":fn"),     svgFilename);
-                                        qReg.bindValue(QStringLiteral(":id"),     imageId);
-                                        qReg.exec();
-                                    }
-                                }
-                            }
-
-                            QSqlQuery qOrph(invDb);
-                            qOrph.exec(QStringLiteral(
-                                "DELETE FROM images"
-                                " WHERE id NOT IN (SELECT image_id FROM image_names)"));
-                        }
-                    }
-                    QSqlDatabase::removeDatabase(invConn);
-                }
-
-                *(state->out) << QStringLiteral("  SVG saved: %1 (%2 chars)\n")
-                                     .arg(svgFilename).arg(svgResult.size());
-                state->out->flush();
             }
 
-            if (!allValid) {
-                *(state->out) << QStringLiteral("FAIL %1: SVG update failed.\n")
-                                     .arg(page.permalink);
-                state->out->flush();
-                continue;
+            if (timedOut) {
+                if (g_updateStopRequested) {
+                    break;
+                }
+                ++timeoutRestarts;
+                if (timeoutRestarts <= kMaxTimeoutRestarts) {
+                    *(state->out) << QStringLiteral("  Restarting page update for %1 (attempt %2/%3 after 60 min timeout)...\n")
+                                         .arg(page.permalink).arg(timeoutRestarts + 1).arg(kMaxTimeoutRestarts + 1);
+                    state->out->flush();
+                    continue;
+                } else {
+                    *(state->out) << QStringLiteral("FAIL %1: exceeded maximum timeout restarts (%2), skipping page.\n")
+                                         .arg(page.permalink).arg(kMaxTimeoutRestarts);
+                    state->out->flush();
+                    pageFinished = true;
+                    break;
+                }
             }
 
-            // SVG changed → social media image variants are stale; reset state so
-            // the second pass re-runs, and clear per-language completion flags.
-            pageRepo.setGenerationState(page.id, PageGenerationState::ContentReady);
-            pageRepo.invalidateTranslationImages(page.id);
+            if (g_updateStopRequested) {
+                break;
+            }
+            if (!valid) {
+                *(state->out) << QStringLiteral("FAIL %1: all %2 attempts invalid, skipping.\n")
+                                     .arg(page.permalink).arg(kMaxAttempts);
+                state->out->flush();
+                pageFinished = true;
+                break;
+            }
 
-            // Record the attempt without touching 1_text.
+            data.insert(effectiveSaveKey, result);
+            pageRepo.saveData(page.id, data);
             pageRepo.recordUpdateAttempt(page.id, promptId);
             ++state->jobsCompleted;
+
             {
                 const int done      = state->jobsCompleted - batchStart;
                 const int remaining = batchSize - done;
-                *(state->out) << QStringLiteral("OK: %1 — %2/%3 done (%4 remaining)\n")
-                                     .arg(page.permalink).arg(done).arg(batchSize).arg(remaining);
+                *(state->out) << QStringLiteral("OK: %1 [%2] — %3/%4 done (%5 remaining)\n")
+                                     .arg(page.permalink, cliModelDescriptor(cli))
+                                     .arg(done).arg(batchSize).arg(remaining);
             }
             state->out->flush();
-            continue;
-        } else if (isTwoCall) {
-            // --- Call 1: analysis ---
-            QString call1Prompt;
-            if (!page.permalink.isEmpty()) {
-                call1Prompt += QStringLiteral("Page permalink: ") + page.permalink
-                             + QStringLiteral("\n\n");
-            }
-            call1Prompt += QStringLiteral(
-                    "Here is the current version of a web article:\n\n"
-                    "<article>\n")
-                + existingText
-                + QStringLiteral("\n</article>\n\n");
-            if (!aiKeyClue.isEmpty()) {
-                call1Prompt += QStringLiteral("Vocabulary hint: ") + aiKeyClue + QStringLiteral("\n\n");
-            }
-            call1Prompt += instructions;
-
-            *(state->out) << QStringLiteral("  Call 1 (analysis, %1 chars) — calling %2...\n")
-                                 .arg(call1Prompt.size()).arg(cli->getName());
-            state->out->flush();
-
-            const QString analysis = runUpdateClaudePrompt(call1Prompt, cli, state->out);
-
-            if (analysis.startsWith(QStringLiteral("__ERROR__"))) {
-                *(state->out) << QStringLiteral("  FAIL call 1: %1\n").arg(analysis);
-                state->out->flush();
-                continue;
-            }
-
-            // --- Call 2: format (up to kMaxAttempts) ---
-            QString call2Base =
-                QStringLiteral("Analysis result:\n") + analysis + QStringLiteral("\n\n");
-            if (!aiKeyClue.isEmpty()) {
-                call2Base += QStringLiteral("Vocabulary hint: ") + aiKeyClue + QStringLiteral("\n\n");
-            }
-            call2Base += formatPrompt;
-
-            for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
-                if (g_updateStopRequested) {
-                    break;
-                }
-
-                const QString attemptPrompt = (attempt == 1)
-                    ? call2Base
-                    : QStringLiteral(
-                          "Your previous response was invalid: \"%1\"\n\n"
-                          "Please try again.\n\n")
-                          .arg(result.left(200))
-                      + call2Base;
-
-                *(state->out) << QStringLiteral("  Call 2 attempt %1/%2 — calling %3...\n")
-                                     .arg(attempt).arg(kMaxAttempts).arg(cli->getName());
-                state->out->flush();
-
-                const QString raw = runUpdateClaudePrompt(attemptPrompt, cli, state->out);
-
-                if (raw.startsWith(QStringLiteral("__ERROR__"))) {
-                    *(state->out) << QStringLiteral("  FAIL call 2 (attempt %1): %2\n")
-                                         .arg(attempt).arg(raw);
-                    state->out->flush();
-                    break;
-                }
-
-                result = raw;
-
-                bool formatOk = false;
-                if (validator == AbstractPageBloc::AiUpdateSpec::Validator::CommaSeparatedInts) {
-                    formatOk = isCommaSeparatedIntsValid(result);
-                } else if (validator == AbstractPageBloc::AiUpdateSpec::Validator::CommaSeparatedVocabulary) {
-                    const QString trimmed = result.trimmed();
-                    if (trimmed.isEmpty()) {
-                        formatOk = true; // empty = no items, which is valid
-                    } else {
-                        const QStringList tokens = trimmed.split(QLatin1Char(','), Qt::SkipEmptyParts);
-                        formatOk = true;
-                        for (const QString &tok : tokens) {
-                            if (!allowedValues.contains(tok.trimmed())) {
-                                formatOk = false;
-                                break;
-                            }
-                        }
-                    }
-                } else {
-                    formatOk = !result.trimmed().isEmpty();
-                }
-
-                if (formatOk) {
-                    valid = true;
-                    break;
-                }
-
-                *(state->out) << QStringLiteral("  WARN call 2 (attempt %1/%2): invalid — got: %3\n")
-                                     .arg(attempt).arg(kMaxAttempts).arg(result.left(120));
-                state->out->flush();
-            }
-        } else {
-            // --- Single call: article rewrite ---
-            const QString singlePrompt =
-                QStringLiteral(
-                    "Here is the current version of a web article:\n\n"
-                    "<article>\n")
-                + existingText
-                + QStringLiteral(
-                    "\n</article>\n\n"
-                    "Please update the article according to these instructions:\n")
-                + instructions
-                + QStringLiteral(
-                    "\n\n"
-                    "Output ONLY the complete updated article, starting with "
-                    "[TITLE level=\"1\"] on the very first line. "
-                    "Do not include any explanation, preamble, or commentary — "
-                    "only the article itself. "
-                    "Keep using the existing shortcode format — never write raw "
-                    "HTML, Markdown tables (\"| col | col |\", \"| --- | --- |\"), "
-                    "\"**bold**\", or \"[NEWLINE]\"/similar placeholder tokens; "
-                    "there is no table shortcode, so any tabular content must be "
-                    "written as plain sentences instead.");
-
-            *(state->out) << QStringLiteral("  Prompt ready (%1 chars) — calling %2...\n")
-                                 .arg(singlePrompt.size()).arg(cli->getName());
-            state->out->flush();
-
-            for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
-                if (g_updateStopRequested) {
-                    break;
-                }
-
-                const QString attemptPrompt = (attempt == 1)
-                    ? singlePrompt
-                    : QStringLiteral(
-                          "Your previous response was invalid.\n"
-                          "It started with: \"%1\"\n\n"
-                          "A valid article must start with [TITLE level=\"1\"] "
-                          "on the very first line.\n\n"
-                          "Please write the COMPLETE updated article from the beginning.\n\n")
-                          .arg(result.left(200))
-                      + singlePrompt;
-
-                const QString raw = runUpdateClaudePrompt(attemptPrompt, cli, state->out);
-
-                if (raw.startsWith(QStringLiteral("__ERROR__"))) {
-                    *(state->out) << QStringLiteral("  FAIL (attempt %1): %2\n")
-                                         .arg(attempt).arg(raw);
-                    state->out->flush();
-                    break;
-                }
-
-                result = raw;
-                if (isUpdatedArticleValid(result)) {
-                    // Fix a known AI mistake: title starting with the raw
-                    // permalink slug instead of a human-readable topic name.
-                    // No-op when the title is clean.
-                    result = GenPageQueue::fixSlugTitle(result, page.permalink, page.endPermalink);
-                    valid = true;
-                    break;
-                }
-
-                *(state->out) << QStringLiteral("  WARN (attempt %1/%2): invalid — starts with: %3\n")
-                                     .arg(attempt).arg(kMaxAttempts).arg(result.left(120));
-                state->out->flush();
-            }
-        }
-
-        if (!valid) {
-            *(state->out) << QStringLiteral("FAIL %1: all %2 attempts invalid, skipping.\n")
-                                 .arg(page.permalink).arg(kMaxAttempts);
-            state->out->flush();
-            continue;
-        }
-
-        data.insert(effectiveSaveKey, result);
-        pageRepo.saveData(page.id, data);
-        pageRepo.recordUpdateAttempt(page.id, promptId);
-        ++state->jobsCompleted;
-
-        {
-            const int done      = state->jobsCompleted - batchStart;
-            const int remaining = batchSize - done;
-            *(state->out) << QStringLiteral("OK: %1 — %2/%3 done (%4 remaining)\n")
-                                 .arg(page.permalink).arg(done).arg(batchSize).arg(remaining);
-        }
-        state->out->flush();
-    }
+            pageFinished = true;
+            break;
+        } // end while
+    } // end for page
 
     if (g_updateStopRequested) {
         *(state->out) << QStringLiteral("Stop requested — update session finished.\n");
@@ -952,7 +1128,6 @@ void LauncherUpdate::run(const QString & /*value*/)
     QString      promptFilter;
     int          jobsLimit = -1;
     QSet<int>    pageIdsFilter;
-    AbstractCli *cli       = nullptr;
 
     for (int i = 0; i < args.size() - 1; ++i) {
         const QString &arg = args.at(i);
@@ -975,25 +1150,16 @@ void LauncherUpdate::run(const QString & /*value*/)
                     pageIdsFilter.insert(id);
                 }
             }
-        } else if (arg == QStringLiteral("--") + AbstractLauncher::OPTION_CLI) {
-            const QString name = args.at(i + 1);
-            for (AbstractCli *c : AbstractCli::ALL_CLIS()) {
-                if (c->getName() == name) {
-                    cli = c;
-                    break;
-                }
-            }
         }
     }
 
-    if (!cli && !AbstractCli::ALL_CLIS().isEmpty()) {
-        cli = AbstractCli::ALL_CLIS().first();
-    }
+    QString cliError;
+    AbstractCli *cli = resolveCli(args, cliError);
     if (!cli) {
-        *out << QStringLiteral("ERROR: no AI CLI registered.\n");
+        *out << cliError << Qt::endl;
         out->flush();
         QMetaObject::invokeMethod(QCoreApplication::instance(),
-                                  &QCoreApplication::quit,
+                                  [] { QCoreApplication::exit(1); },
                                   Qt::QueuedConnection);
         return;
     }

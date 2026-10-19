@@ -27,6 +27,13 @@ endmacro()
 
 add_empire_test(Test_Website_PageBlocText              test_website_page_bloc_text.cpp)
 add_empire_test(Test_Website_ArticleLinkValidator       test_website_article_link_validator.cpp)
+add_empire_test(Test_Website_LauncherUpdate_Links       test_launcher_update_links.cpp)
+target_sources(Test_Website_LauncherUpdate_Links PRIVATE
+    ../WebsiteEmpire/launcher/LauncherUpdate.cpp
+    ../WebsiteEmpire/launcher/AbstractLauncher.cpp
+    ../WebsiteEmpire/gui/panes/UpdateStrategyTree.cpp
+    ../../common/workingdirectory/WorkingDirectoryManager.cpp)
+target_include_directories(Test_Website_LauncherUpdate_Links PRIVATE ../WebsiteEmpire)
 add_empire_test(Test_Website_PageBlocMeta              test_website_page_bloc_meta.cpp)
 add_empire_test(Test_Website_PageBlocCategory          test_website_page_bloc_category.cpp)
 add_empire_test(Test_Website_PageBlocCategoryLinks     test_website_page_bloc_category_links.cpp)

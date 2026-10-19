@@ -25,6 +25,10 @@
  *   2. Build update prompt: existing text + prompt instructions.
  *   3. Run the Claude CLI.
  *   4. Validate response (must start with [TITLE level="1"] and be ≥ 2000 chars).
+ *      For article rewrites, check external LINKFIX/LINKTR destinations before
+ *      saving. Confirmed dead/malformed links trigger CLI retries with URL-level
+ *      feedback; after three failures the existing article remains untouched.
+ *      Inconclusive network checks are visible warnings, not evidence of validity.
  *   5. Replace 1_text in the page_data map and call saveData().
  *   6. Call recordUpdateAttempt(pageId, promptId).
  */
@@ -36,6 +40,10 @@ public:
     static const QString OPTION_PROMPT;
     static const QString OPTION_LIMIT;
     static const QString OPTION_PAGES; ///< comma-separated page IDs to restrict the run
+
+    static void setSubprocessTimeoutMsForTest(int ms);
+    static void setHeartbeatMsForTest(int ms);
+    static void resetTimeoutsForTest();
 
     QString getOptionName() const override;
     bool    isFlag()        const override; // true — no value after --update
