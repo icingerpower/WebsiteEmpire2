@@ -1526,7 +1526,6 @@ void LauncherGeneration::run(const QString & /*value*/)
     QStringList customTopics; // non-empty = GUI "Custom topic" bypass (one entry per --topic)
     bool        newOnly          = false; // true = skip retry queue, only generate new articles
     bool        retryOnly        = false; // true = skip new items, only process retry queue
-    AbstractCli *cli             = nullptr;
 
     for (int i = 0; i < args.size() - 1; ++i) {
         const QString &arg = args.at(i);
@@ -1555,14 +1554,6 @@ void LauncherGeneration::run(const QString & /*value*/)
             if (!t.isEmpty()) {
                 customTopics.append(t);
             }
-        } else if (arg == QStringLiteral("--") + AbstractLauncher::OPTION_CLI) {
-            const QString name = args.at(i + 1);
-            for (AbstractCli *c : AbstractCli::ALL_CLIS()) {
-                if (c->getName() == name) {
-                    cli = c;
-                    break;
-                }
-            }
         }
     }
     // --new-only and --retry-only are flags (no value), check for presence separately.
@@ -1572,15 +1563,13 @@ void LauncherGeneration::run(const QString & /*value*/)
     }
     retryOnly  = args.contains(QStringLiteral("--") + OPTION_RETRY_ONLY);
 
-    // Resolve CLI: fall back to the first registered CLI (CliClaude) when not specified.
-    if (!cli && !AbstractCli::ALL_CLIS().isEmpty()) {
-        cli = AbstractCli::ALL_CLIS().first();
-    }
+    QString cliError;
+    AbstractCli *cli = resolveCli(args, cliError);
     if (!cli) {
-        *out << QStringLiteral("ERROR: no AI CLI registered.\n");
+        *out << cliError << Qt::endl;
         out->flush();
         QMetaObject::invokeMethod(QCoreApplication::instance(),
-                                  &QCoreApplication::quit,
+                                  [] { QCoreApplication::exit(1); },
                                   Qt::QueuedConnection);
         return;
     }

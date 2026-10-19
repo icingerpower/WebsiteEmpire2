@@ -268,7 +268,6 @@ void LauncherImprove::run(const QString & /*value*/)
     int         numSessions    = 1;
     int         jobsLimit      = -1;
     int         maxImpressions = 0;
-    AbstractCli *cli           = nullptr;
 
     for (int i = 0; i < args.size() - 1; ++i) {
         const QString &arg = args.at(i);
@@ -284,25 +283,16 @@ void LauncherImprove::run(const QString & /*value*/)
             bool ok = false;
             const int n = args.at(i + 1).toInt(&ok);
             if (ok && n >= 0) { maxImpressions = n; }
-        } else if (arg == QStringLiteral("--") + AbstractLauncher::OPTION_CLI) {
-            const QString name = args.at(i + 1);
-            for (AbstractCli *c : AbstractCli::ALL_CLIS()) {
-                if (c->getName() == name) {
-                    cli = c;
-                    break;
-                }
-            }
         }
     }
 
-    if (!cli && !AbstractCli::ALL_CLIS().isEmpty()) {
-        cli = AbstractCli::ALL_CLIS().first();
-    }
+    QString cliError;
+    AbstractCli *cli = resolveCli(args, cliError);
     if (!cli) {
-        *out << QStringLiteral("ERROR: no AI CLI registered.\n");
+        *out << cliError << Qt::endl;
         out->flush();
         QMetaObject::invokeMethod(QCoreApplication::instance(),
-                                  &QCoreApplication::quit,
+                                  [] { QCoreApplication::exit(1); },
                                   Qt::QueuedConnection);
         return;
     }

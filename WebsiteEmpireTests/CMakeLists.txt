@@ -74,6 +74,11 @@ add_empire_test(Test_Website_PagesStatsWidget                test_pages_stats_wi
 add_empire_test(Test_Website_CliAntigravity                  test_cli_antigravity.cpp)
 add_empire_test(Test_Website_RasterCliProtocol                 test_raster_cli_protocol.cpp)
 add_empire_test(Test_Website_CliCodex                        test_cli_codex.cpp)
+add_empire_test(Test_Website_LauncherCliSelection             test_launcher_cli_selection.cpp)
+target_sources(Test_Website_LauncherCliSelection PRIVATE
+    ../WebsiteEmpire/launcher/AbstractLauncher.cpp)
+target_include_directories(Test_Website_LauncherCliSelection PRIVATE
+    ../WebsiteEmpire/launcher)
 add_empire_test(Test_Website_GenPageQueueRaster               test_gen_page_queue_raster.cpp)
 add_empire_test(Test_Website_AbstractPageBlocTaxonomies       test_abstract_page_bloc_taxonomies.cpp)
 add_empire_test(Test_Website_PageBlocFashionTaxonomyLinks     test_page_bloc_fashion_taxonomy_links.cpp)

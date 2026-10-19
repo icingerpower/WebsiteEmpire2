@@ -91,25 +91,14 @@ void LauncherTranslateCommon::run(const QString & /*value*/)
                                    ? args.at(langIdx + 1)
                                    : QString();
 
-    // --cli <name>: select AI CLI; falls back to the first registered CLI.
-    AbstractCli *cli = nullptr;
-    const int cliIdx = args.indexOf(QStringLiteral("--") + AbstractLauncher::OPTION_CLI);
-    if (cliIdx >= 0 && cliIdx + 1 < args.size()) {
-        const QString cliName = args.at(cliIdx + 1);
-        for (AbstractCli *c : AbstractCli::ALL_CLIS()) {
-            if (c->getName() == cliName) {
-                cli = c;
-                break;
-            }
-        }
-    }
+    QString cliError;
+    AbstractCli *cli = resolveCli(args, cliError);
     if (!cli) {
-        cli = AbstractCli::ALL_CLIS().isEmpty() ? nullptr : AbstractCli::ALL_CLIS().first();
-    }
-    if (!cli) {
-        qDebug() << "LauncherTranslateCommon: no AI CLI available.";
+        qCritical().noquote() << cliError;
         holder->deleteLater();
-        QCoreApplication::quit();
+        QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                  [] { QCoreApplication::exit(1); },
+                                  Qt::QueuedConnection);
         return;
     }
 

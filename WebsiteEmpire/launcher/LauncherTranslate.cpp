@@ -115,24 +115,13 @@ void LauncherTranslate::run(const QString & /*value*/)
     const bool textOnly = args.contains(QStringLiteral("--") + OPTION_TEXT);
     bool runBoth        = !svgOnly && !textOnly;
 
-    // --cli <name>: select AI CLI; falls back to the first registered CLI.
-    AbstractCli *cli = nullptr;
-    const int cliIdx = args.indexOf(QStringLiteral("--") + AbstractLauncher::OPTION_CLI);
-    if (cliIdx >= 0 && cliIdx + 1 < args.size()) {
-        const QString cliName = args.at(cliIdx + 1);
-        for (AbstractCli *c : AbstractCli::ALL_CLIS()) {
-            if (c->getName() == cliName) {
-                cli = c;
-                break;
-            }
-        }
-    }
+    QString cliError;
+    AbstractCli *cli = resolveCli(args, cliError);
     if (!cli) {
-        cli = AbstractCli::ALL_CLIS().isEmpty() ? nullptr : AbstractCli::ALL_CLIS().first();
-    }
-    if (!cli) {
-        qDebug() << "LauncherTranslate: no AI CLI available.";
-        QCoreApplication::quit();
+        qCritical().noquote() << cliError;
+        QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                  [] { QCoreApplication::exit(1); },
+                                  Qt::QueuedConnection);
         return;
     }
 

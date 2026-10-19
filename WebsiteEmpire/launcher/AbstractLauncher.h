@@ -3,6 +3,9 @@
 
 #include <QMap>
 #include <QString>
+#include <QStringList>
+
+class AbstractCli;
 
 // Base class for headless launch modes triggered by CLI arguments.
 //
@@ -27,6 +30,11 @@ public:
     // Option name (without "--") for selecting the AI CLI (e.g. "Claude", "Gemini").
     // Shared by all launchers that spawn an AI CLI process.
     static const QString OPTION_CLI;
+
+    // Resolve --cli by display name or executable, ignoring case. Only an
+    // omitted option uses the default; invalid selections return nullptr and
+    // a user-visible error which the caller must report before stopping.
+    static AbstractCli *resolveCli(const QStringList &args, QString &error);
 
     // The CLI option name (without "--") that triggers this launcher, e.g. "translate".
     virtual QString getOptionName() const = 0;
