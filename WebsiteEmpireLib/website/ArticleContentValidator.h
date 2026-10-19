@@ -26,6 +26,12 @@ public:
     static bool isValid(const QString &text);
 
     /**
+     * Strips inline <svg>...</svg> blocks and any non-shortcode CLI status
+     * preamble preceding the first [TITLE level="1"] shortcode.
+     */
+    static QString stripLeadingPreamble(const QString &text);
+
+    /**
      * Returns true when text contains a Markdown table (a row matching the
      * "| --- | --- |" header-separator convention), a Markdown link with a
      * scheme, absolute/relative path prefix or fragment destination, or a

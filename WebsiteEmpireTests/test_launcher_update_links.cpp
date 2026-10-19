@@ -19,6 +19,7 @@ private slots:
     void test_launcherupdate_link_gate_data();
     void test_launcherupdate_link_gate();
     void test_launcherupdate_timeout_restarts_page_update();
+    void test_launcherupdate_hung_cli_with_valid_output_succeeds();
 };
 
 void Test_Website_LauncherUpdate_Links::test_launcherupdate_link_gate_data()
@@ -211,6 +212,75 @@ void Test_Website_LauncherUpdate_Links::test_launcherupdate_timeout_restarts_pag
     QVERIFY2(log.contains("Timed out waiting for Claude"), log.constData());
     QVERIFY2(log.contains("Restarting page update for /timeout-page"), log.constData());
     QVERIFY2(log.contains("OK: /timeout-page"), log.constData());
+}
+
+void Test_Website_LauncherUpdate_Links::test_launcherupdate_hung_cli_with_valid_output_succeeds()
+{
+    QTemporaryDir fixture;
+    QVERIFY(fixture.isValid());
+    const QDir dir(fixture.path());
+
+    const auto writeFile = [&dir](const QString &name, const QByteArray &body) {
+        QFile file(dir.filePath(name));
+        return file.open(QIODevice::WriteOnly) && file.write(body) == body.size();
+    };
+
+    const QString prefix = QStringLiteral("[TITLE level=\"1\"]Article[/TITLE]\n")
+                         + QString(2100, QLatin1Char('a'));
+    const QString before = prefix + QStringLiteral(" Original article.");
+    const QString validUpdated = prefix + QStringLiteral(" Updated article content successfully.");
+    const QString withPreamble =
+        QStringLiteral("I have launched the literature search query on PubMed Central.\n")
+        + validUpdated;
+    QVERIFY(writeFile(QStringLiteral("valid_with_preamble.txt"), withPreamble.toUtf8()));
+
+    // Script writes a valid article (with leading status preamble) and then
+    // hangs in shutdown (sleeps 60s), reproducing the Antigravity shutdown deadlock.
+    QVERIFY(writeFile(QStringLiteral("claude"), QByteArray(
+        "#!/bin/sh\n"
+        "n=0\n"
+        "if [ -f \"$LINK_FIXTURE/count\" ]; then read -r n < \"$LINK_FIXTURE/count\"; fi\n"
+        "n=$((n + 1))\n"
+        "printf '%s' \"$n\" > \"$LINK_FIXTURE/count\"\n"
+        "cat \"$LINK_FIXTURE/valid_with_preamble.txt\"\n"
+        "sleep 60\n")));
+    QVERIFY(QFile::setPermissions(dir.filePath(QStringLiteral("claude")),
+        QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+
+    PageDb db(dir);
+    PageRepositoryDb repo(db);
+    const int page = repo.create(QStringLiteral("article"), QStringLiteral("/hung-shutdown-page"), QStringLiteral("en"));
+    repo.saveData(page, {{QStringLiteral("1_text"), before}});
+
+    UpdateStrategyTree strategies(dir);
+    const QString strategy = strategies.addStrategy(QStringLiteral("TestStrat"), QStringLiteral("article"), {}, false);
+    const QString prompt = strategies.addPrompt(strategy, QStringLiteral("TestPrompt"), QStringLiteral("Improve content."));
+
+    QProcess process;
+    auto env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("PATH"), fixture.path() + QLatin1Char(':') + env.value(QStringLiteral("PATH")));
+    env.insert(QStringLiteral("LINK_FIXTURE"), fixture.path());
+    env.insert(QStringLiteral("TEST_TIMEOUT_MS"), QStringLiteral("300"));
+    env.insert(QStringLiteral("XDG_CONFIG_HOME"), dir.filePath(QStringLiteral("config")));
+    process.setProcessEnvironment(env);
+    process.start(QCoreApplication::applicationFilePath(),
+                  {QStringLiteral("--fixture"), fixture.path(), QStringLiteral("--cli"), QStringLiteral("Claude")});
+    QVERIFY(process.waitForStarted());
+    QTRY_COMPARE_WITH_TIMEOUT(process.state(), QProcess::NotRunning, 15000);
+    const QByteArray log = process.readAllStandardOutput() + process.readAllStandardError();
+    QCOMPARE(process.exitCode(), 0);
+
+    QFile counter(dir.filePath(QStringLiteral("count")));
+    QVERIFY2(counter.open(QIODevice::ReadOnly), log.constData());
+    // Must succeed on the very first call without needing a retry.
+    QCOMPARE(counter.readAll().toInt(), 1);
+
+    const auto after = repo.loadData(page);
+    // Leading CLI status preamble must be stripped before saving.
+    QCOMPARE(after.value(QStringLiteral("1_text")), validUpdated);
+    QVERIFY(!repo.lastUpdateAttemptAt(page, prompt).isEmpty());
+    QVERIFY2(log.contains("Output complete"), log.constData());
+    QVERIFY2(log.contains("OK: /hung-shutdown-page"), log.constData());
 }
 
 int main(int argc, char **argv)

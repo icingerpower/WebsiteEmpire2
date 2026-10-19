@@ -38,12 +38,27 @@ bool ArticleContentValidator::hasMarkdownArtifact(const QString &text)
     return false;
 }
 
-bool ArticleContentValidator::isValid(const QString &text)
+QString ArticleContentValidator::stripLeadingPreamble(const QString &text)
 {
     static const QRegularExpression reSvg(
         QStringLiteral("<svg\\b[^>]*>.*?</svg>"),
         QRegularExpression::DotMatchesEverythingOption
         | QRegularExpression::CaseInsensitiveOption);
+
+    QString clean = text.trimmed();
+    clean.remove(reSvg);
+    clean = clean.trimmed();
+    if (!clean.startsWith(QLatin1Char('['))) {
+        const int pos = clean.indexOf(QStringLiteral("[TITLE level=\"1\"]"));
+        if (pos > 0) {
+            clean = clean.mid(pos).trimmed();
+        }
+    }
+    return clean;
+}
+
+bool ArticleContentValidator::isValid(const QString &text)
+{
     // Require a properly formed first TITLE shortcode: [TITLE level="1"]…[/TITLE]
     // with at least one character between the tags that is not '['.
     // This rejects cases where the AI writes `[TITLE level="1"]` shortcode. as
@@ -52,15 +67,7 @@ bool ArticleContentValidator::isValid(const QString &text)
         QStringLiteral("^\\[TITLE level=\"1\"\\][^\\[]+\\[/TITLE\\]"),
         QRegularExpression::DotMatchesEverythingOption);
 
-    QString clean = text.trimmed();
-    clean.remove(reSvg);
-    clean = clean.trimmed();
-    if (!clean.startsWith(QLatin1Char('['))) {
-        const int pos = clean.indexOf(QStringLiteral("[TITLE level=\"1\"]"));
-        if (pos > 0) {
-            clean = clean.mid(pos);
-        }
-    }
+    const QString clean = stripLeadingPreamble(text);
     if (!reTitleFirst.match(clean).hasMatch() || clean.size() < 2000) {
         return false;
     }

@@ -9,7 +9,11 @@
 #include "website/pages/attributes/CategoryTable.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
 
+#include <algorithm>
 #include <csignal>
+#ifdef Q_OS_LINUX
+#include <sys/prctl.h>
+#endif
 
 #include <QCoreApplication>
 #include <QDir>
@@ -129,7 +133,8 @@ static QString cliCallingDescriptor(const AbstractCli *cli)
 
 static QString runUpdateClaudePrompt(const QString &prompt,
                                       AbstractCli   *cli,
-                                      QTextStream   *out)
+                                      QTextStream   *out,
+                                      bool (*isCompleteOutput)(const QString &) = nullptr)
 {
     QTemporaryDir tempDir;
     if (!tempDir.isValid()) {
@@ -159,13 +164,26 @@ static QString runUpdateClaudePrompt(const QString &prompt,
     process.setProgram(cli->getExecutable());
     cli->configurePromptProcess(&process, cli->promptArgs(), prepared, promptPath);
     process.setStandardOutputFile(outputPath);
+#ifdef Q_OS_LINUX
+    process.setChildProcessModifier([]() {
+        ::prctl(PR_SET_PDEATHSIG, SIGKILL);
+    });
+#endif
     process.start();
     process.waitForStarted(-1);
 
-    // Poll in short intervals and emit a heartbeat so the parent GUI process
-    // knows the subprocess is alive and does not trigger its inactivity timer.
-    int elapsedMs = 0;
-    while (!process.waitForFinished(s_claudeHeartbeatMs)) {
+    // Poll in short intervals so we can both emit periodic heartbeats and
+    // detect when a CLI (such as Antigravity after background tool runs) has
+    // already flushed the complete response to output.txt and deadlocked
+    // during process shutdown.
+    const int pollMs           = std::max(10, std::min(5000, s_claudeHeartbeatMs));
+    const int requiredSettleMs = std::min(10000, std::max(pollMs, s_claudeTimeoutMs / 3));
+    int elapsedMs        = 0;
+    int sinceHeartbeatMs = 0;
+    qint64 lastValidSize = -1;
+    int validStableMs    = 0;
+
+    while (!process.waitForFinished(pollMs)) {
         if (process.state() == QProcess::NotRunning) {
             break;
         }
@@ -174,10 +192,43 @@ static QString runUpdateClaudePrompt(const QString &prompt,
             process.waitForFinished(5000);
             return {};
         }
-        elapsedMs += s_claudeHeartbeatMs;
-        *out << QStringLiteral("  Still waiting for %1... (%2 min elapsed)\n")
-                    .arg(cliCallingDescriptor(cli)).arg(elapsedMs / 60000);
-        out->flush();
+        elapsedMs        += pollMs;
+        sinceHeartbeatMs += pollMs;
+
+        if (isCompleteOutput != nullptr) {
+            QFile f(outputPath);
+            const qint64 currentSize = f.size();
+            if (currentSize > 0 && f.open(QIODevice::ReadOnly)) {
+                const QString candidate = QString::fromUtf8(f.readAll()).trimmed();
+                f.close();
+                if (!candidate.isEmpty() && isCompleteOutput(candidate)) {
+                    if (currentSize == lastValidSize) {
+                        validStableMs += pollMs;
+                        if (validStableMs >= requiredSettleMs) {
+                            *out << QStringLiteral("  Output complete (%1 chars) — terminating lingering %2 process.\n")
+                                        .arg(candidate.size()).arg(cliCallingDescriptor(cli));
+                            out->flush();
+                            process.kill();
+                            process.waitForFinished(5000);
+                            return candidate;
+                        }
+                    } else {
+                        lastValidSize = currentSize;
+                        validStableMs = 0;
+                    }
+                } else {
+                    lastValidSize = -1;
+                    validStableMs = 0;
+                }
+            }
+        }
+
+        if (sinceHeartbeatMs >= s_claudeHeartbeatMs) {
+            sinceHeartbeatMs = 0;
+            *out << QStringLiteral("  Still waiting for %1... (%2 min elapsed)\n")
+                        .arg(cliCallingDescriptor(cli)).arg(elapsedMs / 60000);
+            out->flush();
+        }
 
         if (elapsedMs >= s_claudeTimeoutMs) {
             *out << QStringLiteral("  Timed out waiting for %1 after %2 min. Killing process.\n")
@@ -185,6 +236,13 @@ static QString runUpdateClaudePrompt(const QString &prompt,
             out->flush();
             process.kill();
             process.waitForFinished(5000);
+            QFile f(outputPath);
+            if (f.size() > 0 && f.open(QIODevice::ReadOnly)) {
+                const QString salvaged = QString::fromUtf8(f.readAll()).trimmed();
+                if (!salvaged.isEmpty() && (!isCompleteOutput || isCompleteOutput(salvaged))) {
+                    return salvaged;
+                }
+            }
             return QStringLiteral("__TIMEOUT__");
         }
     }
@@ -242,6 +300,11 @@ static QString runSvgClaudePrompt(const QString &prompt,
                                 {QStringLiteral("-p"), QStringLiteral("-")},
                                 prompt, promptPath);
     process.setStandardOutputFile(outputPath);
+#ifdef Q_OS_LINUX
+    process.setChildProcessModifier([]() {
+        ::prctl(PR_SET_PDEATHSIG, SIGKILL);
+    });
+#endif
     process.start();
     process.waitForStarted(-1);
 
@@ -1005,7 +1068,8 @@ static void runUpdateSession(const QString                          &pageTypeId,
                               .arg(result.left(200))
                           + singlePrompt;
 
-                    const QString raw = runUpdateClaudePrompt(attemptPrompt, cli, state->out);
+                    const QString raw = runUpdateClaudePrompt(
+                        attemptPrompt, cli, state->out, isUpdatedArticleValid);
 
                     if (raw == QStringLiteral("__TIMEOUT__")) {
                         timedOut = true;
@@ -1018,7 +1082,7 @@ static void runUpdateSession(const QString                          &pageTypeId,
                         break;
                     }
 
-                    result = raw;
+                    result = ArticleContentValidator::stripLeadingPreamble(raw);
                     if (isUpdatedArticleValid(result)) {
                         const auto links = linkValidator.check(result,
                             []() { return g_updateStopRequested != 0; },
