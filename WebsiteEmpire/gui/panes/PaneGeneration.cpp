@@ -464,8 +464,11 @@ void PaneGeneration::viewGenCommand()
     AbstractCli *selectedCli = _selectedCli();
     const QString cliName = selectedCli ? selectedCli->getName() : QString{};
     if (!cliName.isEmpty()) {
+        const QString quotedCli = cliName.contains(QLatin1Char(' '))
+            ? QStringLiteral("\"%1\"").arg(cliName)
+            : cliName;
         cmd += QStringLiteral(" --") + AbstractLauncher::OPTION_CLI
-               + QLatin1Char(' ') + cliName;
+               + QLatin1Char(' ') + quotedCli;
     }
 
     DialogShowCommand dlg(tr("Generation command"),

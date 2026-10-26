@@ -394,8 +394,11 @@ void PaneUpdate::viewUpdateCommand()
     AbstractCli *selectedCli = _selectedCli();
     const QString cliName = selectedCli ? selectedCli->getName() : QString{};
     if (!cliName.isEmpty()) {
+        const QString quotedCli = cliName.contains(QLatin1Char(' '))
+            ? QStringLiteral("\"%1\"").arg(cliName)
+            : cliName;
         cmd += QStringLiteral(" --") + AbstractLauncher::OPTION_CLI
-               + QStringLiteral(" ") + cliName;
+               + QStringLiteral(" ") + quotedCli;
     }
 
     DialogShowCommand dlg(tr("Update command"),

@@ -14,6 +14,8 @@ private slots:
     void test_antigravity_svg_prompt_not_treated_as_raster();
     void test_antigravity_raster_marker_triggers_generate_image_directive();
     void test_antigravity_plain_text_prompt_gets_text_only_guard();
+    void test_antigravity_model_specific_instance_passes_model_flag();
+    void test_antigravity_all_clis_contains_model_variants();
 };
 
 void Test_Website_CliAntigravity::test_antigravity_svg_prompt_not_treated_as_raster()
@@ -54,6 +56,39 @@ void Test_Website_CliAntigravity::test_antigravity_plain_text_prompt_gets_text_o
 
     QVERIFY(!prepared.contains(QStringLiteral("generate_image")));
     QVERIFY(prepared.contains(QStringLiteral("plain text")));
+}
+
+void Test_Website_CliAntigravity::test_antigravity_model_specific_instance_passes_model_flag()
+{
+    CliAntigravity defaultCli;
+    QCOMPARE(defaultCli.getName(), QStringLiteral("Antigravity"));
+    QVERIFY(!defaultCli.promptArgs().contains(QStringLiteral("--model")));
+
+    CliAntigravity flashCli(QStringLiteral("Gemini 3.8 Flash (Medium)"));
+    QCOMPARE(flashCli.getName(), QStringLiteral("Antigravity - Gemini 3.8 Flash (Medium)"));
+    QCOMPARE(flashCli.getModel(), QStringLiteral("Gemini 3.8 Flash (Medium)"));
+    const QStringList args = flashCli.promptArgs();
+    const int modelIdx = args.indexOf(QStringLiteral("--model"));
+    QVERIFY(modelIdx >= 0);
+    QVERIFY(modelIdx + 1 < args.size());
+    QCOMPARE(args.at(modelIdx + 1), QStringLiteral("Gemini 3.8 Flash (Medium)"));
+}
+
+void Test_Website_CliAntigravity::test_antigravity_all_clis_contains_model_variants()
+{
+    QStringList names;
+    for (const AbstractCli *cli : AbstractCli::ALL_CLIS()) {
+        names << cli->getName();
+    }
+    QVERIFY(names.contains(QStringLiteral("Antigravity")));
+    QVERIFY(names.contains(QStringLiteral("Antigravity - Gemini 3.8 Flash (Low)")));
+    QVERIFY(names.contains(QStringLiteral("Antigravity - Gemini 3.8 Flash (Medium)")));
+    QVERIFY(names.contains(QStringLiteral("Antigravity - Gemini 3.8 Flash (High)")));
+    QVERIFY(names.contains(QStringLiteral("Antigravity - Gemini 4 Argon (Low)")));
+    QVERIFY(names.contains(QStringLiteral("Antigravity - Gemini 4 Argon (Medium)")));
+    QVERIFY(names.contains(QStringLiteral("Antigravity - Gemini 4 Argon (High)")));
+    QVERIFY(names.contains(QStringLiteral("Antigravity - Claude Sonnet 5.5 (Medium)")));
+    QVERIFY(names.contains(QStringLiteral("Antigravity - Claude Opus 5.5 (Medium)")));
 }
 
 QTEST_MAIN(Test_Website_CliAntigravity)
