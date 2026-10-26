@@ -446,8 +446,6 @@ static void runUpdateSession(const QString                          &pageTypeId,
             "Every part of the article other than image references or descriptions must "
             "remain byte-for-byte identical. Do not touch any text, headings, or SVG content.\n\n"));
     }
-    const bool     skipIfSet     = prompt.skipIfKeyNonEmpty;
-
     const QString effectiveSaveKey = saveKey.isEmpty()
         ? QStringLiteral("1_text")
         : saveKey;
@@ -484,7 +482,11 @@ static void runUpdateSession(const QString                          &pageTypeId,
         ? state->jobsLimit - state->jobsCompleted
         : -1;
 
-    const QString filterKey = skipIfSet ? effectiveSaveKey : QString{};
+    // Exclude pages already processed by this prompt unless an explicit
+    // --pages selection was requested. Otherwise, once all un-updated pages
+    // finish (or fail), an unlimited update run wraps around and endlessly
+    // re-updates pages that already have an update_attempt for this prompt.
+    const QString filterKey = pageIdsFilter.isEmpty() ? effectiveSaveKey : QString{};
     QList<PageRecord> pages =
         pageRepo.findPagesForUpdate(pageTypeId, promptId, remaining, filterKey);
 
@@ -537,7 +539,7 @@ static void runUpdateSession(const QString                          &pageTypeId,
 
             const bool alreadyProcessedByThisPrompt =
                 !pageRepo.lastUpdateAttemptAt(page.id, promptId).isEmpty();
-            if (skipIfSet
+            if (pageIdsFilter.isEmpty()
                     && alreadyProcessedByThisPrompt
                     && !data.value(effectiveSaveKey).trimmed().isEmpty()) {
                 *(state->out) << QStringLiteral("SKIP %1: %2 already set.\n")

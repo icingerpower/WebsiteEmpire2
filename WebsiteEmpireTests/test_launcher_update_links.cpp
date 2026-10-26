@@ -20,6 +20,7 @@ private slots:
     void test_launcherupdate_link_gate();
     void test_launcherupdate_timeout_restarts_page_update();
     void test_launcherupdate_hung_cli_with_valid_output_succeeds();
+    void test_launcherupdate_skips_already_updated_pages();
 };
 
 void Test_Website_LauncherUpdate_Links::test_launcherupdate_link_gate_data()
@@ -281,6 +282,69 @@ void Test_Website_LauncherUpdate_Links::test_launcherupdate_hung_cli_with_valid_
     QVERIFY(!repo.lastUpdateAttemptAt(page, prompt).isEmpty());
     QVERIFY2(log.contains("Output complete"), log.constData());
     QVERIFY2(log.contains("OK: /hung-shutdown-page"), log.constData());
+}
+
+void Test_Website_LauncherUpdate_Links::test_launcherupdate_skips_already_updated_pages()
+{
+    QTemporaryDir fixture;
+    QVERIFY(fixture.isValid());
+    const QDir dir(fixture.path());
+
+    const auto writeFile = [&dir](const QString &name, const QByteArray &body) {
+        QFile file(dir.filePath(name));
+        return file.open(QIODevice::WriteOnly) && file.write(body) == body.size();
+    };
+
+    const QString prefix = QStringLiteral("[TITLE level=\"1\"]Article[/TITLE]\n")
+                         + QString(2100, QLatin1Char('a'));
+    const QString alreadyUpdatedBody = prefix + QStringLiteral(" Already updated article.");
+    const QString pendingBody        = prefix + QStringLiteral(" Pending article.");
+    const QString newlyUpdatedBody   = prefix + QStringLiteral(" Newly updated article.");
+    QVERIFY(writeFile(QStringLiteral("valid.txt"), newlyUpdatedBody.toUtf8()));
+
+    QVERIFY(writeFile(QStringLiteral("claude"), QByteArray(
+        "#!/bin/sh\n"
+        "n=0\n"
+        "if [ -f \"$LINK_FIXTURE/count\" ]; then read -r n < \"$LINK_FIXTURE/count\"; fi\n"
+        "n=$((n + 1))\n"
+        "printf '%s' \"$n\" > \"$LINK_FIXTURE/count\"\n"
+        "cat \"$LINK_FIXTURE/valid.txt\"\n")));
+    QVERIFY(QFile::setPermissions(dir.filePath(QStringLiteral("claude")),
+        QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+
+    UpdateStrategyTree strategies(dir);
+    const QString strategy = strategies.addStrategy(QStringLiteral("TestStrat"), QStringLiteral("article"), {}, false);
+    const QString prompt = strategies.addPrompt(strategy, QStringLiteral("TestPrompt"), QStringLiteral("Add references."));
+
+    PageDb db(dir);
+    PageRepositoryDb repo(db);
+    const int pageDone = repo.create(QStringLiteral("article"), QStringLiteral("/already-updated"), QStringLiteral("en"));
+    repo.saveData(pageDone, {{QStringLiteral("1_text"), alreadyUpdatedBody}});
+    repo.recordUpdateAttempt(pageDone, prompt);
+
+    const int pagePending = repo.create(QStringLiteral("article"), QStringLiteral("/pending-article"), QStringLiteral("en"));
+    repo.saveData(pagePending, {{QStringLiteral("1_text"), pendingBody}});
+
+    QProcess process;
+    auto env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("PATH"), fixture.path() + QLatin1Char(':') + env.value(QStringLiteral("PATH")));
+    env.insert(QStringLiteral("LINK_FIXTURE"), fixture.path());
+    env.insert(QStringLiteral("XDG_CONFIG_HOME"), dir.filePath(QStringLiteral("config")));
+    process.setProcessEnvironment(env);
+    process.start(QCoreApplication::applicationFilePath(),
+                  {QStringLiteral("--fixture"), fixture.path(), QStringLiteral("--cli"), QStringLiteral("Claude")});
+    QVERIFY(process.waitForStarted());
+    QTRY_COMPARE_WITH_TIMEOUT(process.state(), QProcess::NotRunning, 15000);
+    const QByteArray log = process.readAllStandardOutput() + process.readAllStandardError();
+    QCOMPARE(process.exitCode(), 0);
+
+    QFile counter(dir.filePath(QStringLiteral("count")));
+    QVERIFY2(counter.open(QIODevice::ReadOnly), log.constData());
+    // Must only invoke the CLI once (for /pending-article), NOT re-update /already-updated.
+    QCOMPARE(counter.readAll().toInt(), 1);
+    QCOMPARE(repo.loadData(pageDone).value(QStringLiteral("1_text")), alreadyUpdatedBody);
+    QCOMPARE(repo.loadData(pagePending).value(QStringLiteral("1_text")), newlyUpdatedBody);
+    QVERIFY2(log.contains("1/1 done (0 remaining)"), log.constData());
 }
 
 int main(int argc, char **argv)
