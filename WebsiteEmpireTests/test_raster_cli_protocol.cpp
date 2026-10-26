@@ -15,6 +15,7 @@ private slots:
     void test_rastercli_review_without_inspection_is_rejected();
     void test_rastercli_review_with_filesystem_search_is_rejected();
     void test_rastercli_review_must_inspect_exact_candidate();
+    void test_rastercli_review_accepts_read_file_with_path_parameter();
     void test_rastercli_result_error_preserves_capacity_and_quota_details();
     void test_rastercli_truncated_or_invalid_stream_fails_closed();
     void test_rastercli_auth_error_overrides_later_errors();
@@ -101,6 +102,15 @@ void Test_Website_RasterCliProtocol::test_rastercli_review_must_inspect_exact_ca
 {
     const QByteArray output = R"({"event":"step_update","step_update":{"state":"DONE","step_type":"tool","tool_name":"view_file","tool_info":{"parameters":{"AbsolutePath":"/candidate.jpg"}}}}
 {"event":"result","result":{"status":"SUCCESS","response":"OK"}}
+)";
+    QCOMPARE(RasterCliProtocol::decodeAntigravity(output, false, QStringLiteral("/candidate.jpg")), QStringLiteral("OK"));
+    QVERIFY(RasterCliProtocol::decodeAntigravity(output, false, QStringLiteral("/other.jpg")).startsWith(QStringLiteral("__ERROR__")));
+}
+
+void Test_Website_RasterCliProtocol::test_rastercli_review_accepts_read_file_with_path_parameter()
+{
+    const QByteArray output = R"({"event":"step_update","step_update":{"state":"DONE","step_type":"tool","tool_name":"read_file","tool_info":{"name":"read_file","parameters":{"Path":"/candidate.jpg"}}}}
+{"event":"result","result":{"status":"SUCCESS","response":"OK\n"}}
 )";
     QCOMPARE(RasterCliProtocol::decodeAntigravity(output, false, QStringLiteral("/candidate.jpg")), QStringLiteral("OK"));
     QVERIFY(RasterCliProtocol::decodeAntigravity(output, false, QStringLiteral("/other.jpg")).startsWith(QStringLiteral("__ERROR__")));

@@ -30,9 +30,12 @@ QString RasterCliProtocol::decodeAntigravity(const QByteArray &output, bool requ
         const auto step = event.value(QStringLiteral("step_update")).toObject();
         const auto info = step.value(QStringLiteral("tool_info")).toObject();
         const auto error = info.value(QStringLiteral("error")).toObject();
+        const QString stepToolName = step.value(QStringLiteral("tool_name")).toString();
+        const bool isViewTool = (stepToolName == QStringLiteral("view_file")
+                                 || stepToolName == QStringLiteral("read_file"));
         if (!requireImage && step.value(QStringLiteral("step_type")).toString() == QStringLiteral("tool")
-            && step.value(QStringLiteral("tool_name")).toString() != QStringLiteral("view_file")) {
-            toolError = QStringLiteral("review used tools other than view_file");
+            && !isViewTool) {
+            toolError = QStringLiteral("review used tools other than view_file/read_file");
         }
         const QString message = error.value(QStringLiteral("message")).toString();
         if (!message.isEmpty()) {
@@ -108,12 +111,15 @@ QString RasterCliProtocol::decodeAntigravity(const QByteArray &output, bool requ
                 }
             }
         }
-        if (step.value(QStringLiteral("tool_name")).toString() == QStringLiteral("view_file")
+        if (isViewTool
             && step.value(QStringLiteral("state")).toString() == QStringLiteral("DONE")
             && error.isEmpty()) {
             const auto parameters = info.value(QStringLiteral("parameters")).toObject();
-            if (expectedImagePath.isEmpty()
-                || parameters.value(QStringLiteral("AbsolutePath")).toString() == expectedImagePath) {
+            QString inspectedPath = parameters.value(QStringLiteral("AbsolutePath")).toString();
+            if (inspectedPath.isEmpty()) {
+                inspectedPath = parameters.value(QStringLiteral("Path")).toString();
+            }
+            if (expectedImagePath.isEmpty() || inspectedPath == expectedImagePath) {
                 inspectionDone = true;
             } else if (!requireImage) {
                 toolError = QStringLiteral("review inspected a file other than the candidate image");

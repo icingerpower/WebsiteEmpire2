@@ -532,7 +532,7 @@ static QCoro::Task<RasterAttemptResult> runOneRasterAttempt(
         QString prepared = referenceEdit ? prompt : cli->preparePrompt(prompt);
         if (referenceEdit) {
             prepared.prepend(QStringLiteral(
-                "First use view_file on ONLY the specified previous image, then use "
+                "First use read_file (or view_file) on ONLY the specified previous image, then use "
                 "native generate_image to edit that reference. Do not merely recreate "
                 "the outfit from text.\n\n"));
         }
