@@ -398,7 +398,10 @@ QString GenPageQueue::buildContentPrompt(const PageRecord &page,
         "  RULES:\n"
         "  • Only use URLs you are certain are real and correct.\n"
         "  • Do NOT invent or guess URLs. If no real URL is known, write the\n"
-        "    reference as plain text (e.g. \"According to the WHO report (2023)\").\n\n"
+        "    reference as plain text (e.g. \"According to the WHO report (2023)\").\n"
+        "  • When the strategy instructions require study or guideline links,\n"
+        "    search for and verify real URLs (e.g. PubMed, PMC, NIH, clinical\n"
+        "    guidelines) and format each citation with [LINKFIX url=\"https://...\"].\n\n"
         "Images — use IMGFIX for every image reference:\n"
         "  [IMGFIX id=\"unique-slug\" fileName=\"image.jpg\" alt=\"description\"][/IMGFIX]\n"
         "  [IMGFIX id=\"unique-slug\" fileName=\"diagram.svg\" alt=\"description\"\n"
@@ -592,6 +595,11 @@ int GenPageQueue::countRasterImgFixRefs(const QString &articleText)
 bool GenPageQueue::wantsSvgImage() const
 {
     return !m_svgInstructions.isEmpty();
+}
+
+QString GenPageQueue::customInstructions() const
+{
+    return m_customInstructions;
 }
 
 bool GenPageQueue::wantsRasterImage() const

@@ -46,8 +46,13 @@ DECLARE_LAUNCHER(LauncherUpdate)
 
 static volatile sig_atomic_t g_updateStopRequested = 0;
 
-static void handleUpdateSignal(int)
+static void handleUpdateSignal(int sig)
 {
+    if (g_updateStopRequested) {
+        std::signal(sig, SIG_DFL);
+        std::raise(sig);
+        return;
+    }
     g_updateStopRequested = 1;
 }
 
@@ -446,8 +451,13 @@ static void runUpdateSession(const QString                          &pageTypeId,
             "Every part of the article other than image references or descriptions must "
             "remain byte-for-byte identical. Do not touch any text, headings, or SVG content.\n\n"));
     }
+    const QString primaryTextKey = pageTypeId == QStringLiteral("symptom_hub")
+        ? QStringLiteral("0_text")
+        : pageTypeId == QStringLiteral("fashion_tag_hub")
+            ? QStringLiteral("3_text")
+            : QStringLiteral("1_text");
     const QString effectiveSaveKey = saveKey.isEmpty()
-        ? QStringLiteral("1_text")
+        ? primaryTextKey
         : saveKey;
 
     AbstractPageBloc::AiUpdateSpec::Validator validator =
@@ -549,10 +559,10 @@ static void runUpdateSession(const QString                          &pageTypeId,
                 break;
             }
 
-            const QString existingText = data.value(QStringLiteral("1_text"));
+            const QString existingText = data.value(primaryTextKey);
             if (existingText.isEmpty()) {
-                *(state->out) << QStringLiteral("SKIP %1: no 1_text found.\n")
-                                     .arg(page.permalink);
+                *(state->out) << QStringLiteral("SKIP %1: no %2 found.\n")
+                                     .arg(page.permalink, primaryTextKey);
                 state->out->flush();
                 pageFinished = true;
                 break;
@@ -1053,6 +1063,7 @@ static void runUpdateSession(const QString                          &pageTypeId,
                                      .arg(singlePrompt.size()).arg(cliCallingDescriptor(cli));
                 state->out->flush();
 
+                const int minStudyLinks = ArticleLinkValidator::requiredStudyLinksMin(instructions);
                 QString validationFeedback;
                 for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
                     if (g_updateStopRequested) {
@@ -1079,7 +1090,7 @@ static void runUpdateSession(const QString                          &pageTypeId,
                     }
                     if (raw.startsWith(QStringLiteral("__ERROR__"))) {
                         *(state->out) << QStringLiteral("  FAIL (attempt %1): %2\n")
-                                             .arg(attempt).arg(raw);
+                                             .arg(QString::number(attempt), raw);
                         state->out->flush();
                         break;
                     }
@@ -1092,7 +1103,7 @@ static void runUpdateSession(const QString                          &pageTypeId,
                                 *(state->out) << QObject::tr("  Checking link: %1\n").arg(url);
                                 state->out->flush();
                             });
-                        for (const QString &warning : links.warnings) {
+                        for (const QString &warning : std::as_const(links.warnings)) {
                             *(state->out) << QObject::tr("  WARN unverified link: %1\n").arg(warning);
                         }
                         state->out->flush();
@@ -1102,7 +1113,28 @@ static void runUpdateSession(const QString                          &pageTypeId,
                         if (!links.accepted()) {
                             validationFeedback = links.retryInstructions();
                             *(state->out) << QObject::tr("  REJECT (attempt %1/%2): %3\n")
-                                .arg(attempt).arg(kMaxAttempts).arg(links.errors.join(QLatin1Char('\n')));
+                                .arg(QString::number(attempt),
+                                     QString::number(kMaxAttempts),
+                                     links.errors.join(QLatin1Char('\n')));
+                            state->out->flush();
+                            continue;
+                        }
+                        if (minStudyLinks > 0 && links.validUrls() == 0) {
+                            validationFeedback = QObject::tr(
+                                "The application rejected the update because 0 verified external "
+                                "[LINKFIX] study or clinical guideline links were included "
+                                "(target: at least %1 distinct verified links).\n"
+                                "Search for and open real, relevant peer-reviewed human studies, "
+                                "systematic reviews, or clinical guidelines from PubMed "
+                                "(https://pubmed.ncbi.nlm.nih.gov/...), PMC "
+                                "(https://pmc.ncbi.nlm.nih.gov/...), or major medical societies "
+                                "and cite them using [LINKFIX url=\"VERIFIED_URL\"]descriptive "
+                                "anchor text[/LINKFIX]. Never invent URLs. Return only the "
+                                "COMPLETE updated article.\n\n")
+                                .arg(minStudyLinks);
+                            *(state->out) << QObject::tr(
+                                "  REJECT (attempt %1/%2): no verified study links included\n")
+                                .arg(QString::number(attempt), QString::number(kMaxAttempts));
                             state->out->flush();
                             continue;
                         }

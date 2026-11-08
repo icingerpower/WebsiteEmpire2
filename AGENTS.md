@@ -20,6 +20,7 @@ Claude-specific tool names describe intent: use the available file editing tool 
 - Admin interfaces must provide structured editors rather than require users to type raw JSON.
 - Deliver remote configuration as real local files for `scp`/`rsync`, not copy-pasted heredocs. Do not guess missing server configuration.
 - Preserve concurrent work. Do not stash or reset a shared checkout to obtain a test baseline; use an isolated worktree when a baseline is needed.
+- **Cap C++ build parallelism at 8 jobs (`--parallel 8` or `-j8`)** — never run unbounded `cmake --build ... --parallel` or `make -j$(nproc)`, which can exhaust system RAM and terminate the desktop session.
 
 ## Build and test quick reference
 
@@ -27,7 +28,7 @@ From this repository root, using a build directory configured for the intended Q
 
 ```bash
 cmake -S . -B build
-cmake --build build --parallel
+cmake --build build --parallel 8
 ctest --test-dir build --output-on-failure
 ```
 

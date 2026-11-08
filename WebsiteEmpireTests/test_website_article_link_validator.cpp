@@ -95,6 +95,8 @@ private slots:
     void test_linkvalidator_dns_retry_budget_and_cancellation_data();
     void test_linkvalidator_dns_retry_budget_and_cancellation();
     void test_linkvalidator_correct_pubmed_host_preserves_warning_policy();
+    void test_linkvalidator_required_study_links_min();
+    void test_linkvalidator_valid_urls_clamps_malformed_links();
 
 private:
     QString link(const QString &path) const;
@@ -401,6 +403,41 @@ void Test_Website_ArticleLinkValidator::test_linkvalidator_correct_pubmed_host_p
     QVERIFY(report.accepted());
     QCOMPARE(report.warnings.size(), 1);
     QCOMPARE(network.requests, 1);
+}
+
+void Test_Website_ArticleLinkValidator::test_linkvalidator_required_study_links_min()
+{
+    QCOMPARE(ArticleLinkValidator::requiredStudyLinksMin(
+        QStringLiteral("Improve transitions and readability.")), 0);
+    QCOMPARE(ArticleLinkValidator::requiredStudyLinksMin(
+        QStringLiteral("Include at least 5 distinct, verified human study, systematic review, "
+                       "or clinical guideline links formatted with [LINKFIX url=\"VERIFIED_URL\"].")), 5);
+    QCOMPARE(ArticleLinkValidator::requiredStudyLinksMin(
+        QStringLiteral("Support claims with at least five distinct, relevant peer-reviewed "
+                       "human studies from PubMed/PMC using [LINKFIX url=\"VERIFIED_URL\"].")), 5);
+    QCOMPARE(ArticleLinkValidator::requiredStudyLinksMin(
+        QStringLiteral("Include at least 3 distinct verified links using [LINKFIX].")), 3);
+    QCOMPARE(ArticleLinkValidator::requiredStudyLinksMin(
+        QStringLiteral("Cite https://pubmed.ncbi.nlm.nih.gov/ studies with [LINKFIX].")), 5);
+}
+
+void Test_Website_ArticleLinkValidator::test_linkvalidator_valid_urls_clamps_malformed_links()
+{
+    QNetworkAccessManager network;
+    ArticleLinkValidator validator(network);
+
+    const auto malformed = validator.check(QStringLiteral("[LINKFIX url=\"\"]empty[/LINKFIX]"));
+    QVERIFY(!malformed.accepted());
+    QCOMPARE(malformed.validUrls(), 0);
+
+    const auto mixed = validator.check(link(QStringLiteral("/ok")) + link(QStringLiteral("/404")));
+    QVERIFY(!mixed.accepted());
+    QCOMPARE(mixed.checkedUrls, 2);
+    QCOMPARE(mixed.validUrls(), 1);
+
+    const auto twoValid = validator.check(link(QStringLiteral("/ok")) + link(QStringLiteral("/200")));
+    QVERIFY(twoValid.accepted());
+    QCOMPARE(twoValid.validUrls(), 2);
 }
 
 QTEST_GUILESS_MAIN(Test_Website_ArticleLinkValidator)

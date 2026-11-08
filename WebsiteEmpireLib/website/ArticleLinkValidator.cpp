@@ -12,9 +12,54 @@
 #include <QUrl>
 #include <algorithm>
 
+int ArticleLinkValidator::Report::validUrls() const
+{
+    return std::max(0, checkedUrls - static_cast<int>(errors.size()));
+}
+
 bool ArticleLinkValidator::Report::accepted() const
 {
     return errors.isEmpty() && !cancelled;
+}
+
+int ArticleLinkValidator::requiredStudyLinksMin(const QString &instructions)
+{
+    if (!instructions.contains(QStringLiteral("LINKFIX"), Qt::CaseInsensitive)
+        && !instructions.contains(QStringLiteral("pubmed.ncbi.nlm.nih.gov"), Qt::CaseInsensitive)
+        && !instructions.contains(QStringLiteral("pmc.ncbi.nlm.nih.gov"), Qt::CaseInsensitive)
+        && !instructions.contains(QStringLiteral("PubMed/PMC"), Qt::CaseInsensitive)) {
+        return 0;
+    }
+    static const QRegularExpression reCount(
+        QStringLiteral("at\\s+least\\s+(\\d+|one|two|three|four|five|six|seven|eight|nine|ten)\\s+"
+                       "(?:distinct|verified|relevant|human\\s+stud|stud|peer-reviewed|link|citation)"),
+        QRegularExpression::CaseInsensitiveOption);
+    const auto m = reCount.match(instructions);
+    if (m.hasMatch()) {
+        const QString token = m.captured(1).toLower();
+        bool ok = false;
+        const int numeric = token.toInt(&ok);
+        if (ok && numeric > 0) {
+            return numeric;
+        }
+        static const QHash<QString, int> words{
+            {QStringLiteral("one"),   1},
+            {QStringLiteral("two"),   2},
+            {QStringLiteral("three"), 3},
+            {QStringLiteral("four"),  4},
+            {QStringLiteral("five"),  5},
+            {QStringLiteral("six"),   6},
+            {QStringLiteral("seven"), 7},
+            {QStringLiteral("eight"), 8},
+            {QStringLiteral("nine"),  9},
+            {QStringLiteral("ten"),   10},
+        };
+        const int mapped = words.value(token, 0);
+        if (mapped > 0) {
+            return mapped;
+        }
+    }
+    return 5;
 }
 
 QString ArticleLinkValidator::Report::retryInstructions() const

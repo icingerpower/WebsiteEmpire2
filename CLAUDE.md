@@ -5,10 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Test
 
 ```bash
-# Configure and build
+# Configure and build (always cap parallelism at 8 jobs to avoid OOM crashes;
+# NEVER use unbounded --parallel or -j$(nproc))
 mkdir build && cd build
 cmake ..
-make -j$(nproc)
+cmake --build . --parallel 8
 
 # Run all tests (from build dir)
 ctest

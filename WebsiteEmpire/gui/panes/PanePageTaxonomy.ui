@@ -19,7 +19,16 @@
     <item><widget class="QPushButton" name="buttonGenerateAll"><property name="text"><string>Generate missing articles</string></property></widget></item>
     <item><widget class="QPushButton" name="buttonCommand"><property name="text"><string>View generation command</string></property></widget></item>
    </layout></item>
-   <item><widget class="QPlainTextEdit" name="textEditOutput"><property name="readOnly"><bool>true</bool></property></widget></item>
+   <item><layout class="QHBoxLayout" name="bottomLayout" stretch="2,1">
+    <item><widget class="QPlainTextEdit" name="textEditOutput"><property name="readOnly"><bool>true</bool></property></widget></item>
+    <item><layout class="QVBoxLayout" name="generatedListLayout">
+     <item><layout class="QHBoxLayout" name="generatedHeaderLayout">
+      <item><widget class="QLabel" name="labelGeneratedPages"><property name="text"><string>Generated taxonomy pages</string></property></widget></item>
+      <item><widget class="QPushButton" name="buttonPreview"><property name="text"><string>Preview</string></property></widget></item>
+     </layout></item>
+     <item><widget class="QListView" name="listViewGeneratedPages"><property name="editTriggers"><set>QAbstractItemView::EditTrigger::NoEditTriggers</set></property></widget></item>
+    </layout></item>
+   </layout></item>
   </layout>
  </widget>
  <resources/>

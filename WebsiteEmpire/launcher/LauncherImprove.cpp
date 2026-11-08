@@ -107,7 +107,10 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt, AbstractCli *cli)
     cli->configurePromptProcess(&process, cli->promptArgs(), prompt, promptPath);
     process.setStandardOutputFile(outputPath);
     // Raise the output token cap so large SVG tables are never truncated.
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    QProcessEnvironment env = process.processEnvironment();
+    if (env.isEmpty()) {
+        env = QProcessEnvironment::systemEnvironment();
+    }
     env.insert(QStringLiteral("CLAUDE_CODE_MAX_OUTPUT_TOKENS"), QStringLiteral("100000"));
     process.setProcessEnvironment(env);
 

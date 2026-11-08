@@ -213,6 +213,11 @@ public:
     bool wantsSvgImage() const;
 
     /**
+     * Returns the strategy's custom instructions text.
+     */
+    QString customInstructions() const;
+
+    /**
      * Returns true when the strategy has dedicated raster image instructions,
      * i.e. the raster image generation pass should run for [IMGFIX] refs whose
      * fileName does not end in ".svg" after the article content pass.

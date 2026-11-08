@@ -15,6 +15,7 @@
 #include "website/pages/PageGenerationState.h"
 #include "website/pages/PageRepositoryDb.h"
 #include "website/ArticleContentValidator.h"
+#include "website/ArticleLinkValidator.h"
 #include "website/pages/attributes/CategoryTable.h"
 #include "website/pages/PageFlag.h"
 #include "website/pages/blocs/AbstractSecondaryPageBloc.h"
@@ -24,8 +25,12 @@
 #include "website/social/AbstractSocialMedia.h"
 #include "workingdirectory/WorkingDirectoryManager.h"
 
-#include <csignal>
+#include <algorithm>
 #include <atomic>
+#include <csignal>
+#ifdef Q_OS_LINUX
+#include <sys/prctl.h>
+#endif
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -33,6 +38,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
+#include <QNetworkAccessManager>
 #include <QPainter>
 #include <QProcess>
 #include <QRegularExpression>
@@ -68,8 +74,13 @@ DECLARE_LAUNCHER(LauncherGeneration)
 
 static volatile sig_atomic_t g_stopRequested = 0;
 
-static void handleSignal(int)
+static void handleSignal(int sig)
 {
+    if (g_stopRequested) {
+        std::signal(sig, SIG_DFL);
+        std::raise(sig);
+        return;
+    }
     g_stopRequested = 1;
 }
 
@@ -82,6 +93,7 @@ struct GenRunState {
     int              jobsLimit        = -1; // -1 = unlimited
     int              activeCount      = 0;
     int              interPageDelayMs = 0;  // pause between pages to avoid rate limits
+    bool             linkCheckActive  = false;
     QTextStream     *out              = nullptr;
 };
 
@@ -117,13 +129,14 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt, AbstractCli *cli)
     // "The file looks good. Let me output the full article content now:".
     const QString promptSubdir = tempDir.path() + QStringLiteral("/prompt");
     QDir().mkdir(promptSubdir);
+    const QString prepared = cli->preparePrompt(prompt);
     const QString promptPath = promptSubdir + QStringLiteral("/prompt.txt");
     {
         QFile f(promptPath);
         if (!f.open(QIODevice::WriteOnly)) {
             co_return result;
         }
-        f.write(prompt.toUtf8());
+        f.write(prepared.toUtf8());
     }
 
     // CLI response is redirected to a file instead of a pipe.
@@ -135,23 +148,83 @@ static QCoro::Task<QString> runClaudePrompt(QString prompt, AbstractCli *cli)
     QProcess process;
     process.setWorkingDirectory(tempDir.path());
     process.setProgram(cli->getExecutable());
-    cli->configurePromptProcess(&process, cli->promptArgs(), prompt, promptPath);
+    cli->configurePromptProcess(&process, cli->promptArgs(), prepared, promptPath);
     process.setStandardOutputFile(outputPath);
+#ifdef Q_OS_LINUX
+    process.setChildProcessModifier([]() {
+        ::prctl(PR_SET_PDEATHSIG, SIGKILL);
+    });
+#endif
     // SVG generation can produce large XML outputs.  Raise the Claude Code output
     // token limit so SVG responses are never truncated by the default 32 k cap.
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    QProcessEnvironment env = process.processEnvironment();
+    if (env.isEmpty()) {
+        env = QProcessEnvironment::systemEnvironment();
+    }
     env.insert(QStringLiteral("CLAUDE_CODE_MAX_OUTPUT_TOKENS"), QStringLiteral("100000"));
     process.setProcessEnvironment(env);
 
-    // Exactly two co_awaits, nothing between them — mirrors ClaudeRunner.
-    co_await qCoro(process).start();
-    co_await qCoro(process).waitForFinished(-1);
+    // Poll instead of waiting with -1 so that:
+    //  1) Ctrl+C (g_stopRequested) interrupts a running subprocess within 2s,
+    //  2) Antigravity post-turn shutdown deadlocks (after output.txt is already
+    //     flushed and stable for 12s) are harvested instead of hanging for hours,
+    //  3) A completely silent hang is bounded by kContentTimeoutMs (25 min).
+    static constexpr int kPollMs           = 2000;
+    static constexpr int kSettleMs         = 12000;
+    static constexpr int kContentTimeoutMs = 25 * 60 * 1000;
+    int    elapsedMs                  = 0;
+    qint64 lastNonEmptySize           = -1;
+    int    stableMs                   = 0;
+    bool   harvestedFromSettledOutput = false;
+    bool   timedOut                   = false;
 
-    // All error checks and output reading happen after both co_awaits.
+    co_await qCoro(process).start();
+    while (!(co_await qCoro(process).waitForFinished(kPollMs))) {
+        if (process.state() == QProcess::NotRunning) {
+            break;
+        }
+        if (g_stopRequested) {
+            process.kill();
+            co_await qCoro(process).waitForFinished(5000);
+            co_return QStringLiteral("__ERROR__: interrupted");
+        }
+        elapsedMs += kPollMs;
+
+        QFile f(outputPath);
+        const qint64 currentSize = f.size();
+        if (currentSize > 0) {
+            if (currentSize == lastNonEmptySize) {
+                stableMs += kPollMs;
+                if (stableMs >= kSettleMs) {
+                    harvestedFromSettledOutput = true;
+                    process.kill();
+                    co_await qCoro(process).waitForFinished(5000);
+                    break;
+                }
+            } else {
+                lastNonEmptySize = currentSize;
+                stableMs         = 0;
+            }
+        } else {
+            lastNonEmptySize = -1;
+            stableMs         = 0;
+        }
+
+        if (elapsedMs >= kContentTimeoutMs) {
+            timedOut = true;
+            process.kill();
+            co_await qCoro(process).waitForFinished(5000);
+            break;
+        }
+    }
+
     if (process.error() == QProcess::FailedToStart) {
         result = QStringLiteral("__ERROR__: %1 executable not found in PATH")
                      .arg(cli->getExecutable());
-    } else if (process.exitCode() != 0) {
+    } else if (timedOut && lastNonEmptySize <= 0) {
+        result = QStringLiteral("__ERROR__: timed out after %1s")
+                     .arg(kContentTimeoutMs / 1000);
+    } else if (!harvestedFromSettledOutput && !timedOut && process.exitCode() != 0) {
         const QString errMsg = QString::fromUtf8(process.readAllStandardError()).trimmed();
         // Some CLIs (e.g. Claude with --output-format stream-json) write errors to stdout.
         // Fall back to the output file content so rate-limit / API errors are visible.
@@ -351,20 +424,69 @@ static QCoro::Task<QString> runBoundedClaudePrompt(QString      preparedPrompt,
     process.setStandardOutputFile(outputPath);
     const QString stderrPath = workDir + QStringLiteral("/stderr.txt");
     process.setStandardErrorFile(stderrPath);
+#ifdef Q_OS_LINUX
+    process.setChildProcessModifier([]() {
+        ::prctl(PR_SET_PDEATHSIG, SIGKILL);
+    });
+#endif
+
+    static constexpr int kPollMs   = 2000;
+    static constexpr int kSettleMs = 4000;
+    int    elapsedMs                  = 0;
+    qint64 lastResultSize             = -1;
+    int    settledAfterResultMs       = 0;
+    bool   harvestedFromSettledOutput = false;
+    bool   timedOut                   = false;
 
     co_await qCoro(process).start();
-    const bool finished = co_await qCoro(process).waitForFinished(timeoutMs);
-    if (!finished && process.state() != QProcess::NotRunning) {
-        // Still running past the deadline — kill it. A stuck call must never
-        // block the rest of the page/session (see kRasterImageTimeoutMs doc above).
-        process.kill();
-        co_await qCoro(process).waitForFinished(5000);
-        co_return QStringLiteral("__ERROR__: timed out after %1s").arg(timeoutMs / 1000);
+    while (!(co_await qCoro(process).waitForFinished(kPollMs))) {
+        if (process.state() == QProcess::NotRunning) {
+            break;
+        }
+        if (g_stopRequested) {
+            process.kill();
+            co_await qCoro(process).waitForFinished(5000);
+            co_return QStringLiteral("__ERROR__: interrupted");
+        }
+        elapsedMs += kPollMs;
+
+        if (antigravity) {
+            QFile f(outputPath);
+            const qint64 currentSize = f.size();
+            if (currentSize > 0 && f.open(QIODevice::ReadOnly)) {
+                const QByteArray bytes = f.readAll();
+                f.close();
+                if (bytes.contains("\"event\":\"result\"")) {
+                    if (currentSize == lastResultSize) {
+                        settledAfterResultMs += kPollMs;
+                        if (settledAfterResultMs >= kSettleMs) {
+                            harvestedFromSettledOutput = true;
+                            process.kill();
+                            co_await qCoro(process).waitForFinished(5000);
+                            break;
+                        }
+                    } else {
+                        lastResultSize       = currentSize;
+                        settledAfterResultMs = 0;
+                    }
+                }
+            }
+        }
+
+        if (elapsedMs >= timeoutMs) {
+            timedOut = true;
+            process.kill();
+            co_await qCoro(process).waitForFinished(5000);
+            break;
+        }
     }
 
     if (process.error() == QProcess::FailedToStart) {
         co_return QStringLiteral("__ERROR__: %1 executable not found in PATH")
                      .arg(cli->getExecutable());
+    }
+    if (timedOut && lastResultSize <= 0) {
+        co_return QStringLiteral("__ERROR__: timed out after %1s").arg(timeoutMs / 1000);
     }
     QFile f(outputPath);
     if (!f.open(QIODevice::ReadOnly)) {
@@ -381,7 +503,7 @@ static QCoro::Task<QString> runBoundedClaudePrompt(QString      preparedPrompt,
         && cli->classifyError(result) != CliErrorKind::Other) {
         co_return result;
     }
-    if (process.exitCode() != 0) {
+    if (!harvestedFromSettledOutput && !timedOut && process.exitCode() != 0) {
         QFile stderrFile(stderrPath);
         QString errMsg;
         if (stderrFile.open(QIODevice::ReadOnly)) {
@@ -758,6 +880,8 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
     PageDb           pageDb(workDir);
     PageRepositoryDb pageRepo(pageDb);
     ImageWriter      imageWriter(workDir);
+    QNetworkAccessManager linkNetwork;
+    ArticleLinkValidator  linkValidator(linkNetwork);
 
     // Set when a raster-image CLI call hits a quota/auth error — stops this
     // session from attempting further pages too, not just the current page's
@@ -1115,7 +1239,7 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                 break; // process error — no point retrying
             }
 
-            articleText = raw;
+            articleText = ArticleContentValidator::stripLeadingPreamble(raw);
             if (isArticleValid(articleText)) {
                 contentValid = true;
                 break;
@@ -1238,6 +1362,171 @@ static QCoro::Task<void> runGenerationSession(GenPageQueue   *queue,
                     }
                 }
                 state->out->flush();
+            }
+        }
+
+        // ---- Call 1.7: verify links and inject missing study links ----------
+        if (!g_stopRequested) {
+            const int minStudyLinks =
+                ArticleLinkValidator::requiredStudyLinksMin(queue->customInstructions());
+            while (state->linkCheckActive && !g_stopRequested) {
+                QTimer waitTimer;
+                waitTimer.setSingleShot(true);
+                waitTimer.start(100);
+                co_await qCoro(waitTimer).waitForTimeout();
+            }
+            if (!g_stopRequested) {
+                state->linkCheckActive = true;
+                ArticleLinkValidator::Report links = linkValidator.check(
+                    articleText,
+                    []() { return g_stopRequested != 0; },
+                    [state, sNum](const QString &url) {
+                        *(state->out) << QStringLiteral("[S%1] Checking link: %2\n")
+                                             .arg(QString::number(sNum), url);
+                        state->out->flush();
+                    });
+                state->linkCheckActive = false;
+
+                for (const QString &warning : std::as_const(links.warnings)) {
+                    *(state->out) << QStringLiteral("[S%1] WARN unverified link: %2\n")
+                                         .arg(QString::number(sNum), warning);
+                }
+                state->out->flush();
+
+                int validLinks = links.validUrls();
+                if (!links.cancelled && links.accepted() && minStudyLinks > 0 && validLinks >= minStudyLinks) {
+                    *(state->out) << QStringLiteral("[S%1] Study links verified: %2 valid link(s).\n")
+                                         .arg(QString::number(sNum), QString::number(validLinks));
+                    state->out->flush();
+                }
+
+                static constexpr int kMaxLinkRepairAttempts = 2;
+                for (int linkAttempt = 1;
+                     !g_stopRequested
+                     && !links.cancelled
+                     && (!links.accepted() || (minStudyLinks > 0 && validLinks < minStudyLinks))
+                     && linkAttempt <= kMaxLinkRepairAttempts;
+                     ++linkAttempt) {
+                    *(state->out) << QStringLiteral(
+                        "[S%1] Study links check: %2/%3 valid link(s), %4 broken — "
+                        "launching %5 (1.7/2: verify & add study links, attempt %6/%7)...\n")
+                        .arg(QString::number(sNum),
+                             QString::number(validLinks),
+                             QString::number(minStudyLinks),
+                             QString::number(links.errors.size()),
+                             cli->getName(),
+                             QString::number(linkAttempt),
+                             QString::number(kMaxLinkRepairAttempts));
+                    state->out->flush();
+
+                    QString linkRepairPrompt =
+                        QStringLiteral("Page permalink: %1\n\n"
+                                       "Here is the current draft of a web article:\n\n"
+                                       "<article>\n%2\n</article>\n\n")
+                            .arg(page.permalink, articleText);
+                    if (!links.accepted()) {
+                        linkRepairPrompt += links.retryInstructions();
+                    }
+                    if (minStudyLinks > 0 && validLinks < minStudyLinks) {
+                        linkRepairPrompt += QStringLiteral(
+                            "The article currently has only %1 verified external study/guideline link(s), "
+                            "but at least %2 distinct, verified study or clinical guideline links are required.\n"
+                            "Search for and open real, relevant peer-reviewed human studies, systematic reviews, "
+                            "or clinical guidelines (from PubMed https://pubmed.ncbi.nlm.nih.gov/..., "
+                            "PMC https://pmc.ncbi.nlm.nih.gov/..., NIH, NHS, AAOS, or major medical societies) "
+                            "that directly support the article's medical, biomarker, genetic, diagnostic, or "
+                            "therapeutic claims.\n"
+                            "Insert or update citations across the article using "
+                            "[LINKFIX url=\"VERIFIED_URL\"]descriptive anchor text[/LINKFIX] so the finished "
+                            "article contains at least %2 distinct, verified study/guideline links.\n"
+                            "Verify every URL before returning the article — never invent or guess URLs, "
+                            "and never use pubmed.ncbi.gov (always use pubmed.ncbi.nlm.nih.gov).\n\n")
+                            .arg(QString::number(validLinks), QString::number(minStudyLinks));
+                    }
+                    linkRepairPrompt += QStringLiteral(
+                        "Preserve all existing sections, headings, [IMGFIX] shortcodes, and formatting rules "
+                        "(no HTML, no Markdown tables or **bold**).\n"
+                        "Return ONLY the complete updated article starting with [TITLE level=\"1\"] on the very "
+                        "first line — no preamble, explanation, or commentary.");
+
+                    const QString repairRaw = co_await runClaudePrompt(linkRepairPrompt, cli);
+                    if (repairRaw.startsWith(QStringLiteral("__ERROR__"))) {
+                        *(state->out) << QStringLiteral("[S%1] WARN (link repair attempt %2): %3\n")
+                                             .arg(QString::number(sNum),
+                                                  QString::number(linkAttempt),
+                                                  repairRaw);
+                        state->out->flush();
+                        break;
+                    }
+
+                    const QString candidate = ArticleContentValidator::stripLeadingPreamble(repairRaw);
+                    if (!isArticleValid(candidate)) {
+                        *(state->out) << QStringLiteral("[S%1] WARN (link repair attempt %2): invalid article structure — discarded.\n")
+                                             .arg(QString::number(sNum), QString::number(linkAttempt));
+                        state->out->flush();
+                        continue;
+                    }
+
+                    while (state->linkCheckActive && !g_stopRequested) {
+                        QTimer waitTimer;
+                        waitTimer.setSingleShot(true);
+                        waitTimer.start(100);
+                        co_await qCoro(waitTimer).waitForTimeout();
+                    }
+                    if (g_stopRequested) {
+                        break;
+                    }
+                    state->linkCheckActive = true;
+                    ArticleLinkValidator::Report candidateLinks = linkValidator.check(
+                        candidate,
+                        []() { return g_stopRequested != 0; },
+                        [state, sNum](const QString &url) {
+                            *(state->out) << QStringLiteral("[S%1] Checking link: %2\n")
+                                                 .arg(QString::number(sNum), url);
+                            state->out->flush();
+                        });
+                    state->linkCheckActive = false;
+
+                    for (const QString &warning : std::as_const(candidateLinks.warnings)) {
+                        *(state->out) << QStringLiteral("[S%1] WARN unverified link: %2\n")
+                                             .arg(QString::number(sNum), warning);
+                    }
+                    if (!candidateLinks.accepted()) {
+                        *(state->out) << QStringLiteral("[S%1] WARN (link repair attempt %2): rejected link(s): %3\n")
+                                             .arg(QString::number(sNum),
+                                                  QString::number(linkAttempt),
+                                                  candidateLinks.errors.join(QStringLiteral("; ")));
+                    }
+                    state->out->flush();
+
+                    const int candidateValidLinks = candidateLinks.validUrls();
+                    if (candidateLinks.accepted()
+                        && (candidateValidLinks >= validLinks || !links.accepted())) {
+                        articleText = candidate;
+                        links       = candidateLinks;
+                        validLinks  = candidateValidLinks;
+                        *(state->out) << QStringLiteral("[S%1] Link repair accepted (%2 valid link(s)).\n")
+                                             .arg(QString::number(sNum), QString::number(validLinks));
+                        state->out->flush();
+                    }
+                }
+
+                if (!g_stopRequested && !links.cancelled && !links.accepted()) {
+                    *(state->out) << QStringLiteral(
+                        "[S%1] FAIL (links): %2 — broken link(s) remain after repair (%3), skipping\n")
+                        .arg(QString::number(sNum),
+                             page.permalink,
+                             links.errors.join(QStringLiteral("; ")));
+                    state->out->flush();
+                    continue;
+                }
+                if (!g_stopRequested && !links.cancelled && minStudyLinks > 0 && validLinks == 0) {
+                    *(state->out) << QStringLiteral(
+                        "[S%1] FAIL (links): %2 — 0 verified study links after repair, skipping\n")
+                        .arg(QString::number(sNum), page.permalink);
+                    state->out->flush();
+                    continue;
+                }
             }
         }
 

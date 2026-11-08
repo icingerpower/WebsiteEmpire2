@@ -33,9 +33,19 @@ public:
         QStringList warnings;
         int checkedUrls = 0;
         bool cancelled = false;
+        int validUrls() const;
         bool accepted() const;
         QString retryInstructions() const;
     };
+
+    /**
+     * Returns the minimum number of distinct verified study/guideline links
+     * requested by strategy or update instructions (0 if no LINKFIX / PubMed /
+     * PMC study-link requirement is present). Parses both numeric ("at least 5")
+     * and word ("at least five") counts, defaulting to 5 when a LINKFIX study
+     * requirement is present without an explicit number.
+     */
+    static int requiredStudyLinksMin(const QString &instructions);
 
     explicit ArticleLinkValidator(QNetworkAccessManager &network,
                                   int requestTimeoutMs = 8000,

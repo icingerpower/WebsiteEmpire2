@@ -6,9 +6,11 @@
 #include "website/pages/blocs/PageBlocSymptomLinks.h"   // for SymptomNav::slugify
 #include "website/pages/blocs/widgets/PageBlocReadOnlyWidget.h"
 #include "website/taxonomy/TaxonomyDb.h"
+#include "website/taxonomy/TaxonomySettings.h"
 
 #include <QCoreApplication>
 #include <QFile>
+#include <QFileInfo>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 
@@ -39,9 +41,12 @@ QString PageBlocConditionList::_resolveSymptomName() const
         return {};
     }
     const QString slug    = m_permalink.mid(prefix.length());
-    const QString dbPath  = m_workingDir.filePath(
+    QString dbPath        = m_workingDir.filePath(
         QStringLiteral("results_db/PageAttributesHealthSymptom.db"));
     if (!QFile::exists(dbPath)) {
+        dbPath = TaxonomySettings(m_workingDir).sourcePath(QStringLiteral("symptoms"));
+    }
+    if (dbPath.isEmpty() || !QFile::exists(dbPath)) {
         return {};
     }
 
@@ -77,9 +82,19 @@ QString PageBlocConditionList::_resolveSymptomName() const
 
 QStringList PageBlocConditionList::_loadConditionNames(const QString &symptomName) const
 {
-    const QString dbPath = m_workingDir.filePath(
+    if (symptomName.isEmpty()) {
+        return {};
+    }
+    QString dbPath = m_workingDir.filePath(
         QStringLiteral("results_db/PageAttributesHealthCondition.db"));
-    if (!QFile::exists(dbPath) || symptomName.isEmpty()) {
+    if (!QFile::exists(dbPath)) {
+        const QString symSource = TaxonomySettings(m_workingDir).sourcePath(QStringLiteral("symptoms"));
+        if (!symSource.isEmpty()) {
+            dbPath = QFileInfo(symSource).dir().filePath(
+                QStringLiteral("PageAttributesHealthCondition.db"));
+        }
+    }
+    if (!QFile::exists(dbPath)) {
         return {};
     }
 

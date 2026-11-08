@@ -21,6 +21,8 @@ private slots:
     void test_launcherupdate_timeout_restarts_page_update();
     void test_launcherupdate_hung_cli_with_valid_output_succeeds();
     void test_launcherupdate_skips_already_updated_pages();
+    void test_launcherupdate_symptom_hub_updates_0_text_and_validates_links();
+    void test_launcherupdate_symptom_hub_missing_study_links_retries_until_added();
 };
 
 void Test_Website_LauncherUpdate_Links::test_launcherupdate_link_gate_data()
@@ -345,6 +347,170 @@ void Test_Website_LauncherUpdate_Links::test_launcherupdate_skips_already_update
     QCOMPARE(repo.loadData(pageDone).value(QStringLiteral("1_text")), alreadyUpdatedBody);
     QCOMPARE(repo.loadData(pagePending).value(QStringLiteral("1_text")), newlyUpdatedBody);
     QVERIFY2(log.contains("1/1 done (0 remaining)"), log.constData());
+}
+
+void Test_Website_LauncherUpdate_Links::test_launcherupdate_symptom_hub_updates_0_text_and_validates_links()
+{
+    QTemporaryDir fixture;
+    QVERIFY(fixture.isValid());
+    const QDir dir(fixture.path());
+
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+    connect(&server, &QTcpServer::newConnection, &server, [&server]() {
+        while (server.hasPendingConnections()) {
+            QTcpSocket *socket = server.nextPendingConnection();
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+            connect(socket, &QTcpSocket::readyRead, socket, [socket]() {
+                socket->readAll();
+                const QByteArray body = "<title>Clinical Guideline</title>Evidence";
+                socket->write("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\nContent-Length: "
+                              + QByteArray::number(body.size()) + "\r\n\r\n" + body);
+                socket->disconnectFromHost();
+            });
+        }
+    });
+
+    const auto writeFile = [&dir](const QString &name, const QByteArray &body) {
+        QFile file(dir.filePath(name));
+        return file.open(QIODevice::WriteOnly) && file.write(body) == body.size();
+    };
+
+    const QString prefix = QStringLiteral("[TITLE level=\"1\"]Knee Swelling[/TITLE]\n")
+                         + QString(2100, QLatin1Char('a'));
+    const QString before = prefix + QStringLiteral(" Symptom hub without links.");
+    const QString updatedWithLinks = prefix
+        + QStringLiteral(" [LINKFIX url=\"http://127.0.0.1:%1/study1\"]Study 1[/LINKFIX]")
+              .arg(server.serverPort());
+    QVERIFY(writeFile(QStringLiteral("valid.txt"), updatedWithLinks.toUtf8()));
+
+    QVERIFY(writeFile(QStringLiteral("claude"), QByteArray(
+        "#!/bin/sh\n"
+        "cat \"$LINK_FIXTURE/valid.txt\"\n")));
+    QVERIFY(QFile::setPermissions(dir.filePath(QStringLiteral("claude")),
+        QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+
+    UpdateStrategyTree strategies(dir);
+    const QString strategy = strategies.addStrategy(
+        QStringLiteral("Symptoms"), QStringLiteral("symptom_hub"), {}, false);
+    const QString prompt = strategies.addPrompt(
+        strategy, QStringLiteral("Add references"), QStringLiteral("Add study links."));
+
+    PageDb db(dir);
+    PageRepositoryDb repo(db);
+    const int page = repo.create(
+        QStringLiteral("symptom_hub"), QStringLiteral("/symptoms/knee-swelling"), QStringLiteral("en"));
+    repo.saveData(page, {{QStringLiteral("0_text"), before},
+                         {QStringLiteral("_taxonomyArticle"), QStringLiteral("1")}});
+
+    QProcess process;
+    auto env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("PATH"), fixture.path() + QLatin1Char(':') + env.value(QStringLiteral("PATH")));
+    env.insert(QStringLiteral("LINK_FIXTURE"), fixture.path());
+    env.insert(QStringLiteral("XDG_CONFIG_HOME"), dir.filePath(QStringLiteral("config")));
+    process.setProcessEnvironment(env);
+    process.start(QCoreApplication::applicationFilePath(),
+                  {QStringLiteral("--fixture"), fixture.path(), QStringLiteral("--cli"), QStringLiteral("Claude")});
+    QVERIFY(process.waitForStarted());
+    QTRY_COMPARE_WITH_TIMEOUT(process.state(), QProcess::NotRunning, 15000);
+    const QByteArray log = process.readAllStandardOutput() + process.readAllStandardError();
+    QCOMPARE(process.exitCode(), 0);
+
+    const auto after = repo.loadData(page);
+    QCOMPARE(after.value(QStringLiteral("0_text")), updatedWithLinks);
+    QVERIFY(!after.contains(QStringLiteral("1_text")));
+    QVERIFY(!repo.lastUpdateAttemptAt(page, prompt).isEmpty());
+    QVERIFY2(log.contains("Checking link:"), log.constData());
+}
+
+void Test_Website_LauncherUpdate_Links::test_launcherupdate_symptom_hub_missing_study_links_retries_until_added()
+{
+    QTemporaryDir fixture;
+    QVERIFY(fixture.isValid());
+    const QDir dir(fixture.path());
+
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+    connect(&server, &QTcpServer::newConnection, &server, [&server]() {
+        while (server.hasPendingConnections()) {
+            QTcpSocket *socket = server.nextPendingConnection();
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+            connect(socket, &QTcpSocket::readyRead, socket, [socket]() {
+                socket->readAll();
+                const QByteArray body = "<title>Peer-Reviewed Human Study</title>Evidence";
+                socket->write("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\nContent-Length: "
+                              + QByteArray::number(body.size()) + "\r\n\r\n" + body);
+                socket->disconnectFromHost();
+            });
+        }
+    });
+
+    const auto writeFile = [&dir](const QString &name, const QByteArray &body) {
+        QFile file(dir.filePath(name));
+        return file.open(QIODevice::WriteOnly) && file.write(body) == body.size();
+    };
+
+    const QString prefix = QStringLiteral("[TITLE level=\"1\"]Chest Tightness[/TITLE]\n")
+                         + QString(2100, QLatin1Char('a'));
+    const QString noLinks = prefix + QStringLiteral(" Symptom hub returned without links.");
+    const QString withLinks = prefix
+        + QStringLiteral(" [LINKFIX url=\"http://127.0.0.1:%1/study-a\"]Study A[/LINKFIX]")
+              .arg(server.serverPort());
+    QVERIFY(writeFile(QStringLiteral("no_links.txt"), noLinks.toUtf8()));
+    QVERIFY(writeFile(QStringLiteral("with_links.txt"), withLinks.toUtf8()));
+
+    QVERIFY(writeFile(QStringLiteral("claude"), QByteArray(
+        "#!/bin/sh\n"
+        "n=0\n"
+        "if [ -f \"$LINK_FIXTURE/count\" ]; then read -r n < \"$LINK_FIXTURE/count\"; fi\n"
+        "n=$((n + 1))\n"
+        "printf '%s' \"$n\" > \"$LINK_FIXTURE/count\"\n"
+        "cat > \"$LINK_FIXTURE/prompt-$n\"\n"
+        "if [ \"$n\" -eq 1 ]; then\n"
+        "  cat \"$LINK_FIXTURE/no_links.txt\"\n"
+        "else\n"
+        "  cat \"$LINK_FIXTURE/with_links.txt\"\n"
+        "fi\n")));
+    QVERIFY(QFile::setPermissions(dir.filePath(QStringLiteral("claude")),
+        QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+
+    UpdateStrategyTree strategies(dir);
+    const QString strategy = strategies.addStrategy(
+        QStringLiteral("Symptoms - Add references"), QStringLiteral("symptom_hub"), {}, false);
+    const QString prompt = strategies.addPrompt(
+        strategy,
+        QStringLiteral("Add references"),
+        QStringLiteral("Support claims with at least five distinct, relevant peer-reviewed "
+                       "human studies from PubMed/PMC using [LINKFIX url=\"VERIFIED_URL\"]anchor[/LINKFIX]."));
+
+    PageDb db(dir);
+    PageRepositoryDb repo(db);
+    const int page = repo.create(
+        QStringLiteral("symptom_hub"), QStringLiteral("/symptoms/chest-tightness"), QStringLiteral("en"));
+    repo.saveData(page, {{QStringLiteral("0_text"), noLinks},
+                         {QStringLiteral("_taxonomyArticle"), QStringLiteral("1")}});
+
+    QProcess process;
+    auto env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("PATH"), fixture.path() + QLatin1Char(':') + env.value(QStringLiteral("PATH")));
+    env.insert(QStringLiteral("LINK_FIXTURE"), fixture.path());
+    env.insert(QStringLiteral("XDG_CONFIG_HOME"), dir.filePath(QStringLiteral("config")));
+    process.setProcessEnvironment(env);
+    process.start(QCoreApplication::applicationFilePath(),
+                  {QStringLiteral("--fixture"), fixture.path(), QStringLiteral("--cli"), QStringLiteral("Claude")});
+    QVERIFY(process.waitForStarted());
+    QTRY_COMPARE_WITH_TIMEOUT(process.state(), QProcess::NotRunning, 15000);
+    const QByteArray log = process.readAllStandardOutput() + process.readAllStandardError();
+    QCOMPARE(process.exitCode(), 0);
+
+    QFile counter(dir.filePath(QStringLiteral("count")));
+    QVERIFY2(counter.open(QIODevice::ReadOnly), log.constData());
+    QCOMPARE(counter.readAll().toInt(), 2);
+
+    const auto after = repo.loadData(page);
+    QCOMPARE(after.value(QStringLiteral("0_text")), withLinks);
+    QVERIFY(!repo.lastUpdateAttemptAt(page, prompt).isEmpty());
+    QVERIFY2(log.contains("no verified study links included"), log.constData());
 }
 
 int main(int argc, char **argv)

@@ -213,6 +213,13 @@ void DialogPreviewPage::_renderPage(const PreviewEntry &entry)
     type->setAuthorLang(rec->lang);
     type->bindGenerationContext(m_repo, m_workingDir);
 
+    QHash<QString, QString> publishedByLang;
+    QHash<QString, QString> updatedByLang;
+    publishedByLang[rec->lang] = rec->createdAt;
+    updatedByLang[rec->lang]   = rec->updatedAt;
+    type->setGenerationContext(rec->permalink, rec->lang, rec->langCodesToTranslate,
+                               publishedByLang, updatedByLang);
+
     // Resolve the engine row for the requested language so addCode picks the
     // correct tr:<lang>:* translation keys during rendering.
     const int engineIdx = _engineIndexForLang(entry.lang);

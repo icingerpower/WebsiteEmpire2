@@ -532,6 +532,12 @@ QList<PageRecord> PageRepositoryDb::findPagesForUpdate(const QString &typeId,
               "     )"
               "   )");
 
+    const QString contentKey = typeId == QStringLiteral("symptom_hub")
+        ? QStringLiteral("0_text")
+        : typeId == QStringLiteral("fashion_tag_hub")
+            ? QStringLiteral("3_text")
+            : QStringLiteral("1_text");
+
     q.prepare(QStringLiteral(
         "SELECT p.id, p.type_id, p.permalink, p.lang,"
         "       p.created_at, p.updated_at, p.translated_at,"
@@ -549,16 +555,17 @@ QList<PageRecord> PageRepositoryDb::findPagesForUpdate(const QString &typeId,
         "   AND EXISTS ("
         "     SELECT 1 FROM page_data pd_content"
         "     WHERE pd_content.page_id = p.id"
-        "       AND pd_content.key = '1_text'"
+        "       AND pd_content.key = :contentKey"
         "       AND pd_content.value != '')")
         + skipClause
         + QStringLiteral(
         " ORDER BY ua.last_updated ASC NULLS FIRST, p.id ASC"
         " LIMIT :limit"));
 
-    q.bindValue(QStringLiteral(":promptId"), promptId);
-    q.bindValue(QStringLiteral(":typeId"),   typeId);
-    q.bindValue(QStringLiteral(":limit"),    limit <= 0 ? -1 : limit);
+    q.bindValue(QStringLiteral(":promptId"),   promptId);
+    q.bindValue(QStringLiteral(":typeId"),     typeId);
+    q.bindValue(QStringLiteral(":contentKey"), contentKey);
+    q.bindValue(QStringLiteral(":limit"),      limit <= 0 ? -1 : limit);
     if (!skipIfDataKey.isEmpty()) {
         q.bindValue(QStringLiteral(":skipKey"), skipIfDataKey);
     }
